@@ -1,8 +1,8 @@
 ---
-# Illogical Impulse Ansible Playbook
+# Snry Shell Ansible Playbook
 # Replaces bash scripts for install, uninstall, deps, setups, files, diagnose, checkdeps
 
-- name: Illogical Impulse Setup
+- name: Snry Shell Setup
   hosts: localhost
   connection: local
   gather_facts: true

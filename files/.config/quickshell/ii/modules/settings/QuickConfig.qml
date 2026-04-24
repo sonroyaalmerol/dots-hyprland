@@ -342,7 +342,7 @@ ContentPage {
             mainText: justCopied ? Translation.tr("Path copied") : Translation.tr("Copy path")
             onClicked: {
                 copyPathButton.justCopied = true
-                Quickshell.clipboardText = FileUtils.trimFileProtocol(`${Directories.config}/illogical-impulse/config.json`);
+                Quickshell.clipboardText = FileUtils.trimFileProtocol(`${Directories.config}/snry-shell/config.json`);
                 revertTextTimer.restart();
             }
             colBackground: ColorUtils.transparentize(Appearance.colors.colPrimaryContainer)

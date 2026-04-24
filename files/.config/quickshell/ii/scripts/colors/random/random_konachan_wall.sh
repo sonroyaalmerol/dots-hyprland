@@ -33,8 +33,8 @@ response=$(curl "https://konachan.net/post.json?tags=rating%3Asafe&limit=1&page=
 link=$(echo "$response" | jq '.[0].file_url' -r);
 ext=$(echo "$link" | awk -F. '{print $NF}')
 downloadPath="$PICTURES_DIR/Wallpapers/random_wallpaper.$ext"
-illogicalImpulseConfigPath="$HOME/.config/illogical-impulse/config.json"
-currentWallpaperPath=$(jq -r '.background.wallpaperPath' $illogicalImpulseConfigPath)
+snryShellConfigPath="$HOME/.config/snry-shell/config.json"
+currentWallpaperPath=$(jq -r '.background.wallpaperPath' $snryShellConfigPath)
 if [ "$downloadPath" == "$currentWallpaperPath" ]; then
     downloadPath="$PICTURES_DIR/Wallpapers/random_wallpaper-1.$ext"
 fi

@@ -3,7 +3,7 @@
     <h3></h3>
 </div>
 
-<div align="center"> 
+<div align="center">
 
 ![](https://img.shields.io/github/last-commit/end-4/dots-hyprland?&style=for-the-badge&color=8ad7eb&logo=git&logoColor=D9E0EE&labelColor=1E202B)
 ![](https://img.shields.io/github/stars/end-4/dots-hyprland?style=for-the-badge&logo=andela&color=86dbd7&logoColor=D9E0EE&labelColor=1E202B)
@@ -20,10 +20,10 @@
 <details> 
   <summary>What this is/isn't</summary>
 
-  - Technically, configuration files
-  - Realistically, mostly the custom graphical shell
-  - NOT a system setup script: no graphic drivers, no zram setup, etc.
-  
+- Technically, configuration files
+- Realistically, mostly the custom graphical shell
+- NOT a system setup script: no graphic drivers, no zram setup, etc.
+
 </details>
 
 <details> 
@@ -39,25 +39,24 @@
 <details> 
   <summary>Installation</summary>
 
-   - _If you're new to Linux and decide to use Hyprland, you're in for a tough ride._
-   - Just run `bash <(curl -s https://ii.clsty.link/get)`
-     - Or, clone this repo and run `./setup install`
-     - See [the wiki](https://ii.clsty.link/en/ii-qs/01setup/) for more details
-   - **Keybinds**: Should be somewhat familiar to Windows or GNOME users. Important ones:
-     - `Super`+`/` = keybind list
-     - `Super`+`Enter` = terminal
-
+- _If you're new to Linux and decide to use Hyprland, you're in for a tough ride._
+- Just run `bash <(curl -s https://ii.clsty.link/get)`
+  - Or, clone this repo and run `./setup install`
+  - See [the wiki](https://ii.clsty.link/en/ii-qs/01setup/) for more details
+- **Keybinds**: Should be somewhat familiar to Windows or GNOME users. Important ones:
+  - `Super`+`/` = keybind list
+  - `Super`+`Enter` = terminal
 
 </details>
 
 <details>
   <summary>Software overview</summary>
 
-  | Software | Purpose |
-  | ------------- | ------------- |
-  | [Hyprland](https://github.com/hyprwm/hyprland) | The compositor (manages and renders windows) |
-  | [Quickshell](https://quickshell.outfoxxed.me/) | A QtQuick-based widget system, used for the status bar, sidebars, etc. |
-  | Others | See [deps-info.md](https://github.com/end-4/dots-hyprland/blob/main/sdata/deps-info.md) |
+| Software                                       | Purpose                                                                                 |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------- |
+| [Hyprland](https://github.com/hyprwm/hyprland) | The compositor (manages and renders windows)                                            |
+| [Quickshell](https://quickshell.outfoxxed.me/) | A QtQuick-based widget system, used for the status bar, sidebars, etc.                  |
+| Others                                         | See [deps-info.md](https://github.com/end-4/dots-hyprland/blob/main/sdata/deps-info.md) |
 
 </details>
 
@@ -73,17 +72,17 @@
 </div>
 
 <div align="center">
-    <img src="assets/illogical-impulse.svg" alt="illogical-impulse logo" style="float:left; width:400;">
+    <img src="assets/snry-shell.svg" alt="snry-shell logo" style="float:left; width:400;">
 </div>
 
 Widget system: Quickshell | Support: Yes
 
 [Showcase video](https://www.youtube.com/watch?v=RPwovTInagE)
 
-| AI, settings app | Some widgets |
-|:---|:---------------|
+| AI, settings app                                                                                                                     | Some widgets                                                                                                                         |
+| :----------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- |
 | <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/5d4e7d07-d0b4-4406-a4c9-ed7ba90e3fe4" /> | <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/6a32395f-9437-4192-8faf-2951a9e84cbe" /> |
-| Window management | wow look its orange |
+| Window management                                                                                                                    | wow look its orange                                                                                                                  |
 | <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/c51bed8b-3670-4d4c-9074-873be224fb8e" /> | <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/98703a66-0743-439f-a721-cef7afa6ab95" /> |
 
 <div align="center">
@@ -91,12 +90,12 @@ Widget system: Quickshell | Support: Yes
     <h3></h3>
 </div>
 
- - [@clsty](https://github.com/clsty) for making the dotfiles accessible by taking care of the install script and many other things
- - [@midn8hustlr](https://github.com/midn8hustlr) for greatly improving the color generation system
- - [@outfoxxed](https://github.com/outfoxxed/) for being extremely supportive in my Quickshell journey
- - Quickshell: [Soramane](https://github.com/caelestia-dots/shell/), [FridayFaerie](https://github.com/FridayFaerie/quickshell), [nydragon](https://github.com/nydragon/nysh)
- - AGS: [Aylur](https://github.com/Aylur/dotfiles/tree/ags-pre-ts), [kotontrion](https://github.com/kotontrion/dotfiles)
- - EWW: [fufexan](https://github.com/fufexan/dotfiles)
+- [@clsty](https://github.com/clsty) for making the dotfiles accessible by taking care of the install script and many other things
+- [@midn8hustlr](https://github.com/midn8hustlr) for greatly improving the color generation system
+- [@outfoxxed](https://github.com/outfoxxed/) for being extremely supportive in my Quickshell journey
+- Quickshell: [Soramane](https://github.com/caelestia-dots/shell/), [FridayFaerie](https://github.com/FridayFaerie/quickshell), [nydragon](https://github.com/nydragon/nysh)
+- AGS: [Aylur](https://github.com/Aylur/dotfiles/tree/ags-pre-ts), [kotontrion](https://github.com/kotontrion/dotfiles)
+- EWW: [fufexan](https://github.com/fufexan/dotfiles)
 
 <div align="center">
     <h2>• stonks •</h2>
@@ -108,7 +107,6 @@ Widget system: Quickshell | Support: Yes
 
 [![Stargazers over time](https://starchart.cc/end-4/dots-hyprland.svg?variant=adaptive)](https://starchart.cc/end-4/dots-hyprland)
 
-
 ---
 
 <div align="center">
@@ -117,18 +115,18 @@ Widget system: Quickshell | Support: Yes
 </div>
 
 - **Unsupported!**
-- **Source**: illogical-impulse AGS in `ii-ags` branch, others in `archive` branch.
+- **Source**: snry-shell AGS in `ii-ags` branch, others in `archive` branch.
 - List is in reverse chronological order
 
-### illogical-impulse (AGS)
+### snry-shell (AGS)
 
 Widget system: AGS | Support: No
 
-| AI | Common widgets |
-|:---|:---------------|
+| AI                                                                                        | Common widgets                                                                                        |
+| :---------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------- |
 | ![image](https://github.com/user-attachments/assets/9d7af13f-89ef-470d-ba78-d2288b79cf60) | ![image](https://github.com/end-4/dots-hyprland/assets/97237370/406b72b6-fa38-4f0d-a6c4-4d7d5d5ddcb7) |
-| Window management | Weeb power |
-| ![image](https://github.com/user-attachments/assets/02983b9b-79ba-4c25-8717-90bef2357ae5) | ![image](https://github.com/user-attachments/assets/bbb332ec-962a-4e88-a95b-486d0bd8ce76) |
+| Window management                                                                         | Weeb power                                                                                            |
+| ![image](https://github.com/user-attachments/assets/02983b9b-79ba-4c25-8717-90bef2357ae5) | ![image](https://github.com/user-attachments/assets/bbb332ec-962a-4e88-a95b-486d0bd8ce76)             |
 
 #### m3ww
 
@@ -162,13 +160,10 @@ Widget system: EWW | Support: No
 <img src="https://github.com/end-4/dots-hyprland/assets/97237370/b15317b1-f295-49f5-b90c-fb6328b8d886" alt="Desktop Preview">
 </a>
 
-
-
 <div align="center">
     <h2>• inspirations/copying •</h2>
     <h3></h3>
 </div>
 
- - Inspiration: osu!lazer (Hybrid), Windows 11 (Windoes), AvdanOS (NovelKnock), Material Design 3 (m3ww & later)
- - Copying: Absolutely, feel free. Just follow the license and it's all good
- 
+- Inspiration: osu!lazer (Hybrid), Windows 11 (Windoes), AvdanOS (NovelKnock), Material Design 3 (m3ww & later)
+- Copying: Absolutely, feel free. Just follow the license and it's all good

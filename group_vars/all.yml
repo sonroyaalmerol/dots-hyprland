@@ -1,5 +1,5 @@
 ---
-# Shared variables for Illogical Impulse Ansible playbook
+# Snry Shell Ansible playbook
 
 # XDG paths
 xdg_bin_home: "{{ lookup('env', 'XDG_BIN_HOME') | default(ansible_user_dir ~ '/.local/bin', true) }}"
@@ -8,9 +8,9 @@ xdg_config_home: "{{ lookup('env', 'XDG_CONFIG_HOME') | default(ansible_user_dir
 xdg_data_home: "{{ lookup('env', 'XDG_DATA_HOME') | default(ansible_user_dir ~ '/.local/share', true) }}"
 xdg_state_home: "{{ lookup('env', 'XDG_STATE_HOME') | default(ansible_user_dir ~ '/.local/state', true) }}"
 
-# Illogical Impulse specific paths
+# Snry Shell specific paths
 backup_dir: "{{ lookup('env', 'BACKUP_DIR') | default(ansible_user_dir ~ '/ii-original-dots-backup', true) }}"
-dots_confdir: "{{ xdg_config_home }}/illogical-impulse"
+dots_confdir: "{{ xdg_config_home }}/snry-shell"
 installed_listfile: "{{ dots_confdir }}/installed_listfile"
 firstrun_file: "{{ dots_confdir }}/installed_true"
 venv_path: "{{ xdg_state_home }}/quickshell/.venv"

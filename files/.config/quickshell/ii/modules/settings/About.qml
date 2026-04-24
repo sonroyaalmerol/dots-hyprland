@@ -89,13 +89,13 @@ ContentPage {
             Layout.bottomMargin: 10
             IconImage {
                 implicitSize: 80
-                source: Quickshell.iconPath("illogical-impulse")
+                source: Quickshell.iconPath("snry-shell")
             }
             ColumnLayout {
                 Layout.alignment: Qt.AlignVCenter
                 // spacing: 10
                 StyledText {
-                    text: Translation.tr("illogical-impulse")
+                    text: Translation.tr("snry-shell")
                     font.pixelSize: Appearance.font.pixelSize.title
                 }
                 StyledText {

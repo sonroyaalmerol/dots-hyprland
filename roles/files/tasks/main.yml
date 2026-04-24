@@ -56,7 +56,7 @@
   when: not skip_backup | bool
   failed_when: false
 
-- name: Create illogical-impulse config directory
+- name: Create snry-shell config directory
   ansible.builtin.file:
     path: "{{ dots_confdir }}"
     state: directory
@@ -204,10 +204,10 @@
     - true # skip_ifexist logic handled by synchronize
 
 # Icon
-- name: Install illogical-impulse icon
+- name: Install snry-shell icon
   ansible.builtin.copy:
-    src: "{{ repo_root }}/files/.local/share/icons/illogical-impulse.svg"
-    dest: "{{ xdg_data_home }}/icons/illogical-impulse.svg"
+    src: "{{ repo_root }}/files/.local/share/icons/snry-shell.svg"
+    dest: "{{ xdg_data_home }}/icons/snry-shell.svg"
     mode: "0644"
 
 # Google Sans Flex (non-Fedora)
@@ -238,7 +238,7 @@
 
 - name: Install Google Sans Flex font
   ansible.builtin.command:
-    cmd: "rsync -a {{ repo_root }}/cache/google-sans-flex/ {{ xdg_data_home }}/fonts/illogical-impulse-google-sans-flex/"
+    cmd: "rsync -a {{ repo_root }}/cache/google-sans-flex/ {{ xdg_data_home }}/fonts/snry-shell-google-sans-flex/"
   when:
     - not is_fedora | bool
     - google_sans_check.rc != 0
