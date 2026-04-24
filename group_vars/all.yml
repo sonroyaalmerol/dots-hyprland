@@ -124,7 +124,7 @@ arch_packages:
   - translate-shell
   - wlogout
   - libqalculate
-  - quickshell
+  - quickshell-git
 
 # Fedora COPR repos
 fedora_copr_repos:
