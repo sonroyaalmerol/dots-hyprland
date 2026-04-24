@@ -59,7 +59,7 @@ Item { // Bar content region
         onMovedAway: GlobalStates.osdBrightnessOpen = false
         onPressed: event => {
             if (event.button === Qt.LeftButton)
-                GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
+                GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
         }
 
         ColumnLayout { // Content
