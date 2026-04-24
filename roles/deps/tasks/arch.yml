@@ -26,7 +26,7 @@
   when: "'paru' not in ansible_facts.packages"
 
 - name: Check if paru is installed
-  ansible.builtin.command: command -v paru
+  ansible.builtin.command: which paru
   register: paru_check
   failed_when: false
   changed_when: false
