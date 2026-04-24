@@ -14,8 +14,8 @@ jobs:
       - name: Install ansible-core
         run: pip install ansible-core
 
-      - name: Install community.general collection
-        run: ansible-galaxy collection install community.general
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install community.general ansible.posix
 
       - name: Validate YAML syntax
         run: |
