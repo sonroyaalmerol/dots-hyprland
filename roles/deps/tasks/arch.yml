@@ -92,5 +92,6 @@
   ansible.builtin.command:
     cmd: "uv pip install -r {{ repo_root }}/data/python/requirements.txt"
   environment:
+    VIRTUAL_ENV: "{{ venv_path }}"
     UV_NO_MODIFY_PATH: "1"
   when: ansible_facts.python_version is defined
