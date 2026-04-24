@@ -9,6 +9,13 @@
   vars_files:
     - group_vars/all.yml
 
+  pre_tasks:
+    - name: Install required Ansible collections
+      ansible.builtin.shell:
+        cmd: ansible-galaxy collection install -r "{{ playbook_dir }}/requirements.yml"
+      changed_when: false
+      tags: [always]
+
   tasks:
     - name: Include deps role
       ansible.builtin.import_role:

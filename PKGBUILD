@@ -15,7 +15,7 @@ backup=()
 package() {
   cd "$srcdir/$pkgname"
   install -dm755 "$pkgdir/usr/share/snry-shell"
-  cp -a ansible.cfg inventory.ini setup.yml group_vars roles data files files-extra "$pkgdir/usr/share/snry-shell/"
+  cp -a ansible.cfg inventory.ini requirements.yml setup.yml group_vars roles data files files-extra "$pkgdir/usr/share/snry-shell/"
   install -Dm755 /dev/stdin "$pkgdir/usr/bin/snry-shell" <<'SCRIPT'
 #!/bin/bash
 exec ansible-playbook /usr/share/snry-shell/setup.yml "$@"
