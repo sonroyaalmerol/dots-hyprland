@@ -11,10 +11,27 @@
   failed_when: false
   changed_when: false
 
+- name: Copy PKGBUILD to temp build directory
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/data/arch/microtex-git/"
+    dest: /tmp/build-microtex/
+    remote_src: true
+  when:
+    - is_arch | bool
+    - microtex_check.rc != 0
+
 - name: Build and install MicroTeX via makepkg
   ansible.builtin.command:
     cmd: makepkg -si --noconfirm --needed
-    chdir: "{{ repo_root }}/data/arch/microtex-git"
+    chdir: /tmp/build-microtex
+  when:
+    - is_arch | bool
+    - microtex_check.rc != 0
+
+- name: Clean up MicroTeX build directory
+  ansible.builtin.file:
+    path: /tmp/build-microtex
+    state: absent
   when:
     - is_arch | bool
     - microtex_check.rc != 0
