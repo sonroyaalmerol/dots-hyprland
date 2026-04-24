@@ -290,3 +290,17 @@
   ansible.builtin.command:
     cmd: hyprctl reload
   failed_when: false
+
+# Start Quickshell if not running
+- name: Check if Quickshell is running
+  ansible.builtin.command: pidof qs
+  register: qs_check
+  failed_when: false
+  changed_when: false
+
+- name: Start Quickshell
+  ansible.builtin.shell:
+    cmd: qs -c ii &
+  async: 5
+  poll: 0
+  when: qs_check.rc != 0
