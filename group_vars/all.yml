@@ -123,6 +123,7 @@ arch_packages:
   - songrec
   - translate-shell
   - wlogout
+  - nwg-displays
   - libqalculate
   - quickshell-git
 
@@ -261,6 +262,7 @@ fedora_packages:
     - translate-shell
     - qalculate
     - wlogout
+    - nwg-displays
 
 # Fedora RPM specs to build locally
 fedora_rpm_specs:
