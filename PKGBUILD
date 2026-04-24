@@ -11,6 +11,7 @@ makedepends=('git')
 source=("git+https://github.com/sonroyaalmerol/dots-hyprland.git")
 sha256sums=('SKIP')
 backup=()
+install=snry-shell-qs.install
 
 package() {
   cd "$srcdir/$pkgname"
