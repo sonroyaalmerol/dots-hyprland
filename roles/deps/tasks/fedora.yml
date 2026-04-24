@@ -44,7 +44,7 @@
 
 - name: Copy RPM specs to rpmbuild
   ansible.builtin.copy:
-    src: "{{ repo_root }}/sdata/dist-fedora/SPECS/"
+    src: "{{ repo_root }}/data/fedora/SPECS/"
     dest: "{{ repo_root }}/cache/rpmbuild/SPECS/"
     remote_src: true
     mode: "0755"
@@ -182,7 +182,7 @@
 
 - name: Install Python packages via uv
   ansible.builtin.command:
-    cmd: "uv pip install -r {{ repo_root }}/sdata/uv/requirements.txt"
+    cmd: "uv pip install -r {{ repo_root }}/data/python/requirements.txt"
   environment:
     UV_NO_MODIFY_PATH: "1"
 

@@ -39,7 +39,7 @@ fontset_dir_name: ""
 # Repo root path
 repo_root: "{{ playbook_dir }}"
 
-# Arch packages (loaded from sdata/dist-arch/packages.conf)
+# Arch packages (loaded from data/arch/packages.conf)
 arch_packages:
   - cava
   - pavucontrol-qt

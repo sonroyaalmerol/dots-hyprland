@@ -139,7 +139,7 @@ VERBOSE=false
 NON_INTERACTIVE=true
 SOURCE_ONLY=true
 
-source "$ORIGINAL_DIR/sdata/subcmd-exp-update/0.run.sh"
+source "$ORIGINAL_DIR/scripts/exp-update/0.run.sh"
 detected_dirs=\$(detect_repo_structure)
 if [[ -n "\$detected_dirs" ]]; then
   read -ra MONITOR_DIRS <<<"\$detected_dirs"
@@ -181,8 +181,8 @@ test_flat_structure() {
   cat > test_detection.sh << EOF
 #!/bin/bash
 # Mock logging and style functions/variables
-source "$ORIGINAL_DIR/sdata/lib/environment-variables.sh"
-source "$ORIGINAL_DIR/sdata/lib/functions.sh"
+source "$ORIGINAL_DIR/scripts/exp-update/options.sh"
+source "$ORIGINAL_DIR/scripts/exp-update/options.sh"
 log_info() { :; }
 log_warning() { :; }
 log_error() { :; }
@@ -200,7 +200,7 @@ VERBOSE=false
 NON_INTERACTIVE=true
 SOURCE_ONLY=true
 
-source "$ORIGINAL_DIR/sdata/subcmd-exp-update/0.run.sh"
+source "$ORIGINAL_DIR/scripts/exp-update/0.run.sh"
 detected_dirs=\$(detect_repo_structure)
 if [[ -n "\$detected_dirs" ]]; then
   read -ra MONITOR_DIRS <<<"\$detected_dirs"
@@ -267,8 +267,8 @@ EOF
   cat > test_ignore.sh << EOF
 #!/bin/bash
 # Suppress all output from sourced script
-source "$ORIGINAL_DIR/sdata/lib/environment-variables.sh"
-source "$ORIGINAL_DIR/sdata/lib/functions.sh"
+source "$ORIGINAL_DIR/scripts/exp-update/options.sh"
+source "$ORIGINAL_DIR/scripts/exp-update/options.sh"
 log_info() { :; }
 log_warning() { :; }
 log_error() { :; }
@@ -293,7 +293,7 @@ HOME_UPDATE_IGNORE_FILE="/dev/null"
 
 # Source the production script to use the real should_ignore function
 # Redirect all unwanted output to stderr, then to /dev/null
-source "$ORIGINAL_DIR/sdata/subcmd-exp-update/0.run.sh" 2>/dev/null
+source "$ORIGINAL_DIR/scripts/exp-update/0.run.sh" 2>/dev/null
 
 test_cases=(
   "\$REPO_ROOT/app.log:0"
@@ -348,7 +348,7 @@ test_safe_read_security() {
   log_test "Testing safe_read uses secure assignment (printf -v)"
 
   local safe_read_function
-  safe_read_function=$(awk '/^safe_read\(\) \{/,/^\}/' "$ORIGINAL_DIR/sdata/subcmd-exp-update/0.run.sh")
+  safe_read_function=$(awk '/^safe_read\(\) \{/,/^\}/' "$ORIGINAL_DIR/scripts/exp-update/0.run.sh")
 
   if [[ -z "$safe_read_function" ]]; then
     log_fail "Could not find safe_read function"
@@ -395,7 +395,7 @@ test_dry_run() {
 
   # Copy necessary files for setup to run
   cp "$ORIGINAL_DIR/setup" .
-  cp -r "$ORIGINAL_DIR/sdata" .
+  mkdir -p "$ORIGINAL_DIR/scripts" && cp -r "$ORIGINAL_DIR/scripts" .
   cp -r "$ORIGINAL_DIR/dots" .
   chmod +x setup
 
@@ -490,7 +490,7 @@ test_lock_file() {
   
   # Copy necessary files
   cp "$ORIGINAL_DIR/setup" .
-  cp -r "$ORIGINAL_DIR/sdata" .
+  mkdir -p "$ORIGINAL_DIR/scripts" && cp -r "$ORIGINAL_DIR/scripts" .
   mkdir -p dots/.config
   chmod +x setup
   
@@ -538,8 +538,8 @@ EOF
   cat > test_substring_ignore.sh << EOF
 #!/bin/bash
 # Suppress all output from sourced script
-source "$ORIGINAL_DIR/sdata/lib/environment-variables.sh"
-source "$ORIGINAL_DIR/sdata/lib/functions.sh"
+source "$ORIGINAL_DIR/scripts/exp-update/options.sh"
+source "$ORIGINAL_DIR/scripts/exp-update/options.sh"
 log_info() { :; }
 log_warning() { :; }
 log_error() { :; }
@@ -563,7 +563,7 @@ UPDATE_IGNORE_FILE="\${REPO_ROOT}/.updateignore"
 HOME_UPDATE_IGNORE_FILE="/dev/null"
 
 # Source the production script to use the real should_ignore function
-source "$ORIGINAL_DIR/sdata/subcmd-exp-update/0.run.sh" 2>/dev/null
+source "$ORIGINAL_DIR/scripts/exp-update/0.run.sh" 2>/dev/null
 
 # Load patterns into cache
 load_ignore_patterns
@@ -629,8 +629,8 @@ test_directory_caching() {
   
   cat > test_dir_cache.sh << EOF
 #!/bin/bash
-source "$ORIGINAL_DIR/sdata/lib/environment-variables.sh"
-source "$ORIGINAL_DIR/sdata/lib/functions.sh"
+source "$ORIGINAL_DIR/scripts/exp-update/options.sh"
+source "$ORIGINAL_DIR/scripts/exp-update/options.sh"
 log_info() { :; }
 log_warning() { :; }
 log_error() { :; }
@@ -649,7 +649,7 @@ VERBOSE=false
 NON_INTERACTIVE=true
 SOURCE_ONLY=true
 
-source "$ORIGINAL_DIR/sdata/subcmd-exp-update/0.run.sh" 2>/dev/null
+source "$ORIGINAL_DIR/scripts/exp-update/0.run.sh" 2>/dev/null
 
 test_dir="/tmp/test-ensure-dir-\$\$"
 
@@ -690,8 +690,8 @@ test_safe_read_noninteractive() {
   
   cat > test_safe_read.sh << 'EOF'
 #!/bin/bash
-source "$ORIGINAL_DIR/sdata/lib/environment-variables.sh"
-source "$ORIGINAL_DIR/sdata/lib/functions.sh"
+source "$ORIGINAL_DIR/scripts/exp-update/options.sh"
+source "$ORIGINAL_DIR/scripts/exp-update/options.sh"
 log_warning() { :; }
 log_error() { :; }
 

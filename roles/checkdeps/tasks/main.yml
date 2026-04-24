@@ -23,7 +23,7 @@
 
 - name: Read packages from packages.conf
   ansible.builtin.slurp:
-    src: "{{ repo_root }}/sdata/dist-arch/packages.conf"
+    src: "{{ repo_root }}/data/arch/packages.conf"
   register: packages_conf_raw
   failed_when: false
 

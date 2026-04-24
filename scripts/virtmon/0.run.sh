@@ -7,9 +7,9 @@ ensure_cmds wayvnc lsof jq ip
 
 start_hypr_mon_guard(){
   if ! pgrep -x hypr_mon_guard >/dev/null 2>&1; then
-    if PATH=$PATH:${REPO_ROOT}/sdata/subcmd-virtmon command -v hypr_mon_guard ; then
+    if PATH=$PATH:${REPO_ROOT}/scripts/virtmon command -v hypr_mon_guard ; then
       echo "Running hypr_mon_guard."
-      PATH=$PATH:${REPO_ROOT}/sdata/subcmd-virtmon setsid hypr_mon_guard > $(mktemp) 2>&1 &
+      PATH=$PATH:${REPO_ROOT}/scripts/virtmon setsid hypr_mon_guard > $(mktemp) 2>&1 &
     else
       echo "Script hypr_mon_guard not found."
       exit 1

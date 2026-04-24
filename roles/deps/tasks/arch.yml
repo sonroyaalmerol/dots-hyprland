@@ -76,7 +76,7 @@
 
 - name: Install Python packages via uv
   ansible.builtin.command:
-    cmd: "uv pip install -r {{ repo_root }}/sdata/uv/requirements.txt"
+    cmd: "uv pip install -r {{ repo_root }}/data/python/requirements.txt"
   environment:
     UV_NO_MODIFY_PATH: "1"
   when: ansible_facts.python_version is defined
