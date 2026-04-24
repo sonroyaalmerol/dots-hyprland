@@ -27,6 +27,8 @@ export ANDROID_HOME=/opt/android-sdk
 export ANDROID_SDK_ROOT=$ANDROID_HOME
 export ANDROID_NDK_HOME=/opt/android-ndk
 
+
+
 # ─── Quickshell terminal colors ───
 if [[ "$TERM" != "linux" ]] && [[ -f ~/.local/state/quickshell/user/generated/terminal/sequences.txt ]]; then
     cat ~/.local/state/quickshell/user/generated/terminal/sequences.txt
