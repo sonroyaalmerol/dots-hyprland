@@ -76,7 +76,7 @@ arch_packages:
   - fzf
   - fontconfig
   - kitty
-  - matugen
+  - matugen-bin
   - otf-space-grotesk
   - starship
   - ttf-jetbrains-mono-nerd
