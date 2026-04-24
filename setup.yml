@@ -37,11 +37,6 @@
         name: files
       tags: [files]
 
-    - name: Include uninstall role
-      ansible.builtin.import_role:
-        name: uninstall
-      tags: [uninstall]
-
     - name: Include diagnose role
       ansible.builtin.import_role:
         name: diagnose
