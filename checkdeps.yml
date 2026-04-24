@@ -1,0 +1,14 @@
+---
+# Snry Shell Check Dependencies Playbook
+
+- name: Snry Shell Check Dependencies
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars_files:
+    - group_vars/all.yml
+
+  tasks:
+    - name: Include checkdeps role
+      ansible.builtin.import_role:
+        name: checkdeps

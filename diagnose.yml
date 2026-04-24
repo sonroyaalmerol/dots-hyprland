@@ -1,0 +1,14 @@
+---
+# Snry Shell Diagnose Playbook
+
+- name: Snry Shell Diagnose
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars_files:
+    - group_vars/all.yml
+
+  tasks:
+    - name: Include diagnose role
+      ansible.builtin.import_role:
+        name: diagnose
