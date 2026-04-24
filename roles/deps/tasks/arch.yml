@@ -53,7 +53,7 @@
 - name: Allow passwordless sudo for pacman
   community.general.sudoers:
     name: pacman-nopasswd
-    user: "{{ ansible_user_id }}"
+    user: "{{ ansible_facts['user_id'] }}"
     commands:
       - /usr/bin/pacman
       - /usr/bin/pacman-key

@@ -23,7 +23,7 @@
 
 - name: Install MicroTeX build dependencies
   community.general.pacman:
-    name: "{{ microtex_deps.stdout_lines }}"
+    name: "{{ microtex_deps.stdout.split(' ') }}"
     extra_args: "--needed --noconfirm --asdeps"
     state: present
   become: true
