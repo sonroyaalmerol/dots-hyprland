@@ -25,11 +25,12 @@
     - "{{ xdg_config_home }}"
     - "{{ xdg_data_home }}"
 
-- name: Update git submodules
-  ansible.builtin.command:
-    cmd: git submodule update --init --recursive
-  args:
-    chdir: "{{ repo_root }}"
+- name: Ensure git submodules are present
+  ansible.builtin.git:
+    repo: https://github.com/end-4/rounded-polygon-qmljs.git
+    dest: "{{ repo_root }}/files/.config/quickshell/ii/modules/common/widgets/shapes"
+    depth: 1
+  when: not skip_quickshell | bool
 
 - name: Create backup directory for clashing configs
   ansible.builtin.file:
