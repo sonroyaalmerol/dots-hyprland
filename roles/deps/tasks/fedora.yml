@@ -1,0 +1,193 @@
+---
+# Fedora dependencies installation
+
+- name: Upgrade dnf packages
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+  become: true
+  when: not skip_sysupdate | bool
+
+- name: Remove versionlock on quickshell-git
+  ansible.builtin.command:
+    cmd: dnf versionlock delete quickshell-git
+  become: true
+  failed_when: false
+
+- name: Install yq for parsing config files
+  ansible.builtin.dnf:
+    name:
+      - yq
+    state: present
+  become: true
+
+- name: Install development tools
+  ansible.builtin.dnf:
+    name:
+      - "@development-tools"
+      - fedora-packager
+    state: present
+  become: true
+
+- name: Enable COPR repositories
+  community.general.copr:
+    name: "{{ item }}"
+    state: enabled
+  become: true
+  loop: "{{ fedora_copr_repos }}"
+
+- name: Create rpmbuild directory
+  ansible.builtin.file:
+    path: "{{ repo_root }}/cache/rpmbuild"
+    state: directory
+    mode: "0755"
+
+- name: Copy RPM specs to rpmbuild
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/sdata/dist-fedora/SPECS/"
+    dest: "{{ repo_root }}/cache/rpmbuild/SPECS/"
+    remote_src: true
+    mode: "0755"
+
+- name: Build local RPM packages
+  block:
+    - name: Download sources for RPM build
+      ansible.builtin.command:
+        cmd: "spectool -g -C {{ repo_root }}/cache/rpmbuild/SOURCES {{ repo_root }}/cache/rpmbuild/SPECS/{{ item }}.spec"
+      loop: "{{ fedora_rpm_specs }}"
+      when: false # Disable for now, requires spectool
+
+    - name: Install build dependencies
+      ansible.builtin.command:
+        cmd: "dnf builddep -y {{ repo_root }}/cache/rpmbuild/SPECS/{{ item }}.spec"
+      become: true
+      loop: "{{ fedora_rpm_specs }}"
+      when: false # Disable for now
+
+    - name: Build RPM packages locally
+      ansible.builtin.command:
+        cmd: "rpmbuild -bb --define '_topdir {{ repo_root }}/cache/rpmbuild' --define 'debug_package %{nil}' {{ repo_root }}/cache/rpmbuild/SPECS/{{ item }}.spec"
+      loop: "{{ fedora_rpm_specs }}"
+      when: false # Disable for now
+  when: false # Disable local RPM builds for now
+
+- name: Install COPR built packages as fallback
+  ansible.builtin.dnf:
+    name: "{{ fedora_rpm_specs }}"
+    enablerepo: "{{ item | regex_replace('/.*', '') }}"
+    state: present
+  become: true
+  loop: "{{ fedora_copr_repos }}"
+  when: false # Disable for now
+
+- name: Install Fedora package groups
+  ansible.builtin.dnf:
+    name: "{{ item }}"
+    state: present
+    install_weak_deps: false
+  become: true
+  loop: "{{ fedora_packages.audio }}"
+
+- name: Install backlight packages
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.backlight }}"
+    state: present
+    install_weak_deps: false
+  become: true
+
+- name: Install basic packages
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.basic }}"
+    state: present
+  become: true
+
+- name: Install cursor theme packages
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.cursor_themes }}"
+    state: present
+  become: true
+
+- name: Install fonts and themes packages
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.fonts_and_themes }}"
+    state: present
+  become: true
+
+- name: Install Hyprland packages
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.hyprland }}"
+    state: present
+    install_weak_deps: false
+  become: true
+
+- name: Install KDE packages
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.kde }}"
+    state: present
+  become: true
+
+- name: Install MicroTeX package
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.microtex }}"
+    state: present
+  become: true
+
+- name: Install portal packages
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.portal }}"
+    state: present
+  become: true
+
+- name: Install Python packages
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.python }}"
+    state: present
+    install_weak_deps: false
+  become: true
+
+- name: Install Quickshell packages
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.quickshell }}"
+    state: present
+  become: true
+
+- name: Install screencapture packages
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.screencapture }}"
+    state: present
+  become: true
+
+- name: Install toolkit packages
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.toolkit }}"
+    state: present
+  become: true
+
+- name: Install widgets packages
+  ansible.builtin.dnf:
+    name: "{{ fedora_packages.widgets }}"
+    state: present
+  become: true
+
+- name: Ensure venv parent directory exists
+  ansible.builtin.file:
+    path: "{{ venv_path | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Create Python venv at {{ venv_path }}
+  ansible.builtin.command:
+    cmd: "uv venv --prompt .venv {{ venv_path }} -p 3.12"
+    creates: "{{ venv_path }}/bin/activate"
+
+- name: Install Python packages via uv
+  ansible.builtin.command:
+    cmd: "uv pip install -r {{ repo_root }}/sdata/uv/requirements.txt"
+  environment:
+    UV_NO_MODIFY_PATH: "1"
+
+- name: Add versionlock for quickshell-git
+  ansible.builtin.command:
+    cmd: dnf versionlock add quickshell-git
+  become: true
+  failed_when: false

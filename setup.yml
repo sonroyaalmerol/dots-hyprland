@@ -1,0 +1,46 @@
+---
+# Illogical Impulse Ansible Playbook
+# Replaces bash scripts for install, uninstall, deps, setups, files, diagnose, checkdeps
+
+- name: Illogical Impulse Setup
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars_files:
+    - group_vars/all.yml
+
+  tasks:
+    - name: Include deps role
+      ansible.builtin.import_role:
+        name: deps
+      tags: [deps]
+
+    - name: Include microtex role
+      ansible.builtin.import_role:
+        name: microtex
+      tags: [deps, microtex]
+
+    - name: Include setups role
+      ansible.builtin.import_role:
+        name: setups
+      tags: [setups]
+
+    - name: Include files role
+      ansible.builtin.import_role:
+        name: files
+      tags: [files]
+
+    - name: Include uninstall role
+      ansible.builtin.import_role:
+        name: uninstall
+      tags: [uninstall]
+
+    - name: Include diagnose role
+      ansible.builtin.import_role:
+        name: diagnose
+      tags: [diagnose]
+
+    - name: Include checkdeps role
+      ansible.builtin.import_role:
+        name: checkdeps
+      tags: [checkdeps]

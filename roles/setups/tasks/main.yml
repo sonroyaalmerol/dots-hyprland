@@ -1,0 +1,99 @@
+---
+# Setups role - System setup tasks
+
+- name: Check if Arch-based
+  ansible.builtin.set_fact:
+    is_arch: "{{ ansible_facts['distribution'] in ['Arch Linux', 'CachyOS'] or ansible_facts['os_family'] == 'Archlinux' }}"
+
+- name: Check if Fedora
+  ansible.builtin.set_fact:
+    is_fedora: "{{ ansible_facts['distribution'] == 'Fedora' }}"
+
+- name: Create i2c group (Arch only)
+  ansible.builtin.group:
+    name: i2c
+    state: present
+  become: true
+  when: is_arch | bool
+
+- name: Add user to video, input groups
+  ansible.builtin.user:
+    name: "{{ ansible_facts.user_id }}"
+    groups: video,input
+    append: true
+  become: true
+
+- name: Add user to i2c group (Arch only)
+  ansible.builtin.user:
+    name: "{{ ansible_facts.user_id }}"
+    groups: i2c
+    append: true
+  become: true
+  when: is_arch | bool
+
+- name: Create i2c-dev module config (Arch only)
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/i2c-dev.conf
+    content: "i2c-dev\n"
+    mode: "0644"
+  become: true
+  when: is_arch | bool
+
+- name: Create uinput module config (Fedora only)
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/uinput.conf
+    content: "uinput\n"
+    mode: "0644"
+  become: true
+  when: is_fedora | bool
+
+- name: Create udev rules for uinput (Fedora only)
+  ansible.builtin.copy:
+    dest: /etc/udev/rules.d/99-uinput.rules
+    content: 'SUBSYSTEM=="misc", KERNEL=="uinput", MODE="0660", GROUP="input"\n'
+    mode: "0644"
+  become: true
+  when: is_fedora | bool
+
+- name: Symlink ydotool service
+  ansible.builtin.file:
+    src: /usr/lib/systemd/system/ydotool.service
+    dest: /usr/lib/systemd/user/ydotool.service
+    state: link
+  become: true
+  when: is_fedora | bool
+
+- name: Enable bluetooth service
+  ansible.builtin.systemd:
+    name: bluetooth
+    state: started
+    enabled: true
+  become: true
+
+- name: Check DBUS_SESSION_BUS_ADDRESS
+  ansible.builtin.set_fact:
+    has_dbus: "{{ lookup('env', 'DBUS_SESSION_BUS_ADDRESS') | length > 0 }}"
+
+- name: Enable ydotool user service with direct systemctl
+  ansible.builtin.command:
+    cmd: "systemctl --user enable ydotool --now"
+  become: true
+  become_user: "{{ ansible_facts.user_id }}"
+  when: has_dbus | bool
+
+- name: Enable ydotool user service via sudo
+  ansible.builtin.command:
+    cmd: "sudo systemctl --machine={{ ansible_facts.user_id }}@.host --user enable ydotool --now"
+  when: not has_dbus | bool
+
+- name: Set font-name gsetting
+  ansible.builtin.command:
+    cmd: "gsettings set org.gnome.desktop.interface font-name 'Google Sans Flex Medium 11 @opsz=11,wght=500'"
+
+- name: Set color-scheme gsetting
+  ansible.builtin.command:
+    cmd: "gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'"
+
+- name: Set widgetStyle via kwriteconfig6
+  ansible.builtin.command:
+    cmd: "kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle Darkly"

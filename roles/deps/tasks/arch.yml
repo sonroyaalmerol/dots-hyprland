@@ -1,0 +1,82 @@
+---
+# Arch Linux dependencies installation
+
+- name: Update pacman mirrors
+  community.general.pacman:
+    update_cache: true
+  become: true
+  when: not skip_sysupdate | bool
+
+- name: Upgrade all packages
+  community.general.pacman:
+    upgrade: true
+  become: true
+  when: not skip_sysupdate | bool
+
+- name: Install base-devel if yay not installed
+  community.general.pacman:
+    name:
+      - base-devel
+    state: present
+  become: true
+  when: "'yay' not in ansible_facts.packages"
+
+- name: Check if yay is installed
+  ansible.builtin.command: command -v yay
+  register: yay_check
+  failed_when: false
+  changed_when: false
+
+- name: Clone and build yay-bin
+  ansible.builtin.git:
+    repo: https://aur.archlinux.org/yay-bin.git
+    dest: /tmp/buildyay
+    accept_hostkey: true
+  become: true
+  when: yay_check.rc != 0
+
+- name: Build and install yay
+  ansible.builtin.make:
+    chdir: /tmp/buildyay
+    target: package
+  become: true
+  when: yay_check.rc != 0
+
+- name: Clean up yay build
+  ansible.builtin.file:
+    path: /tmp/buildyay
+    state: absent
+  when: yay_check.rc != 0
+
+- name: Install Arch packages via yay
+  community.general.pacman:
+    name: "{{ arch_packages }}"
+    extra_args: "--needed --noconfirm"
+    state: present
+  become: true
+
+- name: Install plasma-browser-integration if not skipped
+  community.general.pacman:
+    name:
+      - plasma-browser-integration
+    state: present
+  become: true
+  when: not skip_plasmaintg | bool
+
+- name: Ensure venv parent directory exists
+  ansible.builtin.file:
+    path: "{{ venv_path | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Create Python venv at {{ venv_path }}
+  ansible.builtin.command:
+    cmd: "uv venv --prompt .venv {{ venv_path }} -p 3.12"
+    creates: "{{ venv_path }}/bin/activate"
+
+- name: Install Python packages via uv
+  ansible.builtin.command:
+    cmd: "uv pip install -r {{ repo_root }}/sdata/uv/requirements.txt"
+  environment:
+    UV_NO_MODIFY_PATH: "1"
+  when: ansible_facts.python_version is defined
