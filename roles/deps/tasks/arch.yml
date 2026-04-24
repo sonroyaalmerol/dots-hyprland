@@ -13,46 +13,44 @@
   become: true
   when: not skip_sysupdate | bool
 
-- name: Install base-devel if yay not installed
+- name: Install base-devel if paru not installed
   community.general.pacman:
     name:
       - base-devel
     state: present
   become: true
-  when: "'yay' not in ansible_facts.packages"
+  when: "'paru' not in ansible_facts.packages"
 
-- name: Check if yay is installed
-  ansible.builtin.command: command -v yay
-  register: yay_check
+- name: Check if paru is installed
+  ansible.builtin.command: command -v paru
+  register: paru_check
   failed_when: false
   changed_when: false
 
-- name: Clone and build yay-bin
+- name: Clone and build paru-bin from AUR
   ansible.builtin.git:
-    repo: https://aur.archlinux.org/yay-bin.git
-    dest: /tmp/buildyay
+    repo: https://aur.archlinux.org/paru.git
+    dest: /tmp/buildparu
     accept_hostkey: true
   become: true
-  when: yay_check.rc != 0
+  when: paru_check.rc != 0
 
-- name: Build and install yay
+- name: Build and install paru
   ansible.builtin.make:
-    chdir: /tmp/buildyay
+    chdir: /tmp/buildparu
     target: package
   become: true
-  when: yay_check.rc != 0
+  when: paru_check.rc != 0
 
-- name: Clean up yay build
+- name: Clean up paru build
   ansible.builtin.file:
-    path: /tmp/buildyay
+    path: /tmp/buildparu
     state: absent
-  when: yay_check.rc != 0
+  when: paru_check.rc != 0
 
-- name: Install Arch packages via yay
-  community.general.pacman:
-    name: "{{ arch_packages }}"
-    extra_args: "--needed --noconfirm"
-    state: present
+- name: Install Arch packages via paru
+  ansible.builtin.command:
+    cmd: "paru -S --needed --noconfirm {{ arch_packages }}"
   become: true
 
 - name: Install plasma-browser-integration if not skipped
