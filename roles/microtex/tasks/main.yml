@@ -5,63 +5,16 @@
   ansible.builtin.set_fact:
     is_arch: "{{ ansible_facts['distribution'] in ['Arch Linux', 'CachyOS'] or ansible_facts['os_family'] == 'Archlinux' }}"
 
-- name: Verify PKGBUILD exists
-  ansible.builtin.stat:
-    path: "{{ repo_root }}/data/arch/microtex-git/PKGBUILD"
-  register: pkgbuild_stat
-
-- name: Fail if PKGBUILD not found
-  ansible.builtin.fail:
-    msg: "PKGBUILD not found at {{ repo_root }}/data/arch/microtex-git/PKGBUILD"
-  when: not pkgbuild_stat.stat.exists
-
-- name: Read PKGBUILD for dependencies
-  ansible.builtin.command:
-    cmd: 'bash -c ''source {{ repo_root }}/data/arch/microtex-git/PKGBUILD && echo "${depends[@]}"'''
-  register: microtex_deps
+- name: Check if MicroTeX is already installed
+  ansible.builtin.command: which LaTeX
+  register: microtex_check
+  failed_when: false
   changed_when: false
 
-- name: Install MicroTeX build dependencies
-  community.general.pacman:
-    name: "{{ microtex_deps.stdout.split(' ') }}"
-    extra_args: "--needed --noconfirm --asdeps"
-    state: present
-  become: true
-  when: is_arch | bool
-
-- name: Prepare MicroTeX build directory
-  ansible.builtin.shell:
-    cmd: |
-      sed -i 's/gtksourceviewmm-3.0/gtksourceviewmm-4.0/' CMakeLists.txt
-      sed -i 's/tinyxml2.so.10/tinyxml2.so.11/' CMakeLists.txt
-    chdir: "{{ repo_root }}/data/arch/microtex-git"
-  when: is_arch | bool
-
-- name: Build MicroTeX with cmake
+- name: Build and install MicroTeX via makepkg
   ansible.builtin.command:
-    cmd: cmake -B build -S . -DCMAKE_BUILD_TYPE=None
+    cmd: makepkg -si --noconfirm --needed
     chdir: "{{ repo_root }}/data/arch/microtex-git"
-  when: is_arch | bool
-
-- name: Build MicroTeX
-  ansible.builtin.command:
-    cmd: cmake --build build
-    chdir: "{{ repo_root }}/data/arch/microtex-git"
-  when: is_arch | bool
-
-- name: Install MicroTeX
-  ansible.builtin.copy:
-    src: "{{ repo_root }}/data/arch/microtex-git/build/LaTeX"
-    dest: /opt/MicroTeX/LaTeX
-    remote_src: true
-    mode: "0755"
-  become: true
-  when: is_arch | bool
-
-- name: Copy MicroTeX resources
-  ansible.builtin.copy:
-    src: "{{ repo_root }}/data/arch/microtex-git/build/res/"
-    dest: /opt/MicroTeX/res/
-    remote_src: true
-  become: true
-  when: is_arch | bool
+  when:
+    - is_arch | bool
+    - microtex_check.rc != 0
