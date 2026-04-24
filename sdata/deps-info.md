@@ -43,8 +43,6 @@ Tips:
   - Too many executables involved, not sure where been used.
 - `cliphist`
   - Used in Hyprland and Quickshell config.
-- `cmake`
-  - Used in building quickshell and MicroTeX.
 - `curl`
   - Used in Quickshell config.
 - `wget`
@@ -60,9 +58,8 @@ Tips:
 - `go-yq`
   - Used in install script.
 - Extra Qt6/KDE dependencies (moved from removed quickshell-git meta-package):
-  - `qt6-5compat`, `qt6-avif-image-plugin`, `qt6-imageformats`, `qt6-multimedia`
-  - `qt6-positioning`, `qt6-quicktimeline`, `qt6-sensors`, `qt6-tools`
-  - `qt6-translations`, `qt6-virtualkeyboard`, `kirigami`, `kdialog`, `syntax-highlighting`
+  - `qt6-5compat`, `qt6-avif-image-plugin`, `qt6-imageformats`, `qt6-positioning`
+  - `kirigami`, `kdialog`, `syntax-highlighting`
   - Used by Quickshell QML config.
 
 ## illogical-impulse-fonts-themes
