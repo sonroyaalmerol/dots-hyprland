@@ -238,6 +238,7 @@ fedora_packages:
     - qt6-qtvirtualkeyboard
     - kdialog
     - kf6-syntax-highlighting
+    - polkit-libs
   screencapture:
     - hyprshot
     - slurp
