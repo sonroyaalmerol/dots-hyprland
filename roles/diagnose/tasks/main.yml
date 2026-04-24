@@ -3,8 +3,14 @@
 
 - name: Remove existing diagnose result file
   ansible.builtin.file:
-    path: "{{ repo_root }}/diagnose.result"
+    path: "{{ xdg_cache_home }}/snry-shell/diagnose.result"
     state: absent
+
+- name: Ensure diagnose output directory exists
+  ansible.builtin.file:
+    path: "{{ xdg_cache_home }}/snry-shell"
+    state: directory
+    mode: "0755"
 
 - name: Collect git remote URL
   ansible.builtin.command:
@@ -13,6 +19,7 @@
     chdir: "{{ repo_root }}"
   register: git_remote
   changed_when: false
+  failed_when: false
 
 - name: Collect git HEAD
   ansible.builtin.command:
@@ -21,6 +28,7 @@
     chdir: "{{ repo_root }}"
   register: git_head
   changed_when: false
+  failed_when: false
 
 - name: Collect git status
   ansible.builtin.command:
@@ -29,6 +37,7 @@
     chdir: "{{ repo_root }}"
   register: git_status
   changed_when: false
+  failed_when: false
 
 - name: Collect git submodule status
   ansible.builtin.command:
@@ -37,6 +46,7 @@
     chdir: "{{ repo_root }}"
   register: git_submodules
   changed_when: false
+  failed_when: false
 
 - name: Get distro ID
   ansible.builtin.shell:
@@ -84,17 +94,17 @@
 
 - name: Write diagnose results to file
   ansible.builtin.copy:
-    dest: "{{ repo_root }}/diagnose.result"
+    dest: "{{ xdg_cache_home }}/snry-shell/diagnose.result"
     content: |
       ========================================
       Git Repo Info
       ========================================
-      Remote URL: {{ git_remote.stdout }}
-      HEAD: {{ git_head.stdout }}
+      Remote URL: {{ git_remote.stdout | default('N/A (not a git repo)') }}
+      HEAD: {{ git_head.stdout | default('N/A') }}
       Status:
-      {{ git_status.stdout }}
+      {{ git_status.stdout | default('N/A') }}
       Submodules:
-      {{ git_submodules.stdout }}
+      {{ git_submodules.stdout | default('N/A') }}
 
       ========================================
       Distro Info
@@ -128,5 +138,5 @@
 
 - name: Display diagnose results
   ansible.builtin.command:
-    cmd: cat {{ repo_root }}/diagnose.result
+    cmd: cat {{ xdg_cache_home }}/snry-shell/diagnose.result
   changed_when: false
