@@ -36,7 +36,6 @@ packages = [
   "bc",
   "coreutils",
   "cliphist",
-  "cmake",
   "curl",
   "wget2",
   "ripgrep",
