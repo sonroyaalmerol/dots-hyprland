@@ -22,7 +22,7 @@ skip_backup: false
 skip_quickshell: false
 skip_hyprland: false
 skip_hyprland_entry: false
-skip_fish: false
+skip_bash: false
 skip_fontconfig: false
 skip_miscconf: false
 skip_allgreeting: false
@@ -73,7 +73,7 @@ arch_packages:
   - breeze-plus
   - darkly-bin
   - eza
-  - fish
+  - fzf
   - fontconfig
   - kitty
   - matugen
@@ -170,7 +170,7 @@ fedora_packages:
     - breeze-plus-icon-theme
     - darkly
     - eza
-    - fish
+    - bash-completion
     - fontconfig
     - kitty
     - florian-karsten-space-grotesk-fonts

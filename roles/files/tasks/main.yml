@@ -50,7 +50,7 @@
     cmd: "rsync -av --include='{{ item }}' --exclude='*' {{ xdg_config_home }}/ {{ backup_dir }}/.config/"
   loop:
     - quickshell/
-    - fish/
+    - bash/
     - fontconfig/
     - hypr/
   when: not skip_backup | bool
@@ -68,7 +68,7 @@
     state: directory
     mode: "0755"
 
-# MISC configs (dots/.config/* except quickshell, fish, hypr, fontconfig)
+# MISC configs (dots/.config/* except quickshell, bash, hypr, fontconfig)
 - name: Copy MISC config directories
   ansible.builtin.synchronize:
     src: "{{ repo_root }}/files/.config/{{ item }}/"
@@ -102,16 +102,44 @@
     recursive: true
   when: not skip_quickshell | bool
 
-# Fish
-- name: Sync Fish config (excluding conf.d)
+# Bash
+- name: Sync Bash config
   ansible.builtin.synchronize:
-    src: "{{ repo_root }}/files/.config/fish/"
-    dest: "{{ xdg_config_home }}/fish/"
-    delete: false
+    src: "{{ repo_root }}/files/.config/bash/"
+    dest: "{{ xdg_config_home }}/bash/"
+    delete: true
     recursive: true
-    rsync_opts:
-      - --exclude=conf.d
-  when: not skip_fish | bool
+  when: not skip_bash | bool
+
+- name: Install .bashrc
+  ansible.builtin.copy:
+    src: "{{ xdg_config_home }}/bash/bashrc"
+    dest: "{{ ansible_user_dir }}/.bashrc"
+    mode: "0644"
+    backup: true
+  when: not skip_bash | bool
+
+- name: Install .bash_profile
+  ansible.builtin.copy:
+    src: "{{ xdg_config_home }}/bash/bash_profile"
+    dest: "{{ ansible_user_dir }}/.bash_profile"
+    mode: "0644"
+    backup: true
+  when: not skip_bash | bool
+
+- name: Install .inputrc
+  ansible.builtin.copy:
+    src: "{{ xdg_config_home }}/bash/inputrc"
+    dest: "{{ ansible_user_dir }}/.inputrc"
+    mode: "0644"
+    backup: true
+  when: not skip_bash | bool
+
+- name: Install ble.sh
+  ansible.builtin.command:
+    cmd: "bash -c 'if [ ! -d {{ xdg_data_home }}/blesh ]; then git clone --recursive --shallow-submodules https://github.com/akinomyoga/ble.sh.git {{ xdg_data_home }}/blesh && {{ xdg_data_home }}/blesh/ble.sh install; fi'"
+  when: not skip_bash | bool
+  changed_when: false
 
 # Fontconfig
 - name: Sync default fontconfig

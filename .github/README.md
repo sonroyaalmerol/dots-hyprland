@@ -1,5 +1,5 @@
 <div align="center">
-    <h1>【 Snry Shell 】</h1>
+    <h1>【 snry Shell QS 】</h1>
     <h3></h3>
 </div>
 
@@ -28,7 +28,6 @@
   <summary>Notable features</summary>
      
   - **Overview**: Shows open apps with live previews
-  - **AI**: Gemini, Ollama, and more
   - **QoL**: screen translation, anti-flashbang, Google Lens
   - **Material themes**: Choose your wallpaper, done, enjoy
   - **Transparent installation**: Every command is shown before it's run
