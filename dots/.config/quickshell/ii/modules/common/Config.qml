@@ -477,9 +477,6 @@ Singleton {
                     property bool enable: false
                     property int delay: 300 // Delay before sending request. Reduces (potential) rate limits and lag.
                 }
-                property JsonObject ai: JsonObject {
-                    property bool textFadeIn: false
-                }
                 property JsonObject booru: JsonObject {
                     property bool allowNsfw: false
                     property string defaultProvider: "yandere"
