@@ -59,6 +59,14 @@
       - /usr/bin/pacman-key
   become: true
 
+- name: Remove quickshell if installed (replaced by quickshell-git)
+  community.general.pacman:
+    name:
+      - quickshell
+    state: absent
+  become: true
+  ignore_errors: true
+
 - name: Install Arch packages via paru
   ansible.builtin.command:
     cmd: "paru -S --needed --noconfirm {{ arch_packages | join(' ') }}"
