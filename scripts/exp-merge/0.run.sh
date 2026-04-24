@@ -89,7 +89,7 @@ switch_to_merge_branch() {
 
 copy_and_commit_user_config() {
   local user_quickshell="${HOME}/.config/quickshell"
-  local repo_quickshell="${REPO_ROOT}/dots/.config/quickshell"
+  local repo_quickshell="${REPO_ROOT}/files/.config/quickshell"
 
   if [[ ! -d "${user_quickshell}" ]]; then
     log_warning "Quickshell config not found at: ${user_quickshell}"
@@ -154,7 +154,7 @@ apply_quickshell_config() {
   log_header "Apply Quickshell Config"
 
   local user_quickshell="${HOME}/.config/quickshell"
-  local repo_quickshell="${REPO_ROOT}/dots/.config/quickshell"
+  local repo_quickshell="${REPO_ROOT}/files/.config/quickshell"
   local timestamp
   timestamp=$(date +%Y%m%d-%H%M%S)
 
@@ -218,7 +218,7 @@ update_hypr_config() {
   log_header "Update Hyprland Config"
 
   local user_hypr="${HOME}/.config/hypr"
-  local repo_hypr="${REPO_ROOT}/dots/.config/hypr"
+  local repo_hypr="${REPO_ROOT}/files/.config/hypr"
   local timestamp
   timestamp=$(date +%Y%m%d-%H%M%S)
 

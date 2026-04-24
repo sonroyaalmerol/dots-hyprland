@@ -150,7 +150,7 @@ EOF
   chmod +x test_detection.sh
   result=$(./test_detection.sh "$test_repo")
 
-  if [[ "$result" == *"dots/.config"* ]]; then
+  if [[ "$result" == *"files/.config"* ]]; then
     log_pass "Dots structure detected correctly"
     cd "$ORIGINAL_DIR"
     return 0
@@ -211,7 +211,7 @@ EOF
   chmod +x test_detection.sh
   result=$(./test_detection.sh "$test_repo")
 
-  if [[ "$result" == *".config"* ]] && [[ "$result" != *"dots/"* ]]; then
+  if [[ "$result" == *".config"* ]] && [[ "$result" != *"files/"* ]]; then
     log_pass "Flat structure detected correctly"
     cd "$ORIGINAL_DIR"
     return 0
@@ -226,9 +226,9 @@ EOF
 test_dots_mapping() {
   log_test "Testing dots/ prefix home directory mapping"
   
-  dir_name="dots/.config"
-  if [[ "$dir_name" == dots/* ]]; then
-    home_subdir="${dir_name#dots/}"
+  dir_name="files/.config"
+  if [[ "$dir_name" == files/* ]]; then
+    home_subdir="${dir_name#files/}"
     home_dir_path="${HOME}/${home_subdir}"
   else
     home_dir_path="${HOME}/${dir_name}"

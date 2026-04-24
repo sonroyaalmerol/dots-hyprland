@@ -71,7 +71,7 @@
 # MISC configs (dots/.config/* except quickshell, fish, hypr, fontconfig)
 - name: Copy MISC config directories
   ansible.builtin.synchronize:
-    src: "{{ repo_root }}/dots/.config/{{ item }}/"
+    src: "{{ repo_root }}/files/.config/{{ item }}/"
     dest: "{{ xdg_config_home }}/{{ item }}/"
     delete: true
     recursive: true
@@ -87,7 +87,7 @@
 
 - name: Sync Konsole config
   ansible.builtin.synchronize:
-    src: "{{ repo_root }}/dots/.local/share/konsole/"
+    src: "{{ repo_root }}/files/.local/share/konsole/"
     dest: "{{ xdg_data_home }}/konsole/"
     delete: true
     recursive: true
@@ -96,7 +96,7 @@
 # Quickshell
 - name: Sync Quickshell config
   ansible.builtin.synchronize:
-    src: "{{ repo_root }}/dots/.config/quickshell/"
+    src: "{{ repo_root }}/files/.config/quickshell/"
     dest: "{{ xdg_config_home }}/quickshell/"
     delete: true
     recursive: true
@@ -105,7 +105,7 @@
 # Fish
 - name: Sync Fish config (excluding conf.d)
   ansible.builtin.synchronize:
-    src: "{{ repo_root }}/dots/.config/fish/"
+    src: "{{ repo_root }}/files/.config/fish/"
     dest: "{{ xdg_config_home }}/fish/"
     delete: false
     recursive: true
@@ -116,7 +116,7 @@
 # Fontconfig
 - name: Sync default fontconfig
   ansible.builtin.synchronize:
-    src: "{{ repo_root }}/dots/.config/fontconfig/"
+    src: "{{ repo_root }}/files/.config/fontconfig/"
     dest: "{{ xdg_config_home }}/fontconfig/"
     delete: true
     recursive: true
@@ -126,7 +126,7 @@
 
 - name: Sync custom fontset
   ansible.builtin.synchronize:
-    src: "{{ repo_root }}/dots-extra/fontsets/{{ fontset_dir_name }}/"
+    src: "{{ repo_root }}/files-extra/fontsets/{{ fontset_dir_name }}/"
     dest: "{{ xdg_config_home }}/fontconfig/"
     delete: true
     recursive: true
@@ -137,7 +137,7 @@
 # Hyprland
 - name: Sync Hyprland config
   ansible.builtin.synchronize:
-    src: "{{ repo_root }}/dots/.config/hypr/hyprland/"
+    src: "{{ repo_root }}/files/.config/hypr/hyprland/"
     dest: "{{ xdg_config_home }}/hypr/hyprland/"
     delete: true
     recursive: true
@@ -145,7 +145,7 @@
 
 - name: Backup and install hyprlock.conf
   ansible.builtin.copy:
-    src: "{{ repo_root }}/dots/.config/hypr/hyprlock.conf"
+    src: "{{ repo_root }}/files/.config/hypr/hyprlock.conf"
     dest: "{{ xdg_config_home }}/hypr/hyprlock.conf"
     mode: "0644"
     backup: "{{ not is_firstrun }}"
@@ -153,7 +153,7 @@
 
 - name: Backup and install monitors.conf
   ansible.builtin.copy:
-    src: "{{ repo_root }}/dots/.config/hypr/monitors.conf"
+    src: "{{ repo_root }}/files/.config/hypr/monitors.conf"
     dest: "{{ xdg_config_home }}/hypr/monitors.conf"
     mode: "0644"
     backup: "{{ not is_firstrun }}"
@@ -161,7 +161,7 @@
 
 - name: Backup and install workspaces.conf
   ansible.builtin.copy:
-    src: "{{ repo_root }}/dots/.config/hypr/workspaces.conf"
+    src: "{{ repo_root }}/files/.config/hypr/workspaces.conf"
     dest: "{{ xdg_config_home }}/hypr/workspaces.conf"
     mode: "0644"
     backup: "{{ not is_firstrun }}"
@@ -169,7 +169,7 @@
 
 - name: Install hyprland.conf
   ansible.builtin.copy:
-    src: "{{ repo_root }}/dots/.config/hypr/hyprland.conf"
+    src: "{{ repo_root }}/files/.config/hypr/hyprland.conf"
     dest: "{{ xdg_config_home }}/hypr/hyprland.conf"
     mode: "0644"
   when:
@@ -178,7 +178,7 @@
 
 - name: Backup and install hypridle.conf
   ansible.builtin.copy:
-    src: "{{ repo_root }}/dots/.config/hypr/hypridle.conf"
+    src: "{{ repo_root }}/files/.config/hypr/hypridle.conf"
     dest: "{{ xdg_config_home }}/hypr/hypridle.conf"
     mode: "0644"
     backup: "{{ not is_firstrun }}"
@@ -195,7 +195,7 @@
 
 - name: Install custom directory (skip if exists)
   ansible.builtin.synchronize:
-    src: "{{ repo_root }}/dots/.config/hypr/custom/"
+    src: "{{ repo_root }}/files/.config/hypr/custom/"
     dest: "{{ xdg_config_home }}/hypr/custom/"
     delete: false
     recursive: true
@@ -206,7 +206,7 @@
 # Icon
 - name: Install illogical-impulse icon
   ansible.builtin.copy:
-    src: "{{ repo_root }}/dots/.local/share/icons/illogical-impulse.svg"
+    src: "{{ repo_root }}/files/.local/share/icons/illogical-impulse.svg"
     dest: "{{ xdg_data_home }}/icons/illogical-impulse.svg"
     mode: "0644"
 

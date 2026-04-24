@@ -61,10 +61,10 @@ detect_repo_structure() {
   local found_dirs=()
   
   # Check for dots/ prefixed structure
-  if [[ -d "${REPO_ROOT}/dots/.config" ]]; then
-    found_dirs+=("dots/.config")
-    [[ -d "${REPO_ROOT}/dots/.local/bin" ]] && found_dirs+=("dots/.local/bin")
-    [[ -d "${REPO_ROOT}/dots/.local/share" ]] && found_dirs+=("dots/.local/share")
+  if [[ -d "${REPO_ROOT}/files/.config" ]]; then
+    found_dirs+=("files/.config")
+    [[ -d "${REPO_ROOT}/files/.local/bin" ]] && found_dirs+=("files/.local/bin")
+    [[ -d "${REPO_ROOT}/files/.local/share" ]] && found_dirs+=("files/.local/share")
   # Check for flat structure
   elif [[ -d "${REPO_ROOT}/.config" ]]; then
     found_dirs+=(".config")
@@ -72,7 +72,7 @@ detect_repo_structure() {
     [[ -d "${REPO_ROOT}/.local/share" ]] && found_dirs+=(".local/share")
   else
     # Manual detection of common directories
-    for candidate in "dots/.config" ".config" "dots/.local/bin" ".local/bin" "dots/.local/share" ".local/share"; do
+    for candidate in "files/.config" ".config" "files/.local/bin" ".local/bin" "files/.local/share" ".local/share"; do
       if [[ -d "${REPO_ROOT}/${candidate}" ]]; then
         # Avoid duplicates
         if [[ ! " ${found_dirs[*]} " =~ " ${candidate} " ]]; then
@@ -1040,9 +1040,9 @@ if [[ "$process_files" == true ]]; then
     fi
     
     # FIX: Properly handle dots/ prefix mapping
-    if [[ "$dir_name" == dots/* ]]; then
-      # Strip "dots/" prefix for home directory mapping
-      home_subdir="${dir_name#dots/}"
+    if [[ "$dir_name" == files/* ]]; then
+      # Strip "files/" prefix for home directory mapping
+      home_subdir="${dir_name#files/}"
       home_dir_path="${HOME}/${home_subdir}"
     else
       # Direct structure
