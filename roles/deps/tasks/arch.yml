@@ -50,11 +50,24 @@
     state: absent
   when: paru_check.rc != 0
 
+- name: Allow passwordless sudo for pacman
+  community.general.sudoers:
+    name: pacman-nopasswd
+    user: "{{ ansible_user_id }}"
+    commands:
+      - /usr/bin/pacman
+      - /usr/bin/pacman-key
+  become: true
+
 - name: Install Arch packages via paru
   ansible.builtin.command:
     cmd: "paru -S --needed --noconfirm {{ arch_packages | join(' ') }}"
-  environment:
-    PARU_CONFIRM: "no"
+
+- name: Revoke passwordless sudo for pacman
+  ansible.builtin.file:
+    path: /etc/sudoers.d/pacman-nopasswd
+    state: absent
+  become: true
 
 - name: Install plasma-browser-integration if not skipped
   community.general.pacman:
