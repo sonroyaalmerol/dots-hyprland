@@ -36,11 +36,8 @@ function print_os_group_id_unofficial(){
 function print_os_group_id_unsupported(){
     printf "${STY_RED}"
     printf "===CAUTION===\n"
-    printf "\"--via-nix\" is forcely specified \n"
-    printf "as the only way to try to install on your distro.\n"
-    printf "It is still experimental.\n"
-    printf "Some functionalities are missing.\n"
-    printf "It may also behave unexpectedly.\n"
+    printf "Your distro is not officially supported.\n"
+    printf "Installation may fail or behave unexpectedly.\n"
     printf "Proceed only at your own risk.\n"
     printf "=============\n\n"
     printf "${STY_RST}"
@@ -91,12 +88,6 @@ if [[ "$OS_DISTRO_ID" =~ ^(arch|endeavouros|cachyos)$ ]]; then
 elif [[ "$OS_DISTRO_ID_LIKE" == "arch" ]]; then
   OS_GROUP_ID="arch"
   print_os_group_id_functions=(print_os_group_id{,_alike})
-elif [[ "$OS_DISTRO_ID" == "gentoo" ]]; then
-  OS_GROUP_ID="gentoo"
-  print_os_group_id_functions=(print_os_group_id{,_unofficial})
-elif [[ "$OS_DISTRO_ID_LIKE" == "gentoo" ]]; then
-  OS_GROUP_ID="gentoo"
-  print_os_group_id_functions=(print_os_group_id{,_alike,_unofficial})
 elif [[ "$OS_DISTRO_ID" == "fedora" ]]; then
   OS_GROUP_ID="fedora"
   print_os_group_id_functions=(print_os_group_id{,_unofficial})
@@ -105,15 +96,12 @@ elif [[ "$OS_DISTRO_ID_LIKE" == "fedora" ]]; then
   print_os_group_id_functions=(print_os_group_id{,_alike,_unofficial})
 elif [[ "$OS_DISTRO_ID" =~ ^(opensuse-leap|opensuse-tumbleweed)$ ]] || [[ "$OS_DISTRO_ID_LIKE" =~ ^(opensuse|suse)(\ (opensuse|suse))?$ ]]; then
   OS_GROUP_ID="suse"
-  INSTALL_VIA_NIX=true
   print_os_group_id_functions=(print_os_group_id{,_unsupported})
 elif [[ "$OS_DISTRO_ID" == "debian" || "$OS_DISTRO_ID_LIKE" == "debian" ]]; then
   OS_GROUP_ID="debian"
-  INSTALL_VIA_NIX=true
   print_os_group_id_functions=(print_os_group_id{,_unsupported})
 else
   OS_GROUP_ID="fallback"
-  INSTALL_VIA_NIX=true
   print_os_group_id_functions=(print_os_group_id{,_fallback,_unsupported})
 fi
 

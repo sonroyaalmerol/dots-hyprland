@@ -196,12 +196,4 @@ packages = [
   "wlogout"
 ]
 
-# Extra
-[groups.extra]
-packages = [
-  "mpvpaper",
-  "plasma-systemmonitor",
-  "unzip"
-]
-install_opts = ["--setopt=install_weak_deps=False"]
 

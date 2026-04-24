@@ -1,23 +1,19 @@
-# Install scripts for Arch Linux
+# Install scripts for Arch Linux / CachyOS
 
 - See also [Install scripts | illogical-impulse](https://ii.clsty.link/en/dev/inst-script/)
 
-## Old Dependency Installation Method
-The old deps install method mainly involved `./sdata/dependencies.conf` (which has been removed now).
+## Dependency Installation
 
-## Current Dependency Installation
-Local PKGBUILDs under `./sdata/dist-arch/` are used to install dependencies.
+Dependencies are managed via a flat package list in `packages.conf`.
 
-The mechanism is introduced by [Makrennel](https://github.com/Makrennel) in [PR#570](https://github.com/end-4/dots-hyprland/pull/570).
+The `install-deps.sh` script:
 
-Why is this awesome?
-- It makes it possible to control version since some packages may involve breaking changes from time to time.
-- It makes the dependency trackable for package manager, so that you always know why you have installed some package.
-- As a result, it enables a workable uninstall process.
-
-The PKGBUILDs contains two forms of dependencies:
-- Package name written in dependencies, like a "meta" package.
-- Normal PKGBUILD content to build dependencies, e.g. AGS, which is often for version controlling.
+1. Installs yay if missing
+2. Installs all packages from `packages.conf` via `yay -S --needed --noconfirm`
+3. Builds and installs MicroTeX from its local PKGBUILD (the only remaining local build)
 
 ## Note
-- `pkgver()` should be removed from `PKGBUILD` cuz it will modify the `PKGBUILD` which is tracked by Git and should not be modified during building.
+
+- `packages.conf` contains one package per line with comment-grouped sections
+- `bibata-cursor-theme-bin` is installed from AUR as a simpler alternative to the previous local PKGBUILD
+- `microtex-git` still requires a local PKGBUILD build due to source patches

@@ -43,20 +43,7 @@ function outdate_detect(){
 }
 #####################################################################################
 
-if [[ "$INSTALL_VIA_NIX" == "true" ]]; then
-
-  TARGET_ID=nix
-  printf "${STY_YELLOW}"
-  printf "===WARNING===\n"
-  printf "./sdata/dist-${TARGET_ID}/install-deps.sh will be used.\n"
-  printf "The process is still WIP.\n"
-  printf "Proceed only at your own risk.\n"
-  printf "\n"
-  printf "${STY_RST}"
-  pause
-  source ./sdata/dist-${TARGET_ID}/install-deps.sh
-
-elif [[ "$OS_GROUP_ID" =~ ^(arch|gentoo|fedora)$ ]]; then
+if [[ "$OS_GROUP_ID" =~ ^(arch|fedora)$ ]]; then
 
   TARGET_ID=$OS_GROUP_ID
   if ! [[ "${TARGET_ID}" = "arch" ]]; then
