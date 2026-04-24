@@ -91,6 +91,7 @@ arch_packages:
   - gnome-keyring
   - networkmanager
   - plasma-nm
+  - polkit
   - polkit-kde-agent
   - dolphin
   - systemsettings
