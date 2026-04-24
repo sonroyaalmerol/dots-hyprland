@@ -31,19 +31,17 @@
   failed_when: false
   changed_when: false
 
-- name: Clone and build paru-bin from AUR
+- name: Clone paru from AUR
   ansible.builtin.git:
     repo: https://aur.archlinux.org/paru.git
     dest: /tmp/buildparu
     accept_hostkey: true
-  become: true
   when: paru_check.rc != 0
 
 - name: Build and install paru
-  ansible.builtin.make:
+  ansible.builtin.command:
+    cmd: makepkg -si --noconfirm --needed
     chdir: /tmp/buildparu
-    target: package
-  become: true
   when: paru_check.rc != 0
 
 - name: Clean up paru build
