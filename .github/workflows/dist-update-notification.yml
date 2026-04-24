@@ -15,6 +15,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.repository == 'sonroyaalmerol/dots-hyprland'
     steps:
       - name: Create comment on discussion #2140
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISCUSSION_NUMBER: 2140
