@@ -30,18 +30,23 @@
   when: is_arch | bool
 
 - name: Prepare MicroTeX build directory
-  ansible.builtin.command:
-    cmd: "cd {{ repo_root }}/data/arch/microtex-git && sed -i 's/gtksourceviewmm-3.0/gtksourceviewmm-4.0/' CMakeLists.txt && sed -i 's/tinyxml2.so.10/tinyxml2.so.11/' CMakeLists.txt"
+  ansible.builtin.shell:
+    cmd: |
+      sed -i 's/gtksourceviewmm-3.0/gtksourceviewmm-4.0/' CMakeLists.txt
+      sed -i 's/tinyxml2.so.10/tinyxml2.so.11/' CMakeLists.txt
+    chdir: "{{ repo_root }}/data/arch/microtex-git"
   when: is_arch | bool
 
 - name: Build MicroTeX with cmake
   ansible.builtin.command:
-    cmd: "cd {{ repo_root }}/data/arch/microtex-git && cmake -B build -S . -DCMAKE_BUILD_TYPE=None"
+    cmd: cmake -B build -S . -DCMAKE_BUILD_TYPE=None
+    chdir: "{{ repo_root }}/data/arch/microtex-git"
   when: is_arch | bool
 
 - name: Build MicroTeX
   ansible.builtin.command:
-    cmd: "cd {{ repo_root }}/data/arch/microtex-git && cmake --build build"
+    cmd: cmake --build build
+    chdir: "{{ repo_root }}/data/arch/microtex-git"
   when: is_arch | bool
 
 - name: Install MicroTeX
