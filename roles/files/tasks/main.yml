@@ -243,24 +243,15 @@
 - name: Clone Google Sans Flex repo
   ansible.builtin.git:
     repo: https://github.com/end-4/google-sans-flex
-    dest: "{{ repo_root }}/cache/google-sans-flex"
-    accept_hostkey: true
-  when:
-    - not is_fedora | bool
-    - google_sans_check.rc != 0
-
-- name: Update Google Sans Flex submodules
-  ansible.builtin.command:
-    cmd: git submodule update --init --recursive
-  args:
-    chdir: "{{ repo_root }}/cache/google-sans-flex"
+    dest: "{{ xdg_cache_home }}/snry-shell/google-sans-flex"
+    depth: 1
   when:
     - not is_fedora | bool
     - google_sans_check.rc != 0
 
 - name: Install Google Sans Flex font
   ansible.builtin.command:
-    cmd: "rsync -a {{ repo_root }}/cache/google-sans-flex/ {{ xdg_data_home }}/fonts/snry-shell-google-sans-flex/"
+    cmd: "rsync -a {{ xdg_cache_home }}/snry-shell/google-sans-flex/ {{ xdg_data_home }}/fonts/snry-shell-google-sans-flex/"
   when:
     - not is_fedora | bool
     - google_sans_check.rc != 0
