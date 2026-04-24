@@ -53,7 +53,8 @@
 - name: Install Arch packages via paru
   ansible.builtin.command:
     cmd: "paru -S --needed --noconfirm {{ arch_packages | join(' ') }}"
-  become: true
+  environment:
+    PARU_CONFIRM: "no"
 
 - name: Install plasma-browser-integration if not skipped
   community.general.pacman:
