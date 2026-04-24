@@ -11,13 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Publish snry-shell to AUR
+      - name: Publish snry-shell-qs to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
         with:
-          pkgname: snry-shell
+          pkgname: snry-shell-qs
           pkgbuild: ./PKGBUILD
           assets: |
-            ./snry-shell.install
+            ./snry-shell-qs.install
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}

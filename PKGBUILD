@@ -1,5 +1,5 @@
 # Maintainer: Snry Shell <snry@shell.dev>
-pkgname=snry-shell
+pkgname=snry-shell-qs
 pkgver=1.0.0
 pkgrel=1
 pkgdesc='Snry Shell - Hyprland dotfiles managed by Ansible'

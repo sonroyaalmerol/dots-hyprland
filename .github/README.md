@@ -38,7 +38,7 @@
   <summary>Installation</summary>
 
 - _If you're new to Linux and decide to use Hyprland, you're in for a tough ride._
-- Install via AUR: `paru -S snry-shell`, then run `snry-shell`
+- Install via AUR: `paru -S snry-shell-qs`, then run `snry-shell`
 - Manual: Clone this repo and run `ansible-playbook setup.yml`
 - **Keybinds**: Should be somewhat familiar to Windows or GNOME users. Important ones:
   - `Super`+`/` = keybind list
