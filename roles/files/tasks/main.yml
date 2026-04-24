@@ -249,6 +249,15 @@
     - not is_fedora | bool
     - google_sans_check.rc != 0
 
+- name: Ensure fonts directory exists
+  ansible.builtin.file:
+    path: "{{ xdg_data_home }}/fonts"
+    state: directory
+    mode: "0755"
+  when:
+    - not is_fedora | bool
+    - google_sans_check.rc != 0
+
 - name: Install Google Sans Flex font
   ansible.builtin.command:
     cmd: "rsync -a {{ xdg_cache_home }}/snry-shell/google-sans-flex/ {{ xdg_data_home }}/fonts/snry-shell-google-sans-flex/"
