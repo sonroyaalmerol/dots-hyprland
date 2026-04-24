@@ -20,10 +20,18 @@
     - is_arch | bool
     - microtex_check.rc != 0
 
-- name: Build and install MicroTeX via makepkg
+- name: Build MicroTeX package
   ansible.builtin.command:
-    cmd: makepkg -si --noconfirm --needed
+    cmd: makepkg -s --noconfirm
     chdir: /tmp/build-microtex
+  when:
+    - is_arch | bool
+    - microtex_check.rc != 0
+
+- name: Install MicroTeX package
+  ansible.builtin.shell:
+    cmd: pacman -U --noconfirm /tmp/build-microtex/*.pkg.tar.zst
+  become: true
   when:
     - is_arch | bool
     - microtex_check.rc != 0
