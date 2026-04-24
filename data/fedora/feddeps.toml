@@ -64,7 +64,7 @@ packages = [
   "breeze-plus-icon-theme",
   "darkly",
   "eza",
-  "fish",
+  "bash-completion",
   "fontconfig",
   "kitty",
   "florian-karsten-space-grotesk-fonts",
