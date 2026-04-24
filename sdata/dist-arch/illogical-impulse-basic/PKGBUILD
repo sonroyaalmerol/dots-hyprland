@@ -18,4 +18,18 @@ depends=(
   # Used in install script
   rsync
   go-yq # https://github.com/mikefarah/yq
+  # Extra Qt6/KDE dependencies for Quickshell shell
+  qt6-5compat
+  qt6-avif-image-plugin
+  qt6-imageformats
+  qt6-multimedia
+  qt6-positioning
+  qt6-quicktimeline
+  qt6-sensors
+  qt6-tools
+  qt6-translations
+  qt6-virtualkeyboard
+  kirigami
+  kdialog
+  syntax-highlighting
 )

@@ -93,7 +93,6 @@ install-local-pkgbuild() {
 metapkgs=(./sdata/dist-arch/illogical-impulse-{audio,backlight,basic,fonts-themes,kde,portal,python,screencapture,toolkit,widgets})
 metapkgs+=(./sdata/dist-arch/illogical-impulse-hyprland)
 metapkgs+=(./sdata/dist-arch/illogical-impulse-microtex-git)
-metapkgs+=(./sdata/dist-arch/illogical-impulse-quickshell-git)
 metapkgs+=(./sdata/dist-arch/illogical-impulse-bibata-modern-classic-bin)
 
 for i in "${metapkgs[@]}"; do
@@ -101,6 +100,9 @@ for i in "${metapkgs[@]}"; do
   $ask && showfun install-local-pkgbuild || metainstallflags="$metainstallflags --noconfirm"
   v install-local-pkgbuild "$i" "$metainstallflags"
 done
+
+## Install Quickshell from official repos (pre-built binary)
+v sudo pacman -S --needed --noconfirm quickshell
 
 ## Optional dependencies
 if pacman -Qs ^plasma-browser-integration$ ;then SKIP_PLASMAINTG=true;fi
