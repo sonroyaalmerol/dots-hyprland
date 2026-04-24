@@ -6,7 +6,7 @@
     is_arch: "{{ ansible_facts['distribution'] in ['Arch Linux', 'CachyOS'] or ansible_facts['os_family'] == 'Archlinux' }}"
 
 - name: Check if MicroTeX is already installed
-  ansible.builtin.command: which LaTeX
+  ansible.builtin.command: pacman -Q snry-shell-microtex-git
   register: microtex_check
   failed_when: false
   changed_when: false
