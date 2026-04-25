@@ -101,7 +101,7 @@
   ansible.builtin.command:
     cmd: go build -o osk-watcher .
     chdir: "{{ repo_root }}/scripts/osk-watcher"
-  creates: "{{ repo_root }}/scripts/osk-watcher/osk-watcher"
+    creates: "{{ repo_root }}/scripts/osk-watcher/osk-watcher"
   when: not skip_quickshell | bool
 
 - name: Install osk-watcher binary
