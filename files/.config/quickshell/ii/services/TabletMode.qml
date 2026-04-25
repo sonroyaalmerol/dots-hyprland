@@ -33,6 +33,12 @@ Singleton {
         }
     }
 
+    function connectToDaemon() {
+        if (!sock.connected) {
+            sock.connected = true
+        }
+    }
+
     // Connect to snry-daemon via Unix socket
     Socket {
         id: sock
@@ -60,31 +66,44 @@ Singleton {
                 console.log("TabletMode: connected to snry-daemon")
                 reconnectTimer.stop()
             } else {
+                // Start reconnect attempts
                 reconnectTimer.start()
             }
         }
     }
 
-    // Delay initial connect to let daemon start first
+    // Attempt initial connection after a short delay for daemon startup
     Timer {
         id: startupTimer
-        interval: 2000
+        interval: 1000
         repeat: false
         running: true
-        onTriggered: {
-            sock.connected = true
-        }
+        onTriggered: connectToDaemon()
     }
 
+    // Reconnect timer: uses a two-step approach to ensure the Socket
+    // actually cycles its connection state. First step disconnects,
+    // second step (separate timer tick) reconnects.
     Timer {
         id: reconnectTimer
-        interval: 3000
+        interval: 2000
         repeat: true
+        triggeredOnStart: true
         onTriggered: {
             if (!sock.connected) {
                 sock.connected = false
-                Qt.callLater(() => { sock.connected = true })
+                reconnectTriggerTimer.start()
             }
+        }
+    }
+
+    // Separate one-shot timer to reconnect after disconnect settles
+    Timer {
+        id: reconnectTriggerTimer
+        interval: 100
+        repeat: false
+        onTriggered: {
+            sock.connected = true
         }
     }
 }
