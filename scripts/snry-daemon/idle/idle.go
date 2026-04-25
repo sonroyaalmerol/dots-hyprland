@@ -363,6 +363,13 @@ func (s *Service) Lock() {
 	s.doLock()
 }
 
+// LockAndDPMSOff locks the screen and immediately turns off the display.
+// Used for power button and lid close events.
+func (s *Service) LockAndDPMSOff() {
+	s.doLock()
+	s.setDisplay(false)
+}
+
 // Unlock triggers an unlock externally (e.g. from a socket command).
 func (s *Service) Unlock() {
 	s.bus.publish(topicScreenLock, false)

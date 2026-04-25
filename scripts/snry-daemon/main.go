@@ -191,6 +191,10 @@ func dispatchCommand(line string) {
 		if idleSvc != nil {
 			idleSvc.Unlock()
 		}
+	case "power-button", "lid-close":
+		if idleSvc != nil {
+			idleSvc.LockAndDPMSOff()
+		}
 	}
 }
 
