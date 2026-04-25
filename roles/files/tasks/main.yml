@@ -144,12 +144,6 @@
     backup: true
   when: not skip_bash | bool
 
-- name: Install ble.sh
-  ansible.builtin.command:
-    cmd: "bash -c 'if [ ! -f {{ xdg_data_home }}/blesh/ble.sh ]; then git clone --recursive --depth 1 --shallow-submodules https://github.com/akinomyoga/ble.sh.git /tmp/blesh-build && make -C /tmp/blesh-build install PREFIX={{ ansible_facts["user_dir"] }}/.local && rm -rf /tmp/blesh-build; fi'"
-  when: not skip_bash | bool
-  changed_when: false
-
 # Fontconfig
 - name: Sync default fontconfig
   ansible.builtin.synchronize:

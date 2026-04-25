@@ -126,6 +126,7 @@ arch_packages:
   - wlogout
   - nwg-displays
   - libqalculate
+  - blesh
   - quickshell-git
 
 # Fedora COPR repos
