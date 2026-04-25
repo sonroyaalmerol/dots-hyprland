@@ -11,6 +11,8 @@ import (
 	"syscall"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/osk-watcher/idle"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/osk-watcher/idle/dbusutil"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/osk-watcher/inputmethod"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/osk-watcher/tabletmode"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/osk-watcher/uinput"
@@ -45,10 +47,16 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("")
 
-	// Subcommand dispatch: default = watcher, "uinput" = virtual keyboard
-	if len(os.Args) > 1 && os.Args[1] == "uinput" {
-		uinput.Run()
-		return
+	// Subcommand dispatch: default = watcher, "uinput" = virtual keyboard, "idle" = idle manager
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "uinput":
+			uinput.Run()
+			return
+		case "idle":
+			runIdle()
+			return
+		}
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -97,4 +105,30 @@ func main() {
 	}
 
 	fmt.Fprintln(os.Stderr, "exited")
+}
+
+func runIdle() {
+	log.SetOutput(os.Stderr)
+	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
+	log.SetPrefix("")
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	sysConn, err := dbus.SystemBus()
+	if err != nil {
+		log.Printf("cannot connect to system bus: %v", err)
+	}
+
+	var conn dbusutil.DBusConn
+	if sysConn != nil {
+		conn = dbusutil.NewRealConn(sysConn)
+	} else {
+		conn = &dbusutil.RealConn{}
+	}
+
+	svc := idle.New(conn, idle.DefaultConfig())
+	if err := svc.Run(ctx); err != nil && err != context.Canceled {
+		log.Fatalf("idle service: %v", err)
+	}
 }
