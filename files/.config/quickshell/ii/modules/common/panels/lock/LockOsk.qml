@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.widgets
-import "../../ii/onScreenKeyboard/layouts.js" as Layouts
+import "../../../ii/onScreenKeyboard/layouts.js" as Layouts
 
 Rectangle {
 	id: root
