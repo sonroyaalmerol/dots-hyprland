@@ -97,3 +97,24 @@
 - name: Set widgetStyle via kwriteconfig6
   ansible.builtin.command:
     cmd: "kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle Darkly"
+
+- name: Create logind.conf.d directory
+  ansible.builtin.file:
+    path: /etc/systemd/logind.conf.d
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Deploy logind drop-in configuration
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/files/.config/hypr/custom/logind.conf"
+    dest: /etc/systemd/logind.conf.d/override.conf
+    mode: "0644"
+    backup: true
+  become: true
+
+- name: Restart systemd-logind service
+  ansible.builtin.systemd:
+    name: systemd-logind
+    state: restarted
+  become: true

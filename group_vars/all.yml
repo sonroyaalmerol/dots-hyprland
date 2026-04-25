@@ -129,6 +129,8 @@ arch_packages:
   - zsh
   - zsh-completions
   - quickshell-git
+  - meson
+  - ninja
 
 # Fedora COPR repos
 fedora_copr_repos:

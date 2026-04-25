@@ -129,6 +129,69 @@
     - not skip_quickshell | bool
     - not snry_daemon_src.stat.exists
 
+# hyprgrass plugin
+- name: Create hyprgrass plugin directory
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.local/lib/hyprland/plugins"
+    state: directory
+    mode: "0755"
+
+- name: Check if hyprgrass plugin exists
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.local/lib/hyprland/plugins/libhyprgrass.so"
+  register: hyprgrass_plugin_stat
+
+- name: Clone hyprgrass repository
+  ansible.builtin.git:
+    repo: https://github.com/horriblename/hyprgrass.git
+    dest: "{{ xdg_cache_home }}/snry-shell/hyprgrass"
+    depth: 1
+    update: false
+  when:
+    - not skip_hyprland | bool
+    - not hyprgrass_plugin_stat.stat.exists
+
+- name: Initialize hyprgrass submodules
+  ansible.builtin.command:
+    cmd: git submodule update --init --recursive
+    chdir: "{{ xdg_cache_home }}/snry-shell/hyprgrass"
+  when:
+    - not skip_hyprland | bool
+    - not hyprgrass_plugin_stat.stat.exists
+
+- name: Setup hyprgrass with meson
+  ansible.builtin.command:
+    cmd: >-
+      meson setup build
+      --prefix={{ ansible_facts['user_dir'] }}/.local
+      -Dhyprgrass=true
+    chdir: "{{ xdg_cache_home }}/snry-shell/hyprgrass"
+    env:
+      HYPRLAND_HEADERS: /var/cache/hyprpm/{{ ansible_facts.user_id }}/headersRoot
+    creates: "{{ xdg_cache_home }}/snry-shell/hyprgrass/build"
+  when:
+    - not skip_hyprland | bool
+    - not hyprgrass_plugin_stat.stat.exists
+
+- name: Build hyprgrass with ninja
+  ansible.builtin.command:
+    cmd: ninja -C build
+    chdir: "{{ xdg_cache_home }}/snry-shell/hyprgrass"
+    creates: "{{ xdg_cache_home }}/snry-shell/hyprgrass/build/src/libhyprgrass.so"
+  when:
+    - not skip_hyprland | bool
+    - not hyprgrass_plugin_stat.stat.exists
+
+- name: Install hyprgrass plugin
+  ansible.builtin.copy:
+    src: "{{ xdg_cache_home }}/snry-shell/hyprgrass/build/src/libhyprgrass.so"
+    dest: "{{ ansible_facts['user_dir'] }}/.local/lib/hyprland/plugins/libhyprgrass.so"
+    mode: "0755"
+    backup: true
+  when:
+    - not skip_hyprland | bool
+    - not hyprgrass_plugin_stat.stat.exists
+
 # Bash
 - name: Sync Bash config
   ansible.builtin.synchronize:
