@@ -153,12 +153,6 @@ Rectangle {
 					? Appearance.colors.colLayer1Hover
 					: Appearance.colors.colLayer1;
 			}
-			Behavior on color {
-				ColorAnimation {
-					duration: 100
-				}
-			}
-
 			StyledText {
 				anchors.fill: parent
 				font.family: (isBackspace || isEnter) ? Appearance.font.family.iconMaterial : Appearance.font.family.main
