@@ -32,6 +32,7 @@ type event struct {
 }
 
 var clients sync.Map // map[net.Conn]struct{}
+var idleSvc *idle.Service
 
 func emit(evt event) {
 	data, err := json.Marshal(evt)
@@ -181,6 +182,14 @@ func dispatchCommand(line string) {
 			uinputSend(evKey, code, 0)
 		}
 		uinputSyn()
+	case "lock":
+		if idleSvc != nil {
+			idleSvc.Lock()
+		}
+	case "unlock":
+		if idleSvc != nil {
+			idleSvc.Unlock()
+		}
 	}
 }
 
@@ -268,7 +277,7 @@ func main() {
 		log.Printf("system bus: %v (idle service disabled)", err)
 	}
 	if idleConn != nil {
-		idleSvc := idle.New(dbusutil.NewRealConn(idleConn), idle.DefaultConfig())
+		idleSvc = idle.New(dbusutil.NewRealConn(idleConn), idle.DefaultConfig())
 		wg.Go(func() {
 			if err := idleSvc.Run(ctx); err != nil && err != context.Canceled {
 				log.Printf("idle service: %v", err)

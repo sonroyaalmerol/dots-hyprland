@@ -6,9 +6,7 @@ package idle
 import (
 	"context"
 	"log"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -49,9 +47,6 @@ type Service struct {
 	idleStarted time.Time
 	inhibited   bool
 
-	// Stamp file path for lock state
-	stampFile string
-
 	// Wayland fields
 	waylandMu       sync.Mutex
 	display         *client.Display
@@ -63,12 +58,10 @@ type Service struct {
 
 // New creates the idle service.
 func New(conn dbusutil.DBusConn, cfg Config) *Service {
-	stamp := filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "snry-locked")
 	return &Service{
-		bus:       newBus(),
-		conn:      conn,
-		cfg:       cfg,
-		stampFile: stamp,
+		bus:  newBus(),
+		conn: conn,
+		cfg:  cfg,
 	}
 }
 
@@ -140,14 +133,6 @@ func (s *Service) setDisplay(on bool) {
 
 // Run starts monitoring. Blocks until ctx is cancelled.
 func (s *Service) Run(ctx context.Context) error {
-	// Read initial lock state from stamp file
-	if _, err := os.Stat(s.stampFile); err == nil {
-		s.mu.Lock()
-		s.locked = true
-		s.mu.Unlock()
-		log.Printf("[idle] detected existing lock stamp at %s", s.stampFile)
-	}
-
 	// Start logind monitor and ScreenSaver D-Bus
 	if realConn, ok := s.conn.(*dbusutil.RealConn); ok && realConn.Conn != nil {
 		go s.monitorLogind(ctx)
@@ -207,13 +192,6 @@ func (s *Service) setLocked(locked bool) {
 		s.idleStarted = time.Time{}
 	}
 	s.mu.Unlock()
-
-	// Update stamp file
-	if locked {
-		os.WriteFile(s.stampFile, []byte{}, 0644)
-	} else {
-		os.Remove(s.stampFile)
-	}
 
 	if changed {
 		log.Printf("[idle] lock state: %v", locked)
@@ -367,6 +345,16 @@ func (s *Service) doLock() {
 	}
 
 	s.bus.publish(topicScreenLock, true)
+}
+
+// Lock triggers a lock externally (e.g. from a socket command).
+func (s *Service) Lock() {
+	s.doLock()
+}
+
+// Unlock triggers an unlock externally (e.g. from a socket command).
+func (s *Service) Unlock() {
+	s.bus.publish(topicScreenLock, false)
 }
 
 func (s *Service) monitorLogind(ctx context.Context) {
