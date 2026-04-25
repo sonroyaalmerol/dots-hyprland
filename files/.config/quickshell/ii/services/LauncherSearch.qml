@@ -71,7 +71,7 @@ Singleton {
         {
             action: "dark",
             execute: () => {
-                Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", "dark", "--noswitch"]);
+                Quickshell.execDetached(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", "prefer-dark"]);
             }
         },
         {
@@ -83,7 +83,7 @@ Singleton {
         {
             action: "light",
             execute: () => {
-                Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", "light", "--noswitch"]);
+                Quickshell.execDetached(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", "prefer-light"]);
             }
         },
         {

@@ -17,7 +17,7 @@ RippleButton {
     colBackground: Appearance.colors.colLayer2
     toggled: Appearance.m3colors.darkmode === dark
     onClicked: {
-        Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --mode ${dark ? "dark" : "light"} --noswitch`])
+        Quickshell.execDetached(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", dark ? "prefer-dark" : "prefer-light"])
     }
     contentItem: Item {
         anchors.centerIn: parent

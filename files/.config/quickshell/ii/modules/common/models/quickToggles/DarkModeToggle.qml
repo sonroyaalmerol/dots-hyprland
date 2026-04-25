@@ -14,11 +14,7 @@ QuickToggleModel {
     icon: "contrast"
     
     mainAction: () => {
-        if (Appearance.m3colors.darkmode) {
-            Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", "light", "--noswitch"]);
-        } else {
-            Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", "dark", "--noswitch"]);
-        }
+        Quickshell.execDetached(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", Appearance.m3colors.darkmode ? "prefer-light" : "prefer-dark"]);
     }
 
     tooltipText: Translation.tr("Dark Mode")
