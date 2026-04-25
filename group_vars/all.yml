@@ -116,6 +116,7 @@ arch_packages:
   - ydotool
   - fuzzel
   - glib2
+  - go
   - imagemagick
   - hypridle
   - hyprlock

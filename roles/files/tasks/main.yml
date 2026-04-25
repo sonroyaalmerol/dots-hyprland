@@ -96,6 +96,21 @@
     recursive: true
   when: not skip_quickshell | bool
 
+# osk-watcher
+- name: Build osk-watcher binary
+  ansible.builtin.command:
+    cmd: go build -o osk-watcher .
+    chdir: "{{ repo_root }}/scripts/osk-watcher"
+  creates: "{{ repo_root }}/scripts/osk-watcher/osk-watcher"
+  when: not skip_quickshell | bool
+
+- name: Install osk-watcher binary
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/scripts/osk-watcher/osk-watcher"
+    dest: "{{ xdg_bin_home }}/osk-watcher"
+    mode: "0755"
+  when: not skip_quickshell | bool
+
 # Bash
 - name: Sync Bash config
   ansible.builtin.synchronize:

@@ -14,6 +14,56 @@ Scope { // Scope
     id: root
     property bool pinned: Config.options?.osk.pinnedOnStartup ?? false
 
+    // Auto-show/hide state tracking
+    property bool autoShown: false
+    property bool manualDismissed: false
+
+    Timer {
+        id: autoShowTimer
+        interval: 300
+        onTriggered: {
+            if (TabletMode.effectiveTabletMode && TabletMode.textInputActive && !root.manualDismissed && !GlobalStates.oskOpen) {
+                GlobalStates.oskOpen = true
+                root.autoShown = true
+            }
+        }
+    }
+
+    Connections {
+        target: TabletMode
+
+        function onTextInputActiveChanged() {
+            if (TabletMode.textInputActive) {
+                // New text focus — reset manual dismiss
+                root.manualDismissed = false
+                // Auto-show if in tablet mode
+                if (TabletMode.effectiveTabletMode && !GlobalStates.oskOpen) {
+                    autoShowTimer.start()
+                }
+            } else {
+                // Text focus lost — auto-hide if we auto-showed
+                autoShowTimer.stop()
+                if (root.autoShown) {
+                    GlobalStates.oskOpen = false
+                    root.autoShown = false
+                    root.manualDismissed = false
+                }
+            }
+        }
+
+        function onEffectiveTabletModeChanged() {
+            if (!TabletMode.effectiveTabletMode && root.autoShown) {
+                // Left tablet mode — auto-hide
+                autoShowTimer.stop()
+                GlobalStates.oskOpen = false
+                root.autoShown = false
+            } else if (TabletMode.effectiveTabletMode && TabletMode.textInputActive && !root.manualDismissed && !GlobalStates.oskOpen) {
+                // Entered tablet mode with active text focus — auto-show
+                autoShowTimer.start()
+            }
+        }
+    }
+
     component OskControlButton: GroupButton { // Pin button
         baseWidth: 40
         baseHeight: 40
@@ -43,6 +93,8 @@ Scope { // Scope
 
             function hide() {
                 GlobalStates.oskOpen = false
+                root.autoShown = false
+                root.manualDismissed = true
             }
             exclusiveZone: root.pinned ? implicitHeight - Appearance.sizes.hyprlandGapsOut : 0
             implicitWidth: oskBackground.width + Appearance.sizes.elevationMargin * 2
@@ -131,15 +183,25 @@ Scope { // Scope
         target: "osk"
 
         function toggle(): void {
-            GlobalStates.oskOpen = !GlobalStates.oskOpen;
+            if (GlobalStates.oskOpen) {
+                GlobalStates.oskOpen = false
+                root.autoShown = false
+                root.manualDismissed = true
+            } else {
+                GlobalStates.oskOpen = true
+                root.autoShown = false
+            }
         }
 
         function close(): void {
             GlobalStates.oskOpen = false
+            root.autoShown = false
+            root.manualDismissed = true
         }
 
         function open(): void {
             GlobalStates.oskOpen = true
+            root.autoShown = false
         }
     }
 
@@ -148,7 +210,14 @@ Scope { // Scope
         description: "Toggles on screen keyboard on press"
 
         onPressed: {
-            GlobalStates.oskOpen = !GlobalStates.oskOpen;
+            if (GlobalStates.oskOpen) {
+                GlobalStates.oskOpen = false
+                root.autoShown = false
+                root.manualDismissed = true
+            } else {
+                GlobalStates.oskOpen = true
+                root.autoShown = false
+            }
         }
     }
 
@@ -158,6 +227,7 @@ Scope { // Scope
 
         onPressed: {
             GlobalStates.oskOpen = true
+            root.autoShown = false
         }
     }
 
@@ -167,6 +237,8 @@ Scope { // Scope
 
         onPressed: {
             GlobalStates.oskOpen = false
+            root.autoShown = false
+            root.manualDismissed = true
         }
     }
 
