@@ -74,7 +74,7 @@ Scope {
             // Unlock the screen before exiting, or the compositor will display a
             // fallback lock you can't interact with.
             GlobalStates.screenLocked = false;
-            Quickshell.execDetached(["snry-daemon", "send", "unlock"])
+            Quickshell.execDetached(["bash", "-c", "$HOME/.local/bin/snry-daemon send unlock"])
             
             // Refocus last focused window on unlock (hack)
             Quickshell.execDetached(["bash", "-c", `sleep 0.2; hyprctl --batch "dispatch togglespecialworkspace; dispatch togglespecialworkspace"`])
@@ -102,7 +102,7 @@ Scope {
             return;
         }
         GlobalStates.screenLocked = true;
-        Quickshell.execDetached(["snry-daemon", "send", "lock"])
+        Quickshell.execDetached(["bash", "-c", "$HOME/.local/bin/snry-daemon send lock"])
     }
 
     IpcHandler {
