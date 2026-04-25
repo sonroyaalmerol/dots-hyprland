@@ -96,38 +96,38 @@
     recursive: true
   when: not skip_quickshell | bool
 
-# osk-watcher
-- name: Check if osk-watcher source exists
+# snry-daemon
+- name: Check if snry-daemon source exists
   ansible.builtin.stat:
-    path: "{{ repo_root }}/scripts/osk-watcher/main.go"
-  register: osk_watcher_src
+    path: "{{ repo_root }}/scripts/snry-daemon/main.go"
+  register: snry_daemon_src
 
-- name: Build osk-watcher binary from source
+- name: Build snry-daemon binary from source
   ansible.builtin.command:
-    cmd: go build -o osk-watcher .
-    chdir: "{{ repo_root }}/scripts/osk-watcher"
-    creates: "{{ repo_root }}/scripts/osk-watcher/osk-watcher"
+    cmd: go build -o snry-daemon .
+    chdir: "{{ repo_root }}/scripts/snry-daemon"
+    creates: "{{ repo_root }}/scripts/snry-daemon/snry-daemon"
   when:
     - not skip_quickshell | bool
-    - osk_watcher_src.stat.exists
+    - snry_daemon_src.stat.exists
 
-- name: Install osk-watcher binary (built from source)
+- name: Install snry-daemon binary (built from source)
   ansible.builtin.copy:
-    src: "{{ repo_root }}/scripts/osk-watcher/osk-watcher"
-    dest: "{{ xdg_bin_home }}/osk-watcher"
+    src: "{{ repo_root }}/scripts/snry-daemon/snry-daemon"
+    dest: "{{ xdg_bin_home }}/snry-daemon"
     mode: "0755"
   when:
     - not skip_quickshell | bool
-    - osk_watcher_src.stat.exists
+    - snry_daemon_src.stat.exists
 
-- name: Install osk-watcher binary (from package)
+- name: Install snry-daemon binary (from package)
   ansible.builtin.copy:
-    src: "/usr/share/snry-shell/scripts/osk-watcher/osk-watcher"
-    dest: "{{ xdg_bin_home }}/osk-watcher"
+    src: "/usr/share/snry-shell/scripts/snry-daemon/snry-daemon"
+    dest: "{{ xdg_bin_home }}/snry-daemon"
     mode: "0755"
   when:
     - not skip_quickshell | bool
-    - not osk_watcher_src.stat.exists
+    - not snry_daemon_src.stat.exists
 
 # Bash
 - name: Sync Bash config

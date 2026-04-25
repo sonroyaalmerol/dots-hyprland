@@ -1,4 +1,4 @@
-module github.com/sonroyaalmerol/dots-hyprland/scripts/osk-watcher
+module github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon
 
 go 1.26
 

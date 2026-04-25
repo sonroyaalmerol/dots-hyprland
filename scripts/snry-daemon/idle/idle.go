@@ -14,9 +14,9 @@ import (
 
 	"github.com/godbus/dbus/v5"
 	"github.com/rajveermalviya/go-wayland/wayland/client"
-	"github.com/sonroyaalmerol/dots-hyprland/scripts/osk-watcher/idle/dbusutil"
-	protocol "github.com/sonroyaalmerol/dots-hyprland/scripts/osk-watcher/idle/protocol"
-	"github.com/sonroyaalmerol/dots-hyprland/scripts/osk-watcher/waylandutil"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/idle/dbusutil"
+	protocol "github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/idle/protocol"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/waylandutil"
 )
 
 // Config holds tunable idle parameters.
