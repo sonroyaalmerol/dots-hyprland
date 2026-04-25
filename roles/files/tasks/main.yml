@@ -200,21 +200,33 @@
     backup: "{{ not is_firstrun }}"
   when: not skip_hyprland | bool
 
-- name: Backup and install monitors.conf
+- name: Check if monitors.conf exists
+  ansible.builtin.stat:
+    path: "{{ xdg_config_home }}/hypr/monitors.conf"
+  register: monitors_conf_stat
+
+- name: Install monitors.conf (skip if already exists)
   ansible.builtin.copy:
     src: "{{ repo_root }}/files/.config/hypr/monitors.conf"
     dest: "{{ xdg_config_home }}/hypr/monitors.conf"
     mode: "0644"
-    backup: "{{ not is_firstrun }}"
-  when: not skip_hyprland | bool
+  when:
+    - not skip_hyprland | bool
+    - is_firstrun or not monitors_conf_stat.stat.exists
 
-- name: Backup and install workspaces.conf
+- name: Check if workspaces.conf exists
+  ansible.builtin.stat:
+    path: "{{ xdg_config_home }}/hypr/workspaces.conf"
+  register: workspaces_conf_stat
+
+- name: Install workspaces.conf (skip if already exists)
   ansible.builtin.copy:
     src: "{{ repo_root }}/files/.config/hypr/workspaces.conf"
     dest: "{{ xdg_config_home }}/hypr/workspaces.conf"
     mode: "0644"
-    backup: "{{ not is_firstrun }}"
-  when: not skip_hyprland | bool
+  when:
+    - not skip_hyprland | bool
+    - is_firstrun or not workspaces_conf_stat.stat.exists
 
 - name: Install hyprland.conf
   ansible.builtin.copy:

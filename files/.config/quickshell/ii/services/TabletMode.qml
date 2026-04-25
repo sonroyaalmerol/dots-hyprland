@@ -20,7 +20,7 @@ Singleton {
         id: oskWatcher
         command: [(Quickshell.env("XDG_BIN_HOME") || (Quickshell.env("HOME") + "/.local/bin")) + "/osk-watcher"]
         running: false
-        stdout: SplitLineParser {
+        stdout: SplitParser {
             onRead: data => {
                 try {
                     const parsed = JSON.parse(data)
