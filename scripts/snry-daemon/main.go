@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -256,6 +257,30 @@ func socketListener(ctx context.Context) error {
 
 // ── Main ──────────────────────────────────────────────────────────────────
 
+func setupHyprlandSystemBinds() func() {
+	binds := []struct{ key, cmd string }{
+		{"XF86PowerOff", "~/.local/bin/snry-daemon send power-button"},
+		{"switch:on:Lid Switch", "~/.local/bin/snry-daemon send lid-close"},
+	}
+	for _, b := range binds {
+		val := ", " + b.key + ", exec, " + b.cmd
+		out, err := exec.Command("hyprctl", "keyword", "bindl", val).CombinedOutput()
+		if err != nil {
+			log.Printf("hyprland bindl %s: %v: %s", b.key, err, string(out))
+		} else {
+			log.Printf("hyprland bindl registered: %s", b.key)
+		}
+	}
+	return func() {
+		for _, b := range binds {
+			out, err := exec.Command("hyprctl", "keyword", "unbind", ", "+b.key).CombinedOutput()
+			if err != nil {
+				log.Printf("hyprland unbind %s: %v: %s", b.key, err, string(out))
+			}
+		}
+	}
+}
+
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage: snry-daemon [send <command>]")
 }
@@ -360,6 +385,18 @@ func main() {
 	} else {
 		log.Printf("zwp_input_method_v2 not available, text focus events disabled")
 	}
+
+	// ── Hyprland dynamic system binds (power button, lid switch) ────────
+	var bindCleanup func()
+	wg.Go(func() {
+		time.Sleep(3 * time.Second)
+		bindCleanup = setupHyprlandSystemBinds()
+	})
+	defer func() {
+		if bindCleanup != nil {
+			bindCleanup()
+		}
+	}()
 
 	// ── Wait for shutdown ──────────────────────────────────────────────
 	<-ctx.Done()
