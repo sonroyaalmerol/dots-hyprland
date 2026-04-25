@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,21 +31,24 @@ type event struct {
 	Active bool   `json:"active"`
 }
 
-var (
-	mu     sync.Mutex
-	writer = os.Stdout
-)
+var clients sync.Map // map[net.Conn]struct{}
 
 func emit(evt event) {
-	mu.Lock()
-	defer mu.Unlock()
-	enc := json.NewEncoder(writer)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(evt); err != nil {
-		log.Printf("failed to encode event: %v", err)
+	data, err := json.Marshal(evt)
+	if err != nil {
+		log.Printf("failed to marshal event: %v", err)
 		return
 	}
-	writer.Sync()
+	data = append(data, '\n')
+	clients.Range(func(key, _ any) bool {
+		conn := key.(net.Conn)
+		if _, werr := conn.Write(data); werr != nil {
+			log.Printf("client write error: %v", werr)
+			conn.Close()
+			clients.Delete(conn)
+		}
+		return true
+	})
 }
 
 // ── Uinput virtual keyboard ──────────────────────────────────────────────
@@ -141,47 +146,94 @@ func destroyUinput() {
 	}
 }
 
-func handleStdin() {
-	scanner := bufio.NewScanner(os.Stdin)
+func dispatchCommand(line string) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return
+	}
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return
+	}
+	switch fields[0] {
+	case "press":
+		if len(fields) != 2 {
+			return
+		}
+		code, err := strconv.ParseUint(fields[1], 10, 16)
+		if err != nil || code > maxKey {
+			return
+		}
+		uinputSend(evKey, uint16(code), 1)
+		uinputSyn()
+	case "release":
+		if len(fields) != 2 {
+			return
+		}
+		code, err := strconv.ParseUint(fields[1], 10, 16)
+		if err != nil || code > maxKey {
+			return
+		}
+		uinputSend(evKey, uint16(code), 0)
+		uinputSyn()
+	case "releaseall":
+		for code := uint16(0); code <= maxKey; code++ {
+			uinputSend(evKey, code, 0)
+		}
+		uinputSyn()
+	}
+}
+
+func handleClient(conn net.Conn) {
+	defer conn.Close()
+	clients.Store(conn, struct{}{})
+	defer clients.Delete(conn)
+
+	log.Printf("client connected: %s", conn.RemoteAddr())
+	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) == 0 {
-			continue
-		}
-		switch fields[0] {
-		case "press":
-			if len(fields) != 2 {
-				continue
-			}
-			code, err := strconv.ParseUint(fields[1], 10, 16)
-			if err != nil || code > maxKey {
-				continue
-			}
-			uinputSend(evKey, uint16(code), 1)
-			uinputSyn()
-		case "release":
-			if len(fields) != 2 {
-				continue
-			}
-			code, err := strconv.ParseUint(fields[1], 10, 16)
-			if err != nil || code > maxKey {
-				continue
-			}
-			uinputSend(evKey, uint16(code), 0)
-			uinputSyn()
-		case "releaseall":
-			for code := uint16(0); code <= maxKey; code++ {
-				uinputSend(evKey, code, 0)
-			}
-			uinputSyn()
-		}
+		dispatchCommand(scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		log.Printf("stdin error: %v", err)
+		log.Printf("client read error: %v", err)
+	}
+	log.Printf("client disconnected: %s", conn.RemoteAddr())
+}
+
+func socketListener(ctx context.Context) error {
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		return fmt.Errorf("XDG_RUNTIME_DIR not set")
+	}
+	sockPath := filepath.Join(runtimeDir, "snry-daemon.sock")
+
+	// Remove stale socket file
+	os.Remove(sockPath)
+
+	listener, err := net.Listen("unix", sockPath)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", sockPath, err)
+	}
+	defer listener.Close()
+	log.Printf("listening on %s", sockPath)
+
+	go func() {
+		<-ctx.Done()
+		listener.Close()
+	}()
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+			}
+			log.Printf("accept error: %v", err)
+			continue
+		}
+		go handleClient(conn)
 	}
 }
 
@@ -197,15 +249,18 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	// ── Uinput virtual keyboard (stdin commands) ────────────────────────
+	// ── Uinput virtual keyboard ─────────────────────────────────────────
 	if err := initUinput(); err != nil {
 		log.Printf("uinput: %v (virtual keyboard disabled)", err)
-	} else {
-		wg.Go(func() {
-			handleStdin()
-			cancel() // stdin closed → shut down
-		})
 	}
+
+	// ── Unix socket listener ────────────────────────────────────────────
+	wg.Go(func() {
+		if err := socketListener(ctx); err != nil {
+			log.Printf("socket listener: %v", err)
+			cancel()
+		}
+	})
 
 	// ── Idle manager (own dbus connection to avoid Signal channel conflict) ──
 	idleConn, err := dbus.SystemBus()

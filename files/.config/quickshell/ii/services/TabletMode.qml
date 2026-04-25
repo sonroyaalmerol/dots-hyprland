@@ -18,8 +18,8 @@ Singleton {
     }
     property bool watcherRunning: false
 
-    // Expose the daemon process so Ydotool can write to stdin
-    property alias daemonProcess: oskWatcher
+    // Expose the daemon socket so Ydotool can write commands
+    property alias daemonSocket: sock
 
     function cycleMode() {
         if (root.mode === "auto") root.mode = "tablet"
@@ -33,13 +33,13 @@ Singleton {
         }
     }
 
-    // Single snry-daemon process: tablet mode + input method + idle + uinput
-    Process {
-        id: oskWatcher
-        stdinEnabled: true
-        command: [(Quickshell.env("XDG_BIN_HOME") || (Quickshell.env("HOME") + "/.local/bin")) + "/snry-daemon"]
-        running: false
-        stdout: SplitParser {
+    // Connect to snry-daemon via Unix socket
+    Socket {
+        id: sock
+        path: Quickshell.env("XDG_RUNTIME_DIR") + "/snry-daemon.sock"
+        connected: true
+
+        parser: SplitParser {
             onRead: data => {
                 try {
                     const parsed = JSON.parse(data)
@@ -49,28 +49,35 @@ Singleton {
                         root.textInputActive = parsed.active === true
                     }
                 } catch (e) {
-                    console.warn("TabletMode: Failed to parse JSON:", e, data)
+                    console.warn("TabletMode: parse error:", e, data)
                 }
             }
         }
-        onRunningChanged: {
-            root.watcherRunning = oskWatcher.running
-            if (!oskWatcher.running) {
-                Qt.callLater(() => { oskWatcher.running = true })
+
+        onSocketConnected: {
+            root.watcherRunning = true
+        }
+
+        onConnectionStateChanged: {
+            root.watcherRunning = sock.connected
+            if (!sock.connected) {
+                // Reconnect after delay
+                reconnectTimer.start()
             }
+        }
+
+        onSocketError: error => {
+            console.warn("TabletMode socket error:", error)
+            reconnectTimer.start()
         }
     }
 
     Timer {
-        id: startupDelay
+        id: reconnectTimer
         interval: 2000
         repeat: false
         onTriggered: {
-            oskWatcher.running = true
+            sock.connected = true
         }
-    }
-
-    Component.onCompleted: {
-        startupDelay.start()
     }
 }

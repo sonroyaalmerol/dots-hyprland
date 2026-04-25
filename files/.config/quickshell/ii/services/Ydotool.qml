@@ -12,9 +12,8 @@ Singleton {
     property list<int> ctrlKeys: [29, 97]
 
     function send(cmd) {
-        // Use the shared daemon process from TabletMode
-        if (TabletMode.daemonProcess && TabletMode.daemonProcess.running) {
-            TabletMode.daemonProcess.write(cmd + "\n")
+        if (TabletMode.daemonSocket && TabletMode.daemonSocket.connected) {
+            TabletMode.daemonSocket.write(cmd + "\n")
         }
     }
 
