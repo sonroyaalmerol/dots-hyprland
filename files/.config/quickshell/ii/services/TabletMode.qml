@@ -54,22 +54,16 @@ Singleton {
             }
         }
 
-        onSocketConnected: {
-            root.watcherRunning = true
-        }
-
         onConnectionStateChanged: {
             root.watcherRunning = sock.connected
-            if (!sock.connected) {
-                // Reconnect after delay
+            if (sock.connected) {
+                console.log("TabletMode: connected to snry-daemon")
+            } else {
                 reconnectTimer.start()
             }
         }
 
-        onSocketError: error => {
-            console.warn("TabletMode socket error:", error)
-            reconnectTimer.start()
-        }
+
     }
 
     Timer {
