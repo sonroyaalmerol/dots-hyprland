@@ -167,7 +167,7 @@
       -Dhyprgrass=true
     chdir: "{{ xdg_cache_home }}/snry-shell/hyprgrass"
     env:
-      HYPRLAND_HEADERS: /var/cache/hyprpm/{{ ansible_facts.user_id }}/headersRoot
+      HYPRLAND_HEADERS: /usr/include
     creates: "{{ xdg_cache_home }}/snry-shell/hyprgrass/build"
   when:
     - not skip_hyprland | bool
