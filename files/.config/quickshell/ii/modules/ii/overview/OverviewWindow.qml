@@ -8,6 +8,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 
 Item { // Window
     id: root
@@ -139,6 +140,46 @@ Item { // Window
             Behavior on height {
                 animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
             }
+        }
+    }
+
+    // Close button — outside ScreencopyView to avoid OpacityMask clipping
+    MouseArea {
+        id: closeButton
+        property real margin: 4
+        anchors {
+            top: parent.top
+            right: parent.right
+            margins: margin
+        }
+        width: 28
+        height: 28
+        z: 10
+        opacity: (root.hovered || TabletMode.effectiveTabletMode) ? 1 : 0
+        visible: opacity > 0
+        hoverEnabled: true
+        onClicked: (mouse) => {
+            if (windowData) {
+                Hyprland.dispatch("closewindow address:" + windowData.address)
+            }
+            mouse.accepted = true
+        }
+
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Appearance.rounding.small
+            color: closeButton.containsMouse ? ColorUtils.transparentize(Appearance.colors.colLayer1, 0.85) : Appearance.colors.colLayer1
+        }
+
+        MaterialSymbol {
+            anchors.centerIn: parent
+            text: "close"
+            iconSize: 16
+            color: Appearance.colors.colOnLayer1
         }
     }
 }
