@@ -367,7 +367,11 @@ func (s *Service) Lock() {
 // Used for power button and lid close events.
 func (s *Service) LockAndDPMSOff() {
 	s.doLock()
-	s.setDisplay(false)
+	s.mu.Lock()
+	s.displayOff = true
+	s.mu.Unlock()
+	log.Printf("[idle] turning display OFF")
+	exec.Command("hyprctl", "dispatch", "dpms", "off").Run()
 }
 
 // Unlock triggers an unlock externally (e.g. from a socket command).
