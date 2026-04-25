@@ -1,0 +1,89 @@
+---
+# Snry Shell Autoscale - Auto-set Hyprland monitor scale based on resolution
+
+- name: Snry Shell Autoscale
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Check if Hyprland is running
+      ansible.builtin.command:
+        cmd: hyprctl version
+      register: hyprctl_check
+      changed_when: false
+      failed_when: hyprctl_check.rc != 0
+
+    - name: Get monitor info from Hyprland
+      ansible.builtin.command:
+        cmd: hyprctl monitors -j
+      register: monitors_raw
+      changed_when: false
+
+    - name: Parse monitor data
+      ansible.builtin.set_fact:
+        monitors: "{{ monitors_raw.stdout | from_json }}"
+
+    - name: Calculate scale for each monitor
+      ansible.builtin.set_fact:
+        monitor_configs: >-
+          {{
+            monitor_configs | default([]) + [{
+              'name': m.name,
+              'width': m.width,
+              'height': m.height,
+              'current_scale': m.scale,
+              'ideal_scale': (
+                ([1.0, (m.height | float) / 1080.0] | max)
+                * 4 | round(0) | int / 4.0
+                | float
+              ) | round(2),
+              'position': (m.x | string) + 'x' + (m.y | string)
+            }]
+          }}
+      loop: "{{ monitors }}"
+      loop_control:
+        loop_var: m
+
+    - name: Show current vs ideal scale
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.name }}: {{ item.width }}x{{ item.height }}
+          (current: {{ item.current_scale }}, ideal: {{ item.ideal_scale }})
+      loop: "{{ monitor_configs }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Apply scale via hyprctl
+      ansible.builtin.command:
+        cmd: >-
+          hyprctl keyword monitor
+          {{ item.name }},{{ item.width }}x{{ item.height }},{{ item.position }},{{ item.ideal_scale }}
+      loop: "{{ monitor_configs }}"
+      loop_control:
+        label: "{{ item.name }}-{{ item.ideal_scale }}"
+      when: item.current_scale != item.ideal_scale
+      changed_when: true
+      register: applied
+
+    - name: Build replacement config lines
+      ansible.builtin.set_fact:
+        monitor_config_lines: "{{ monitor_configs | map(attribute='name') | map('regex_replace', '^(.*)$', 'monitor=\\1') | list | zip(monitor_configs | map(attribute='width'), monitor_configs | map(attribute='height'), monitor_configs | map(attribute='position'), monitor_configs | map(attribute='ideal_scale')) | map('join', ',') | join('\n') }}
+
+    - name: Persist monitor config to general.conf
+      ansible.builtin.replace:
+        path: "{{ ansible_user_dir }}/.config/hypr/hyprland/general.conf"
+        regexp: "^monitor=.*$"
+        replace: "{{ monitor_config_lines }}"
+      register: config_updated
+
+    - name: Report results
+      ansible.builtin.debug:
+        msg: >-
+          {% set changed = applied.results | default([]) | selectattr('changed') | list %}
+          {% if changed | length > 0 %}
+          Scale updated for {{ changed | map(attribute='item.name') | join(', ') }}.
+          {% else %}
+          All monitors already at ideal scale.
+          {% endif %}
+          Config {{ 'updated' if config_updated.changed else 'unchanged' }}.
