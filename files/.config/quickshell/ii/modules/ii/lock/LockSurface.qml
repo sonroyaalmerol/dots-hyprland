@@ -17,6 +17,7 @@ MouseArea {
     required property LockContext context
     property bool active: false
     property bool showInputField: active || context.currentText.length > 0
+    property bool showLockOsk: false
     readonly property bool requirePasswordToPower: Config.options.lock.security.requirePasswordToPower
 
     // Force focus on entry
@@ -102,7 +103,7 @@ MouseArea {
         anchors {
             horizontalCenter: parent.horizontalCenter
             bottom: parent.bottom
-            bottomMargin: 20
+            bottomMargin: root.showLockOsk ? 340 : 20
         }
         Behavior on anchors.bottomMargin {
             animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
@@ -286,6 +287,11 @@ MouseArea {
             pinnedItems: SystemTray.items.values.filter(i => i.id == "Fcitx")
             visible: pinnedItems.length > 0
         }
+
+        IconToolbarButton {
+            text: root.showLockOsk ? "keyboard_hide" : "keyboard"
+            onClicked: root.showLockOsk = !root.showLockOsk
+        }
     }
 
     // Right toolbar
@@ -324,6 +330,19 @@ MouseArea {
             id: rebootButton
             text: "restart_alt"
             targetAction: LockContext.ActionEnum.Reboot
+        }
+    }
+
+    LockOsk {
+        anchors {
+            horizontalCenter: parent.horizontalCenter
+            bottom: parent.bottom
+            bottomMargin: 20
+        }
+        context: root.context
+        showOsk: root.showLockOsk
+        onShowOskChanged: {
+            if (!showOsk) root.forceFieldFocus();
         }
     }
 
