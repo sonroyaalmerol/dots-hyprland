@@ -15,10 +15,11 @@ Singleton {
     Process {
         id: oskInput
         running: true
+        stdinEnabled: true
         command: [(Quickshell.env("XDG_BIN_HOME") || (Quickshell.env("HOME") + "/.local/bin")) + "/osk-input"]
         stdout: SplitParser {
             onRead: data => {
-                // osk-input logs to stderr, but just in case
+                // osk-input logs to stderr
             }
         }
         onExited: (exitCode, exitStatus) => {
@@ -29,7 +30,7 @@ Singleton {
 
     function send(cmd) {
         if (oskInput.running) {
-            oskInput.stdin.write(cmd + "\n")
+            oskInput.write(cmd + "\n")
         }
     }
 
