@@ -153,10 +153,10 @@ Item { // Window
             right: parent.right
             margins: margin
         }
-        width: 28
-        height: 28
-        z: 10
-        opacity: (root.hovered || TabletMode.effectiveTabletMode) ? 1 : 0
+        width: TabletMode.effectiveTabletMode ? 36 : 28
+        height: TabletMode.effectiveTabletMode ? 36 : 28
+        z: 100
+        opacity: (root.hovered || root.pressed || TabletMode.effectiveTabletMode) ? 1 : 0
         visible: opacity > 0
         hoverEnabled: true
         onClicked: (mouse) => {
