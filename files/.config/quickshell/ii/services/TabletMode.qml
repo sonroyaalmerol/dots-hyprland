@@ -37,7 +37,7 @@ Singleton {
     Socket {
         id: sock
         path: Quickshell.env("XDG_RUNTIME_DIR") + "/snry-daemon.sock"
-        connected: true
+        connected: false
 
         parser: SplitParser {
             onRead: data => {
@@ -58,20 +58,33 @@ Singleton {
             root.watcherRunning = sock.connected
             if (sock.connected) {
                 console.log("TabletMode: connected to snry-daemon")
+                reconnectTimer.stop()
             } else {
                 reconnectTimer.start()
             }
         }
+    }
 
-
+    // Delay initial connect to let daemon start first
+    Timer {
+        id: startupTimer
+        interval: 2000
+        repeat: false
+        running: true
+        onTriggered: {
+            sock.connected = true
+        }
     }
 
     Timer {
         id: reconnectTimer
-        interval: 2000
-        repeat: false
+        interval: 3000
+        repeat: true
         onTriggered: {
-            sock.connected = true
+            if (!sock.connected) {
+                sock.connected = false
+                Qt.callLater(() => { sock.connected = true })
+            }
         }
     }
 }
