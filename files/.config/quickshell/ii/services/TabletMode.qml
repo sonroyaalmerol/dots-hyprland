@@ -16,10 +16,17 @@ Singleton {
         if (mode === "desktop") return false
         return tabletMode // auto mode
     }
-    property bool watcherRunning: false
+    property bool watcherRunning: daemonProc.running
 
-    // Expose the daemon socket so Ydotool can write commands
-    property alias daemonSocket: sock
+    // Wrapper exposing .connected and .write() for Ydotool compatibility
+    property alias daemonSocket: daemonBridge
+    QtObject {
+        id: daemonBridge
+        property bool connected: daemonProc.running
+        function write(data) {
+            daemonProc.write(data)
+        }
+    }
 
     function cycleMode() {
         if (root.mode === "auto") root.mode = "tablet"
@@ -33,20 +40,56 @@ Singleton {
         }
     }
 
-    function connectToDaemon() {
-        if (!sock.connected) {
-            sock.connected = true
-        }
-    }
+    // Python relay process: maintains a persistent connection to snry-daemon
+    // with automatic reconnection. Handles bidirectional communication:
+    //   daemon socket → stdout (JSON events for QML to parse)
+    //   stdin → daemon socket (commands from Ydotool)
+    Process {
+        id: daemonProc
+        running: true
 
-    // Connect to snry-daemon via Unix socket
-    Socket {
-        id: sock
-        path: Quickshell.env("XDG_RUNTIME_DIR") + "/snry-daemon.sock"
-        connected: false
+        command: ["python3", "-u", "-c", `
+import socket, os, sys, select, time
 
-        parser: SplitParser {
+sock_path = os.path.join(os.environ.get('XDG_RUNTIME_DIR', ''), 'snry-daemon.sock')
+
+def relay(s):
+    print('CONNECTED', flush=True)
+    while True:
+        rlist, _, _ = select.select([s, sys.stdin], [], [], 30)
+        if s in rlist:
+            data = s.recv(65536)
+            if not data:
+                return
+            sys.stdout.buffer.write(data)
+            sys.stdout.buffer.flush()
+        if sys.stdin in rlist:
+            line = sys.stdin.buffer.readline()
+            if not line:
+                return
+            nl = bytes([10])
+            s.sendall(line.rstrip(nl) + nl)
+
+while True:
+    try:
+        if os.path.exists(sock_path):
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(2)
+            s.connect(sock_path)
+            s.settimeout(None)
+            relay(s)
+            s.close()
+    except Exception:
+        pass
+    time.sleep(2)
+`]
+
+        stdout: SplitParser {
             onRead: data => {
+                if (data === "CONNECTED") {
+                    console.log("TabletMode: connected to snry-daemon")
+                    return
+                }
                 try {
                     const parsed = JSON.parse(data)
                     if (parsed.event === "tablet_mode") {
@@ -58,52 +101,6 @@ Singleton {
                     console.warn("TabletMode: parse error:", e, data)
                 }
             }
-        }
-
-        onConnectionStateChanged: {
-            root.watcherRunning = sock.connected
-            if (sock.connected) {
-                console.log("TabletMode: connected to snry-daemon")
-                reconnectTimer.stop()
-            } else {
-                // Start reconnect attempts
-                reconnectTimer.start()
-            }
-        }
-    }
-
-    // Attempt initial connection after a short delay for daemon startup
-    Timer {
-        id: startupTimer
-        interval: 1000
-        repeat: false
-        running: true
-        onTriggered: connectToDaemon()
-    }
-
-    // Reconnect timer: uses a two-step approach to ensure the Socket
-    // actually cycles its connection state. First step disconnects,
-    // second step (separate timer tick) reconnects.
-    Timer {
-        id: reconnectTimer
-        interval: 2000
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: {
-            if (!sock.connected) {
-                sock.connected = false
-                reconnectTriggerTimer.start()
-            }
-        }
-    }
-
-    // Separate one-shot timer to reconnect after disconnect settles
-    Timer {
-        id: reconnectTriggerTimer
-        interval: 100
-        repeat: false
-        onTriggered: {
-            sock.connected = true
         }
     }
 }
