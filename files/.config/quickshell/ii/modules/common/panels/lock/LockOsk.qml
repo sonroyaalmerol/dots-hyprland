@@ -94,11 +94,10 @@ Rectangle {
 		property bool isSpace: (shape === "space")
 		property bool isSpacer: (keytype === "spacer")
 
-		width: isSpacer ? 5 : (baseWidth * (widthMultiplier[shape] || 1))
-		height: isSpacer ? baseHeight : (baseHeight * (heightMultiplier[shape] || 1))
+		width: baseWidth * (widthMultiplier[shape] || 1)
+		height: baseHeight * (heightMultiplier[shape] || 1)
 		enabled: !isSpacer && shape !== "empty"
 
-		visible: enabled
 		Layout.fillWidth: shape === "space" || shape === "expand"
 
 		onPressed: mouse => {
@@ -143,6 +142,8 @@ Rectangle {
 			anchors.fill: parent
 			radius: Appearance.rounding.small
 			color: {
+				if (isSpacer || shape === "empty")
+					return "transparent"
 				if (isShift) {
 					return (root.shiftMode === 1 || root.shiftMode === 2)
 						? Appearance.colors.colPrimary
