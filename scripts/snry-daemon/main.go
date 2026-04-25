@@ -207,15 +207,13 @@ func main() {
 		})
 	}
 
-	// ── Idle manager ────────────────────────────────────────────────────
-	sysConn, err := dbus.SystemBus()
+	// ── Idle manager (own dbus connection to avoid Signal channel conflict) ──
+	idleConn, err := dbus.SystemBus()
 	if err != nil {
 		log.Printf("system bus: %v (idle service disabled)", err)
 	}
-
-	if sysConn != nil {
-		var dbusConn dbusutil.DBusConn = dbusutil.NewRealConn(sysConn)
-		idleSvc := idle.New(dbusConn, idle.DefaultConfig())
+	if idleConn != nil {
+		idleSvc := idle.New(dbusutil.NewRealConn(idleConn), idle.DefaultConfig())
 		wg.Go(func() {
 			if err := idleSvc.Run(ctx); err != nil && err != context.Canceled {
 				log.Printf("idle service: %v", err)
@@ -223,10 +221,13 @@ func main() {
 		})
 	}
 
-	// ── Tablet mode detection ───────────────────────────────────────────
+	// ── Tablet mode detection (own dbus connection) ─────────────────────
+	tabletConn, err := dbus.SystemBus()
 	var conn *dbus.Conn
-	if sysConn != nil {
-		conn = sysConn
+	if err != nil {
+		log.Printf("system bus: %v (tablet mode logind disabled)", err)
+	} else {
+		conn = tabletConn
 	}
 	tm := tabletmode.New(conn, func(tablet bool) {
 		emit(event{Event: "tablet_mode", Active: tablet})
