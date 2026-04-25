@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/godbus/dbus/v5"
@@ -209,12 +210,15 @@ func handleClient(conn net.Conn) {
 	log.Printf("client disconnected: %s", conn.RemoteAddr())
 }
 
+func socketPath() string {
+	return filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "snry-daemon.sock")
+}
+
 func socketListener(ctx context.Context) error {
-	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-	if runtimeDir == "" {
+	if os.Getenv("XDG_RUNTIME_DIR") == "" {
 		return fmt.Errorf("XDG_RUNTIME_DIR not set")
 	}
-	sockPath := filepath.Join(runtimeDir, "snry-daemon.sock")
+	sockPath := socketPath()
 
 	// Remove stale socket file
 	os.Remove(sockPath)
@@ -248,10 +252,48 @@ func socketListener(ctx context.Context) error {
 
 // ── Main ──────────────────────────────────────────────────────────────────
 
+func usage() {
+	fmt.Fprintln(os.Stderr, "usage: snry-daemon [send <command>]")
+}
+
+func sendCommand(cmd string) int {
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		fmt.Fprintln(os.Stderr, "error: XDG_RUNTIME_DIR not set")
+		return 1
+	}
+	sockPath := socketPath()
+	conn, err := net.Dial("unix", sockPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	defer conn.Close()
+	fmt.Fprintf(conn, "%s\n", cmd)
+	// Brief pause to let the daemon process the command
+	time.Sleep(100 * time.Millisecond)
+	return 0
+}
+
 func main() {
 	log.SetOutput(os.Stderr)
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("")
+
+	// ── Subcommand detection ──────────────────────────────────────────
+	if len(os.Args) >= 2 {
+		switch os.Args[1] {
+		case "send":
+			if len(os.Args) < 3 {
+				usage()
+				os.Exit(1)
+			}
+			os.Exit(sendCommand(os.Args[2]))
+		default:
+			usage()
+			os.Exit(1)
+		}
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
