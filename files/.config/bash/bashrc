@@ -70,5 +70,3 @@ if [[ -f /usr/share/fzf/completion.bash ]]; then
     . /usr/share/fzf/completion.bash
 fi
 
-# ─── ble.sh (MUST be last) ───
-[[ $- == *i* ]] && source /usr/share/blesh/ble.sh

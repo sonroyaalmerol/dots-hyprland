@@ -126,7 +126,8 @@ arch_packages:
   - wlogout
   - nwg-displays
   - libqalculate
-  - blesh
+  - zsh
+  - zsh-completions
   - quickshell-git
 
 # Fedora COPR repos
@@ -157,6 +158,7 @@ fedora_packages:
     - wget2
     - ripgrep
     - jq
+    - zsh
     - xdg-utils
     - rsync
     - yq

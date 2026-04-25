@@ -9,7 +9,7 @@ Singleton {
     property bool tabletMode: false
     property bool textInputActive: false
     property bool manualOverride: false
-    property bool effectiveTabletMode: manualOverride ? true : tabletMode
+    property bool effectiveTabletMode: manualOverride ? !tabletMode : tabletMode
     property bool watcherRunning: false
 
     function toggleManualOverride() {
