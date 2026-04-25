@@ -84,11 +84,15 @@ Scope { // Scope
         sourceComponent: PanelWindow { // Window
             id: oskRoot
             visible: oskLoader.active && !GlobalStates.screenLocked
+            property real floatOffsetY: 0
 
             anchors {
                 bottom: true
                 left: true
                 right: true
+                margins {
+                    bottom: root.pinned ? 0 : floatOffsetY
+                }
             }
 
             function hide() {
@@ -140,10 +144,43 @@ Scope { // Scope
                     id: oskRowLayout
                     anchors.centerIn: parent
                     spacing: 5
-                    VerticalButtonGroup {
-                        OskControlButton { // Pin button
-                            toggled: root.pinned
-                            downAction: () => root.pinned = !root.pinned
+                    MouseArea {
+                        id: dragArea
+                        width: 50
+                        height: parent.height
+                        enabled: !root.pinned
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: enabled ? Qt.OpenHandCursor : Qt.ArrowCursor
+                        onDoubleClicked: {
+                            floatOffsetY = 0
+                        }
+                        onPositionChanged: (mouse) => {
+                            if (mouse.buttons & Qt.LeftButton && enabled) {
+                                floatOffsetY = Math.max(0, floatOffsetY + mouse.movementY)
+                            }
+                        }
+                        onContainsMouseChanged: {
+                            cursorShape = enabled ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                        }
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.topMargin: 10
+                            width: 24
+                            height: 24
+                            visible: !root.pinned
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "drag_indicator"
+                                iconSize: 20
+                                color: Appearance.colors.colOnLayer0
+                            }
+                        }
+                        VerticalButtonGroup {
+                            anchors.centerIn: parent
+                            OskControlButton { // Pin button
+                                toggled: root.pinned
+                                downAction: () => root.pinned = !root.pinned
                             contentItem: MaterialSymbol {
                                 text: "keep"
                                 horizontalAlignment: Text.AlignHCenter
