@@ -90,7 +90,9 @@ Scope { // Scope
                 bottom: true
                 left: true
                 right: true
-                margins.bottom: root.pinned ? 0 : floatOffsetY
+            }
+            margins {
+                bottom: root.pinned ? 0 : floatOffsetY
             }
 
             onFloatOffsetYChanged: {
