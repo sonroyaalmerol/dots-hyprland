@@ -75,7 +75,7 @@ arch_packages:
   - eza
   - fzf
   - fontconfig
-  - kitty
+  - ghostty
   - matugen-bin
   - otf-space-grotesk
   - starship
@@ -177,7 +177,7 @@ fedora_packages:
     - eza
     - bash-completion
     - fontconfig
-    - kitty
+    - ghostty
     - florian-karsten-space-grotesk-fonts
     - starship
     - jetbrains-mono-nerd-fonts

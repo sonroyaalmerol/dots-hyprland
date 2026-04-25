@@ -66,7 +66,7 @@ packages = [
   "eza",
   "bash-completion",
   "fontconfig",
-  "kitty",
+  "ghostty",
   "florian-karsten-space-grotesk-fonts",
   "starship",
   "jetbrains-mono-nerd-fonts",
