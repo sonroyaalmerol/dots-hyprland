@@ -97,19 +97,37 @@
   when: not skip_quickshell | bool
 
 # osk-watcher
-- name: Build osk-watcher binary
+- name: Check if osk-watcher source exists
+  ansible.builtin.stat:
+    path: "{{ repo_root }}/scripts/osk-watcher/main.go"
+  register: osk_watcher_src
+
+- name: Build osk-watcher binary from source
   ansible.builtin.command:
     cmd: go build -o osk-watcher .
     chdir: "{{ repo_root }}/scripts/osk-watcher"
     creates: "{{ repo_root }}/scripts/osk-watcher/osk-watcher"
-  when: not skip_quickshell | bool
+  when:
+    - not skip_quickshell | bool
+    - osk_watcher_src.stat.exists
 
-- name: Install osk-watcher binary
+- name: Install osk-watcher binary (built from source)
   ansible.builtin.copy:
     src: "{{ repo_root }}/scripts/osk-watcher/osk-watcher"
     dest: "{{ xdg_bin_home }}/osk-watcher"
     mode: "0755"
-  when: not skip_quickshell | bool
+  when:
+    - not skip_quickshell | bool
+    - osk_watcher_src.stat.exists
+
+- name: Install osk-watcher binary (from package)
+  ansible.builtin.copy:
+    src: "/usr/share/snry-shell/scripts/osk-watcher/osk-watcher"
+    dest: "{{ xdg_bin_home }}/osk-watcher"
+    mode: "0755"
+  when:
+    - not skip_quickshell | bool
+    - not osk_watcher_src.stat.exists
 
 # Bash
 - name: Sync Bash config
