@@ -13,6 +13,7 @@ import (
 	"github.com/godbus/dbus/v5"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/osk-watcher/inputmethod"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/osk-watcher/tabletmode"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/osk-watcher/uinput"
 )
 
 type event struct {
@@ -44,6 +45,12 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("")
 
+	// Subcommand dispatch: default = watcher, "uinput" = virtual keyboard
+	if len(os.Args) > 1 && os.Args[1] == "uinput" {
+		uinput.Run()
+		return
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -61,11 +68,9 @@ func main() {
 	tm := tabletmode.New(conn, func(tablet bool) {
 		emit(event{Event: "tablet_mode", Active: tablet})
 	})
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		tm.Run(ctx)
-	}()
+	})
 
 	// ── Input method (text focus) watcher ───────────────────────────────
 	im, err := inputmethod.New(func(active bool) {
@@ -75,11 +80,9 @@ func main() {
 		log.Printf("inputmethod watcher error: %v", err)
 	}
 	if im != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			im.Run(ctx)
-		}()
+		})
 	} else {
 		log.Printf("zwp_input_method_v2 not available, text focus events disabled")
 	}

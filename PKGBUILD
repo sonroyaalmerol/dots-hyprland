@@ -23,6 +23,7 @@ package() {
   go build -o osk-watcher .
   install -dm755 "$pkgdir/usr/share/snry-shell/scripts/osk-watcher"
   install -Dm755 osk-watcher "$pkgdir/usr/share/snry-shell/scripts/osk-watcher/osk-watcher"
+  install -Dm755 osk-watcher "$pkgdir/usr/share/snry-shell/scripts/osk-watcher/osk-input"
   install -Dm755 /dev/stdin "$pkgdir/usr/bin/snry-shell" <<'SCRIPT'
 #!/bin/bash
 BASE=/usr/share/snry-shell
