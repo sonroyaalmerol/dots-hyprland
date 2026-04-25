@@ -118,3 +118,79 @@
     name: systemd-logind
     state: restarted
   become: true
+
+# ── Disable display managers ──
+
+- name: Disable GDM service
+  ansible.builtin.systemd:
+    name: gdm
+    enabled: false
+    state: stopped
+  become: true
+  failed_when: false
+
+- name: Disable SDDM service
+  ansible.builtin.systemd:
+    name: sddm
+    enabled: false
+    state: stopped
+  become: true
+  failed_when: false
+
+- name: Disable LightDM service
+  ansible.builtin.systemd:
+    name: lightdm
+    enabled: false
+    state: stopped
+  become: true
+  failed_when: false
+
+- name: Disable display-manager.service alias
+  ansible.builtin.systemd:
+    name: display-manager
+    enabled: false
+    state: stopped
+  become: true
+  failed_when: false
+
+# ── TTY autologin ──
+
+- name: Create getty@tty1 override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/getty@tty1.service.d
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Deploy getty@tty1 autologin override
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/getty@tty1.service.d/override.conf
+    content: |
+      [Service]
+      ExecStart=
+      ExecStart=-/sbin/agetty -o '-p -- \\u' --autologin {{ ansible_facts.user_id }} --noclear %I $TERM
+    mode: "0644"
+  become: true
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+# ── PAM gnome-keyring integration for TTY login ──
+
+- name: Add pam_gnome_keyring to PAM login auth
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/login
+    line: "auth       optional   pam_gnome_keyring.so"
+    insertafter: "^auth.*include.*system-local-login"
+    state: present
+  become: true
+
+- name: Add pam_gnome_keyring to PAM login session
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/login
+    line: "session    optional   pam_gnome_keyring.so auto_start"
+    insertafter: "^session.*include.*system-local-login"
+    state: present
+  become: true

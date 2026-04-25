@@ -1,0 +1,8 @@
+#
+# ~/.zprofile
+#
+
+# Auto-start Hyprland on first TTY login (no display manager)
+if [ -z "${WAYLAND_DISPLAY}" ] && [ "${XDG_VTNR}" -eq 1 ] && [ -z "${HYPRLAND_INSTANCE_SIGNATURE}" ]; then
+    exec Hyprland
+fi
