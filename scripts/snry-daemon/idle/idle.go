@@ -19,17 +19,17 @@ import (
 
 // Config holds tunable idle parameters.
 type Config struct {
-	LockTimeout           time.Duration
-	IdleDisplayOffTimeout time.Duration
-	LockDisplayOffTimeout time.Duration
+	IdleTimeout           time.Duration // time before display turns off when unlocked
+	LockDelay             time.Duration // delay after display off before locking (when unlocked)
+	LockDisplayOffTimeout time.Duration // idle time before display off when already locked
 	SuspendTimeout        time.Duration
 }
 
 // DefaultConfig returns the factory defaults matching snry-idle requirements.
 func DefaultConfig() Config {
 	return Config{
-		LockTimeout:           5 * time.Minute,
-		IdleDisplayOffTimeout: 5 * time.Minute,
+		IdleTimeout:           5 * time.Minute,
+		LockDelay:             3 * time.Second,
 		LockDisplayOffTimeout: 3 * time.Second,
 		SuspendTimeout:        0,
 	}
@@ -52,8 +52,8 @@ type Service struct {
 	display         *client.Display
 	manager         *protocol.ExtIdleNotifierV1
 	seat            *client.Seat
-	lockNotif       *protocol.ExtIdleNotificationV1
 	displayOffNotif *protocol.ExtIdleNotificationV1
+	lockCancel      context.CancelFunc // cancels pending lock-after-display-off goroutine
 }
 
 // New creates the idle service.
@@ -66,10 +66,6 @@ func New(conn dbusutil.DBusConn, cfg Config) *Service {
 }
 
 func (s *Service) recreateTimers() {
-	if s.lockNotif != nil {
-		s.lockNotif.Destroy()
-		s.lockNotif = nil
-	}
 	if s.displayOffNotif != nil {
 		s.displayOffNotif.Destroy()
 		s.displayOffNotif = nil
@@ -80,35 +76,48 @@ func (s *Service) recreateTimers() {
 	locked := s.locked
 	s.mu.Unlock()
 
-	// 1. Lock Timer (only if not already locked)
-	if !locked && cfg.LockTimeout > 0 {
-		ms := uint32(cfg.LockTimeout.Milliseconds())
-		notif, err := s.manager.GetIdleNotification(ms, s.seat)
-		if err == nil {
-			notif.SetIdledHandler(func(protocol.ExtIdleNotificationV1IdledEvent) {
-				s.doLock()
-			})
-			s.lockNotif = notif
-		}
-	}
-
-	// 2. Display Off Timer
-	displayTimeout := cfg.IdleDisplayOffTimeout
 	if locked {
-		displayTimeout = cfg.LockDisplayOffTimeout
-	}
-
-	if displayTimeout > 0 {
-		ms := uint32(displayTimeout.Milliseconds())
-		notif, err := s.manager.GetIdleNotification(ms, s.seat)
-		if err == nil {
-			notif.SetIdledHandler(func(protocol.ExtIdleNotificationV1IdledEvent) {
-				s.setDisplay(false)
-			})
-			notif.SetResumedHandler(func(protocol.ExtIdleNotificationV1ResumedEvent) {
-				s.setDisplay(true)
-			})
-			s.displayOffNotif = notif
+		// Locked: one timer at LockDisplayOffTimeout
+		if cfg.LockDisplayOffTimeout > 0 {
+			ms := uint32(cfg.LockDisplayOffTimeout.Milliseconds())
+			notif, err := s.manager.GetIdleNotification(ms, s.seat)
+			if err == nil {
+				notif.SetIdledHandler(func(protocol.ExtIdleNotificationV1IdledEvent) {
+					s.setDisplay(false)
+				})
+				notif.SetResumedHandler(func(protocol.ExtIdleNotificationV1ResumedEvent) {
+					s.setDisplay(true)
+				})
+				s.displayOffNotif = notif
+			}
+		}
+	} else {
+		// Unlocked: one timer at IdleTimeout
+		if cfg.IdleTimeout > 0 {
+			ms := uint32(cfg.IdleTimeout.Milliseconds())
+			notif, err := s.manager.GetIdleNotification(ms, s.seat)
+			if err == nil {
+				notif.SetIdledHandler(func(protocol.ExtIdleNotificationV1IdledEvent) {
+					s.setDisplay(false)
+					// Start cancellable lock goroutine
+					var ctx context.Context
+					s.mu.Lock()
+					ctx, s.lockCancel = context.WithCancel(context.Background())
+					s.mu.Unlock()
+					go func() {
+						select {
+						case <-ctx.Done():
+							return
+						case <-time.After(cfg.LockDelay):
+							s.doLock()
+						}
+					}()
+				})
+				notif.SetResumedHandler(func(protocol.ExtIdleNotificationV1ResumedEvent) {
+					s.setDisplay(true)
+				})
+				s.displayOffNotif = notif
+			}
 		}
 	}
 }
@@ -120,6 +129,11 @@ func (s *Service) setDisplay(on bool) {
 		return
 	}
 	s.displayOff = !on
+	// Cancel pending lock goroutine if display is turned back on
+	if on && s.lockCancel != nil {
+		s.lockCancel()
+		s.lockCancel = nil
+	}
 	s.mu.Unlock()
 
 	if on {
@@ -247,9 +261,6 @@ func (s *Service) waylandLoop(ctx context.Context) {
 func (s *Service) cleanupWayland() {
 	s.waylandMu.Lock()
 	defer s.waylandMu.Unlock()
-	if s.lockNotif != nil {
-		s.lockNotif = nil
-	}
 	if s.displayOffNotif != nil {
 		s.displayOffNotif = nil
 	}
