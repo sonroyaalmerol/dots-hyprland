@@ -90,9 +90,11 @@ Scope { // Scope
                 bottom: true
                 left: true
                 right: true
-                margins {
-                    bottom: root.pinned ? 0 : floatOffsetY
-                }
+                margins.bottom: root.pinned ? 0 : floatOffsetY
+            }
+
+            onFloatOffsetYChanged: {
+                if (root.pinned) floatOffsetY = 0
             }
 
             function hide() {
@@ -144,58 +146,70 @@ Scope { // Scope
                     id: oskRowLayout
                     anchors.centerIn: parent
                     spacing: 5
-                    MouseArea {
-                        id: dragArea
-                        width: 50
-                        height: parent.height
-                        enabled: !root.pinned
-                        acceptedButtons: Qt.LeftButton
-                        cursorShape: enabled ? Qt.OpenHandCursor : Qt.ArrowCursor
-                        onDoubleClicked: {
-                            floatOffsetY = 0
-                        }
-                        onPositionChanged: (mouse) => {
-                            if (mouse.buttons & Qt.LeftButton && enabled) {
-                                floatOffsetY = Math.max(0, floatOffsetY + mouse.movementY)
-                            }
-                        }
-                        onContainsMouseChanged: {
-                            cursorShape = enabled ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                        }
-                        Rectangle {
-                            anchors.top: parent.top
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.topMargin: 10
-                            width: 24
-                            height: 24
+                    ColumnLayout {
+                        id: controlsColumn
+                        Layout.fillHeight: true
+                        spacing: 0
+
+                        // Drag handle (only when unpinned)
+                        MouseArea {
+                            id: dragHandle
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 24
+                            Layout.topMargin: 5
+                            enabled: !root.pinned
                             visible: !root.pinned
-                            MaterialSymbol {
+                            acceptedButtons: Qt.LeftButton
+                            hoverEnabled: true
+                            cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+
+                            property real _startY: 0
+                            property real _startOffset: 0
+
+                            onPressed: (mouse) => {
+                                _startY = mouse.y
+                                _startOffset = oskRoot.floatOffsetY
+                            }
+                            onDoubleClicked: oskRoot.floatOffsetY = 0
+                            onPositionChanged: (mouse) => {
+                                if (pressed) {
+                                    // finger moves up (mouse.y decreases) = window should move up
+                                    // margins.bottom increases = window moves up
+                                    var delta = _startY - mouse.y
+                                    oskRoot.floatOffsetY = Math.max(0, _startOffset + delta)
+                                }
+                            }
+
+                            Rectangle {
                                 anchors.centerIn: parent
-                                text: "drag_indicator"
-                                iconSize: 20
-                                color: Appearance.colors.colOnLayer0
+                                width: 20
+                                height: 4
+                                radius: 2
+                                color: Appearance.colors.colOutlineVariant
+                                opacity: dragHandle.containsMouse ? 1 : 0.5
                             }
                         }
+
                         VerticalButtonGroup {
-                            anchors.centerIn: parent
                             OskControlButton { // Pin button
                                 toggled: root.pinned
                                 downAction: () => root.pinned = !root.pinned
-                            contentItem: MaterialSymbol {
-                                text: "keep"
-                                horizontalAlignment: Text.AlignHCenter
-                                iconSize: Appearance.font.pixelSize.larger
-                                color: root.pinned ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer0
+                                contentItem: MaterialSymbol {
+                                    text: "keep"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: root.pinned ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer0
+                                }
                             }
-                        }
-                        OskControlButton {
-                            onClicked: () => {
-                                oskRoot.hide()
-                            }
-                            contentItem: MaterialSymbol {
-                                horizontalAlignment: Text.AlignHCenter
-                                text: "keyboard_hide"
-                                iconSize: Appearance.font.pixelSize.larger
+                            OskControlButton {
+                                onClicked: () => {
+                                    oskRoot.hide()
+                                }
+                                contentItem: MaterialSymbol {
+                                    horizontalAlignment: Text.AlignHCenter
+                                    text: "keyboard_hide"
+                                    iconSize: Appearance.font.pixelSize.larger
+                                }
                             }
                         }
                     }
