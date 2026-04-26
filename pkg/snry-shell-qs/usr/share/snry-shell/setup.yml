@@ -1,0 +1,38 @@
+---
+# Snry Shell Ansible Playbook
+# Replaces bash scripts for install, uninstall, deps, setups, files, diagnose, checkdeps
+
+- name: Snry Shell Setup
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars_files:
+    - group_vars/all.yml
+
+  pre_tasks:
+    - name: Install required Ansible collections
+      ansible.builtin.shell:
+        cmd: ansible-galaxy collection install -r "{{ playbook_dir }}/requirements.yml"
+      changed_when: false
+      tags: [always]
+
+  tasks:
+    - name: Include deps role
+      ansible.builtin.import_role:
+        name: deps
+      tags: [deps]
+
+    - name: Include microtex role
+      ansible.builtin.import_role:
+        name: microtex
+      tags: [deps, microtex]
+
+    - name: Include setups role
+      ansible.builtin.import_role:
+        name: setups
+      tags: [setups]
+
+    - name: Include files role
+      ansible.builtin.import_role:
+        name: files
+      tags: [files]

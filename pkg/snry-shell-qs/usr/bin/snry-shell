@@ -1,0 +1,10 @@
+#!/bin/bash
+BASE=/usr/share/snry-shell
+ansible-galaxy collection install -r $BASE/requirements.yml "$@"
+
+case "${1:-}" in
+  uninstall)  exec ansible-playbook --ask-become-pass $BASE/uninstall.yml "${@:2}" ;;
+  diagnose)   exec ansible-playbook --ask-become-pass $BASE/diagnose.yml "${@:2}" ;;
+  checkdeps)  exec ansible-playbook --ask-become-pass $BASE/checkdeps.yml "${@:2}" ;;
+  *)          exec ansible-playbook --ask-become-pass $BASE/setup.yml "$@" ;;
+esac

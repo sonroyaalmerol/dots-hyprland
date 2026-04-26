@@ -1,0 +1,75 @@
+---
+# Checkdeps role - Check AUR package existence
+
+- name: Check if Arch-based
+  ansible.builtin.set_fact:
+    is_arch: "{{ ansible_facts['distribution'] in ['Arch Linux', 'CachyOS'] or ansible_facts['os_family'] == 'Archlinux' }}"
+
+- name: Fail if not Arch-based
+  ansible.builtin.fail:
+    msg: "checkdeps only works on Arch-based distributions"
+  when: not is_arch | bool
+
+- name: Check required commands exist
+  ansible.builtin.command:
+    cmd: "command -v {{ item }}"
+  register: cmd_check
+  failed_when: false
+  changed_when: false
+  loop:
+    - curl
+    - gzip
+    - pacman
+
+- name: Read packages from packages.conf
+  ansible.builtin.slurp:
+    src: "{{ repo_root }}/data/arch/packages.conf"
+  register: packages_conf_raw
+  failed_when: false
+
+- name: Parse packages list
+  ansible.builtin.set_fact:
+    packages_list: "{{ (packages_conf_raw.content | b64decode | regex_findall('^[^#]+', multiline=true) | map('trim') | select() | map('split', ' ') | flatten | unique | list) if packages_conf_raw is defined else [] }}"
+
+- name: Create temp file for packages
+  ansible.builtin.tempfile:
+    state: file
+    suffix: .txt
+  register: packages_file
+
+- name: Write packages to temp file
+  ansible.builtin.copy:
+    dest: "{{ packages_file.path }}"
+    content: "{{ packages_list | join('\n') }}\n"
+    mode: "0644"
+
+- name: Download AUR packages list
+  ansible.builtin.command:
+    cmd: "curl -s https://aur.archlinux.org/packages.gz | gzip -cd | sort > /tmp/aur_packages.txt"
+  changed_when: false
+  failed_when: false
+
+- name: Get pacman packages list
+  ansible.builtin.command:
+    cmd: "pacman -Ssq | sort > /tmp/pacman_packages.txt"
+  changed_when: false
+
+- name: Find missing packages
+  ansible.builtin.command:
+    cmd: "comm -23 <(sort -u {{ packages_file.path }}) <(cat /tmp/pacman_packages.txt /tmp/aur_packages.txt | sort -u)"
+  register: missing_packages
+  changed_when: false
+
+- name: Display missing packages
+  ansible.builtin.debug:
+    msg: "Missing packages: {{ missing_packages.stdout if missing_packages.stdout | length > 0 else 'None' }}"
+
+- name: Clean up temp files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ packages_file.path }}"
+    - /tmp/aur_packages.txt
+    - /tmp/pacman_packages.txt
+  failed_when: false

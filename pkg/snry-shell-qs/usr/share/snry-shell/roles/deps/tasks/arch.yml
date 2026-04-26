@@ -1,0 +1,105 @@
+---
+# Arch Linux dependencies installation
+
+- name: Update pacman mirrors
+  community.general.pacman:
+    update_cache: true
+  become: true
+  when: not skip_sysupdate | bool
+
+- name: Upgrade all packages
+  community.general.pacman:
+    upgrade: true
+  become: true
+  when: not skip_sysupdate | bool
+
+- name: Gather package facts
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Install base-devel if paru not installed
+  community.general.pacman:
+    name:
+      - base-devel
+    state: present
+  become: true
+  when: "'paru' not in ansible_facts.packages"
+
+- name: Check if paru is installed
+  ansible.builtin.command: which paru
+  register: paru_check
+  failed_when: false
+  changed_when: false
+
+- name: Clone paru from AUR
+  ansible.builtin.git:
+    repo: https://aur.archlinux.org/paru.git
+    dest: /tmp/buildparu
+    accept_hostkey: true
+  when: paru_check.rc != 0
+
+- name: Build and install paru
+  ansible.builtin.command:
+    cmd: makepkg -si --noconfirm --needed
+    chdir: /tmp/buildparu
+  when: paru_check.rc != 0
+
+- name: Clean up paru build
+  ansible.builtin.file:
+    path: /tmp/buildparu
+    state: absent
+  when: paru_check.rc != 0
+
+- name: Allow passwordless sudo for pacman
+  community.general.sudoers:
+    name: pacman-nopasswd
+    user: "{{ ansible_facts['user_id'] }}"
+    commands:
+      - /usr/bin/pacman
+      - /usr/bin/pacman-key
+  become: true
+
+- name: Remove quickshell if installed (replaced by quickshell-git)
+  community.general.pacman:
+    name:
+      - quickshell
+    state: absent
+  become: true
+  ignore_errors: true
+
+- name: Install Arch packages via paru
+  ansible.builtin.command:
+    cmd: "paru -S --needed --noconfirm {{ arch_packages | join(' ') }}"
+
+- name: Revoke passwordless sudo for pacman
+  ansible.builtin.file:
+    path: /etc/sudoers.d/pacman-nopasswd
+    state: absent
+  become: true
+
+- name: Install plasma-browser-integration if not skipped
+  community.general.pacman:
+    name:
+      - plasma-browser-integration
+    state: present
+  become: true
+  when: not skip_plasmaintg | bool
+
+- name: Ensure venv parent directory exists
+  ansible.builtin.file:
+    path: "{{ venv_path | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Create Python venv at {{ venv_path }}
+  ansible.builtin.command:
+    cmd: "uv venv --prompt .venv {{ venv_path }} -p 3.12"
+    creates: "{{ venv_path }}/bin/activate"
+
+- name: Install Python packages via uv
+  ansible.builtin.command:
+    cmd: "uv pip install -r {{ repo_root }}/data/python/requirements.txt"
+  environment:
+    VIRTUAL_ENV: "{{ venv_path }}"
+    UV_NO_MODIFY_PATH: "1"
+  when: ansible_facts.python_version is defined
