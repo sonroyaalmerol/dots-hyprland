@@ -36,18 +36,21 @@
     repo: https://aur.archlinux.org/paru.git
     dest: /tmp/buildparu
     accept_hostkey: true
+  become: false
   when: paru_check.rc != 0
 
 - name: Build and install paru
   ansible.builtin.command:
     cmd: makepkg -si --noconfirm --needed
     chdir: /tmp/buildparu
+  become: false
   when: paru_check.rc != 0
 
 - name: Clean up paru build
   ansible.builtin.file:
     path: /tmp/buildparu
     state: absent
+  become: false
   when: paru_check.rc != 0
 
 - name: Allow passwordless sudo for pacman
@@ -70,6 +73,7 @@
 - name: Install Arch packages via paru
   ansible.builtin.command:
     cmd: "paru -S --needed --noconfirm {{ arch_packages | join(' ') }}"
+  become: false
 
 - name: Revoke passwordless sudo for pacman
   ansible.builtin.file:
@@ -95,6 +99,7 @@
   ansible.builtin.command:
     cmd: "uv venv --prompt .venv {{ venv_path }} -p 3.12"
     creates: "{{ venv_path }}/bin/activate"
+  become: false
 
 - name: Install Python packages via uv
   ansible.builtin.command:
@@ -102,4 +107,5 @@
   environment:
     VIRTUAL_ENV: "{{ venv_path }}"
     UV_NO_MODIFY_PATH: "1"
+  become: false
   when: ansible_facts.python_version is defined
