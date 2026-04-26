@@ -11,6 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Rename branch to master for AUR
+        run: git branch -M master
+
       - name: Publish snry-shell-qs to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
         with:
