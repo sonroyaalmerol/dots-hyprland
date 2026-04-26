@@ -351,9 +351,15 @@ func (s *Service) doLock() {
 	// Try quickshell lock first, fall back to hyprlock
 	lockCmd := exec.Command("sh", "-c",
 		"pidof qs quickshell >/dev/null 2>&1 && hyprctl dispatch global quickshell:lock || hyprlock")
-	if err := lockCmd.Run(); err != nil {
+	if err := lockCmd.Start(); err != nil {
 		log.Printf("[idle] lock command failed: %v", err)
+		return
 	}
+	go func() {
+		if err := lockCmd.Wait(); err != nil {
+			log.Printf("[idle] lock command exited: %v", err)
+		}
+	}()
 
 	s.bus.publish(topicScreenLock, true)
 }
@@ -366,12 +372,10 @@ func (s *Service) Lock() {
 // LockAndDPMSOff locks the screen and immediately turns off the display.
 // Used for power button and lid close events.
 func (s *Service) LockAndDPMSOff() {
-	s.mu.Lock()
-	s.displayOff = true
-	s.mu.Unlock()
-	log.Printf("[idle] turning display OFF")
-	exec.Command("hyprctl", "dispatch", "dpms", "off").Run()
+	// Lock first so the lock screen renders before the display turns off
 	s.doLock()
+	// Then turn off the display
+	s.setDisplay(false)
 }
 
 // Unlock triggers an unlock externally (e.g. from a socket command).
