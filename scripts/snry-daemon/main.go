@@ -23,6 +23,7 @@ import (
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/idle/dbusutil"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/inputmethod"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/lockscreen"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/quickshell"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/tabletmode"
 	"golang.org/x/sys/unix"
 )
@@ -495,9 +496,24 @@ func main() {
 		}
 	}()
 
+	// ── QuickShell process manager ──────────────────────────────────────
+	qsSvc := quickshell.New(quickshell.DefaultConfig())
+	wg.Go(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("quickshell: panic: %v", r)
+			}
+		}()
+		log.Printf("quickshell: service goroutine starting")
+		if err := qsSvc.Run(ctx); err != nil && err != context.Canceled {
+			log.Printf("quickshell: %v", err)
+		}
+	})
+
 	// ── Wait for shutdown ──────────────────────────────────────────────
 	<-ctx.Done()
 	log.Printf("shutting down...")
+	qsSvc.Stop()
 	destroyUinput()
 	wg.Wait()
 	fmt.Fprintln(os.Stderr, "exited")
