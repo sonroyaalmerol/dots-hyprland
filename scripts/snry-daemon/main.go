@@ -411,19 +411,37 @@ func main() {
 
 	// ── Lockscreen service ────────────────────────────────────────────────
 	lockscreenSvc = lockscreen.New(lockscreen.DefaultConfig(), func(et lockscreen.EventType, data any) {
-		m := map[string]any{"event": "lockscreen"}
 		switch et {
 		case lockscreen.EventLockState:
-			m["type"] = "lock_state"
-			m["locked"] = data.(bool)
+			locked := data.(bool)
+			if idleSvc != nil {
+				idleSvc.SetLocked(locked)
+			}
+			emitMap(map[string]any{
+				"event": "lock_state",
+				"data": map[string]any{
+					"locked": locked,
+				},
+			})
 		case lockscreen.EventAuthResult:
-			m["type"] = "auth_result"
-			m["data"] = data
+			r := data.(lockscreen.AuthResult)
+			emitMap(map[string]any{
+				"event": "auth_result",
+				"data": map[string]any{
+					"success":   r.Success,
+					"remaining": r.Remaining,
+					"lockedOut": r.LockedOut,
+					"message":   r.Message,
+				},
+			})
 		case lockscreen.EventLockoutTick:
-			m["type"] = "lockout_tick"
-			m["remaining"] = data.(int)
+			emitMap(map[string]any{
+				"event": "lockout_tick",
+				"data": map[string]any{
+					"remainingSeconds": data.(int),
+				},
+			})
 		}
-		emitMap(m)
 	})
 
 	// Wire idle service to use lockscreen for lock/unlock

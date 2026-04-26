@@ -1,4 +1,6 @@
+
 import qs
+import qs.services
 import qs.modules.common
 import QtQuick
 import Quickshell
@@ -23,6 +25,11 @@ Scope {
     property var targetAction: LockContext.ActionEnum.Unlock
     property bool alsoInhibitIdle: false
 
+    // Lockout state from daemon
+    property int remainingAttempts: 3
+    property bool isLockedOut: false
+    property int lockoutSeconds: 0
+
     function resetTargetAction() {
         root.targetAction = LockContext.ActionEnum.Unlock;
     }
@@ -39,7 +46,10 @@ Scope {
         root.resetTargetAction();
         root.clearText();
         root.unlockInProgress = false;
-        stopFingerPam();
+        root.remainingAttempts = 3;
+        root.isLockedOut = false;
+        root.lockoutSeconds = 0;
+        root.stopFingerPam();
     }
 
     Timer {
@@ -62,7 +72,7 @@ Scope {
     function tryUnlock(alsoInhibitIdle = false) {
         root.alsoInhibitIdle = alsoInhibitIdle;
         root.unlockInProgress = true;
-        pam.start();
+        DaemonSocket.authenticate(root.currentText);
     }
 
     function tryFingerUnlock() {
@@ -74,6 +84,33 @@ Scope {
     function stopFingerPam() {
         if (fingerPam.active) {
             fingerPam.abort();
+        }
+    }
+
+    Connections {
+        target: DaemonSocket
+        function onAuthResult(data) {
+            root.unlockInProgress = false;
+            if (data.success) {
+                root.unlocked(root.targetAction);
+                stopFingerPam();
+            } else {
+                root.clearText();
+                root.remainingAttempts = data.remaining ?? 3;
+                root.isLockedOut = data.lockedOut ?? false;
+                GlobalStates.screenUnlockFailed = true;
+                root.showFailure = true;
+            }
+        }
+    }
+
+    Connections {
+        target: DaemonSocket
+        function onLockoutTick(remainingSeconds) {
+            root.lockoutSeconds = remainingSeconds;
+            if (remainingSeconds <= 0) {
+                root.isLockedOut = false;
+            }
         }
     }
 
@@ -91,30 +128,6 @@ Scope {
             if (exitCode !== 0) {
                 // console.warn("[LockContext] fprintd-list command exited with error:", exitCode, exitStatus);
                 root.fingerprintsConfigured = false;
-            }
-        }
-    }
-    
-    PamContext {
-        id: pam
-
-        // pam_unix will ask for a response for the password prompt
-        onPamMessage: {
-            if (this.responseRequired) {
-                this.respond(root.currentText);
-            }
-        }
-
-        // pam_unix won't send any important messages so all we need is the completion status.
-        onCompleted: result => {
-            if (result == PamResult.Success) {
-                root.unlocked(root.targetAction);
-                stopFingerPam();
-            } else {
-                root.clearText();
-                root.unlockInProgress = false;
-                GlobalStates.screenUnlockFailed = true;
-                root.showFailure = true;
             }
         }
     }

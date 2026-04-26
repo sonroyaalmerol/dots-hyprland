@@ -28,21 +28,6 @@ Scope {
         }
     }
 
-    Process {
-        id: unlockKeyringProc
-        onExited: (exitCode, exitStatus) => {
-            KeyringStorage.fetchKeyringData();
-        }
-    }
-    function unlockKeyring() {
-        unlockKeyringProc.exec({
-            environment: ({
-                "UNLOCK_PASSWORD": lockContext.currentText
-            }),
-            command: ["bash", "-c", Quickshell.shellPath("scripts/keyring/unlock.sh")]
-        })
-    }
-
     // This stores all the information shared between the lock surfaces on each screen.
     // https://github.com/quickshell-mirror/quickshell-examples/tree/master/lockscreen
     LockContext {
@@ -58,6 +43,13 @@ Scope {
             }
         }
 
+        Connections {
+            target: DaemonSocket
+            function onLockStateChanged(locked) {
+                GlobalStates.screenLocked = locked;
+            }
+        }
+
         onUnlocked: (targetAction) => {
             // Perform the target action if it's not just unlocking
             if (targetAction == LockContext.ActionEnum.Poweroff) {
@@ -68,13 +60,10 @@ Scope {
                 return;
             }
 
-            // Unlock the keyring if configured to do so
-            if (Config.options.lock.security.unlockKeyring) root.unlockKeyring(); // Async
-
             // Unlock the screen before exiting, or the compositor will display a
             // fallback lock you can't interact with.
             GlobalStates.screenLocked = false;
-            
+
             // Refocus last focused window on unlock (hack)
             Quickshell.execDetached(["bash", "-c", `sleep 0.2; hyprctl --batch "dispatch togglespecialworkspace; dispatch togglespecialworkspace"`])
 
@@ -100,7 +89,7 @@ Scope {
             Quickshell.execDetached(["bash", "-c", "pidof hyprlock || hyprlock"]);
             return;
         }
-        GlobalStates.screenLocked = true;
+        DaemonSocket.lock();
     }
 
     IpcHandler {

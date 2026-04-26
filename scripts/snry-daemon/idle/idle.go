@@ -450,7 +450,7 @@ func (s *Service) monitorLogind(ctx context.Context) {
 			case dbusutil.LogindSession + ".Lock":
 				s.doLock()
 			case dbusutil.LogindSession + ".Unlock":
-				s.bus.publish(topicScreenLock, false)
+				s.setLocked(false)
 			}
 		}
 	}
