@@ -41,11 +41,11 @@ type Service struct {
 	conn dbusutil.DBusConn
 	cfg  Config
 
-	mu          sync.Mutex
-	locked      bool
-	displayOff  bool
-	idleStarted time.Time
-	inhibited   bool
+	mu             sync.Mutex
+	locked         bool
+	idleStarted    time.Time
+	inhibited      bool
+	onLockCallback func() // called by doLock instead of publishing to internal bus
 
 	// Wayland fields
 	waylandMu       sync.Mutex
@@ -63,6 +63,23 @@ func New(conn dbusutil.DBusConn, cfg Config) *Service {
 		conn: conn,
 		cfg:  cfg,
 	}
+}
+
+// SetOnLock registers a callback invoked by doLock instead of publishing to the internal bus.
+func (s *Service) SetOnLock(fn func()) {
+	s.mu.Lock()
+	s.onLockCallback = fn
+	s.mu.Unlock()
+}
+
+// SetLocked is the exported wrapper around setLocked.
+func (s *Service) SetLocked(locked bool) {
+	s.setLocked(locked)
+}
+
+// SetDisplay is the exported wrapper around setDisplay.
+func (s *Service) SetDisplay(on bool) {
+	s.setDisplay(on)
 }
 
 func (s *Service) recreateTimers() {
@@ -124,11 +141,6 @@ func (s *Service) recreateTimers() {
 
 func (s *Service) setDisplay(on bool) {
 	s.mu.Lock()
-	if s.displayOff == !on {
-		s.mu.Unlock()
-		return
-	}
-	s.displayOff = !on
 	// Cancel pending lock goroutine if display is turned back on
 	if on && s.lockCancel != nil {
 		s.lockCancel()
@@ -207,6 +219,9 @@ func (s *Service) setLocked(locked bool) {
 	}
 	s.mu.Unlock()
 
+	if !locked {
+		s.setDisplay(true)
+	}
 	if changed {
 		log.Printf("[idle] lock state: %v", locked)
 		s.waylandMu.Lock()
@@ -344,20 +359,33 @@ func (s *Service) doLock() {
 		s.mu.Unlock()
 		return
 	}
+	cb := s.onLockCallback
 	s.mu.Unlock()
 
 	log.Printf("[idle] idle lock triggered")
 
-	// Try quickshell lock first, fall back to hyprlock
-	lockCmd := exec.Command("sh", "-c",
-		"pidof qs quickshell >/dev/null 2>&1 && hyprctl dispatch global quickshell:lock || hyprlock")
+	if cb != nil {
+		cb()
+		return
+	}
+
+	// Legacy fallback: try quickshell lock, then hyprlock.
+	if exec.Command("pidof", "qs", "quickshell").Run() == nil {
+		if err := exec.Command("hyprctl", "dispatch", "global", "quickshell:lock").Run(); err == nil {
+			s.bus.publish(topicScreenLock, true)
+			return
+		}
+		log.Printf("[idle] quickshell lock dispatch failed, falling back to hyprlock")
+	}
+
+	lockCmd := exec.Command("hyprlock")
 	if err := lockCmd.Start(); err != nil {
-		log.Printf("[idle] lock command failed: %v", err)
+		log.Printf("[idle] hyprlock failed: %v", err)
 		return
 	}
 	go func() {
 		if err := lockCmd.Wait(); err != nil {
-			log.Printf("[idle] lock command exited: %v", err)
+			log.Printf("[idle] hyprlock exited: %v", err)
 		}
 	}()
 
@@ -369,18 +397,18 @@ func (s *Service) Lock() {
 	s.doLock()
 }
 
-// LockAndDPMSOff locks the screen and immediately turns off the display.
-// Used for power button and lid close events.
-func (s *Service) LockAndDPMSOff() {
-	// Lock first so the lock screen renders before the display turns off
-	s.doLock()
-	// Then turn off the display
-	s.setDisplay(false)
-}
-
 // Unlock triggers an unlock externally (e.g. from a socket command).
 func (s *Service) Unlock() {
-	s.bus.publish(topicScreenLock, false)
+	s.mu.Lock()
+	cb := s.onLockCallback
+	s.mu.Unlock()
+
+	if cb != nil {
+		// The callback (set by main.go) handles lockscreenSvc.Unlock().
+		s.setLocked(false)
+	} else {
+		s.bus.publish(topicScreenLock, false)
+	}
 }
 
 func (s *Service) monitorLogind(ctx context.Context) {

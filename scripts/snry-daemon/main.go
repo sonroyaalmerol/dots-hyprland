@@ -22,6 +22,7 @@ import (
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/idle"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/idle/dbusutil"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/inputmethod"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/lockscreen"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/tabletmode"
 	"golang.org/x/sys/unix"
 )
@@ -35,11 +36,30 @@ type event struct {
 
 var clients sync.Map // map[net.Conn]struct{}
 var idleSvc *idle.Service
+var lockscreenSvc *lockscreen.Service
 
 func emit(evt event) {
 	data, err := json.Marshal(evt)
 	if err != nil {
 		log.Printf("failed to marshal event: %v", err)
+		return
+	}
+	data = append(data, '\n')
+	clients.Range(func(key, _ any) bool {
+		conn := key.(net.Conn)
+		if _, werr := conn.Write(data); werr != nil {
+			log.Printf("client write error: %v", werr)
+			conn.Close()
+			clients.Delete(conn)
+		}
+		return true
+	})
+}
+
+func emitMap(m map[string]any) {
+	data, err := json.Marshal(m)
+	if err != nil {
+		log.Printf("failed to marshal event map: %v", err)
 		return
 	}
 	data = append(data, '\n')
@@ -184,17 +204,50 @@ func dispatchCommand(line string) {
 			uinputSend(evKey, code, 0)
 		}
 		uinputSyn()
+	case "auth":
+		if len(fields) < 2 || lockscreenSvc == nil {
+			return
+		}
+		password := strings.Join(fields[1:], " ")
+		go lockscreenSvc.Authenticate(password)
 	case "lock":
-		if idleSvc != nil {
+		if lockscreenSvc != nil {
+			lockscreenSvc.Lock()
+		} else if idleSvc != nil {
 			idleSvc.Lock()
 		}
 	case "unlock":
-		if idleSvc != nil {
+		if lockscreenSvc != nil {
+			lockscreenSvc.Unlock()
+		} else if idleSvc != nil {
 			idleSvc.Unlock()
 		}
 	case "power-button", "lid-close":
+		if lockscreenSvc != nil {
+			lockscreenSvc.Lock()
+		}
 		if idleSvc != nil {
-			idleSvc.LockAndDPMSOff()
+			idleSvc.SetDisplay(false)
+		}
+	case "combo":
+		if len(fields) < 2 {
+			return
+		}
+		var codes []uint16
+		for i := 1; i < len(fields); i++ {
+			code, err := strconv.ParseUint(fields[i], 10, 16)
+			if err != nil || code > maxKey {
+				return
+			}
+			codes = append(codes, uint16(code))
+		}
+		for _, code := range codes {
+			uinputSend(evKey, code, 1)
+			uinputSyn()
+		}
+		for i := len(codes) - 1; i >= 0; i-- {
+			uinputSend(evKey, codes[i], 0)
+			uinputSyn()
 		}
 	}
 }
@@ -317,7 +370,7 @@ func main() {
 				usage()
 				os.Exit(1)
 			}
-			os.Exit(sendCommand(os.Args[2]))
+			os.Exit(sendCommand(strings.Join(os.Args[2:], " ")))
 		default:
 			usage()
 			os.Exit(1)
@@ -352,6 +405,32 @@ func main() {
 		wg.Go(func() {
 			if err := idleSvc.Run(ctx); err != nil && err != context.Canceled {
 				log.Printf("idle service: %v", err)
+			}
+		})
+	}
+
+	// ── Lockscreen service ────────────────────────────────────────────────
+	lockscreenSvc = lockscreen.New(lockscreen.DefaultConfig(), func(et lockscreen.EventType, data any) {
+		m := map[string]any{"event": "lockscreen"}
+		switch et {
+		case lockscreen.EventLockState:
+			m["type"] = "lock_state"
+			m["locked"] = data.(bool)
+		case lockscreen.EventAuthResult:
+			m["type"] = "auth_result"
+			m["data"] = data
+		case lockscreen.EventLockoutTick:
+			m["type"] = "lockout_tick"
+			m["remaining"] = data.(int)
+		}
+		emitMap(m)
+	})
+
+	// Wire idle service to use lockscreen for lock/unlock
+	if idleSvc != nil {
+		idleSvc.SetOnLock(func() {
+			if lockscreenSvc != nil {
+				lockscreenSvc.Lock()
 			}
 		})
 	}

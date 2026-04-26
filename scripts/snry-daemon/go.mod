@@ -8,3 +8,5 @@ require (
 	github.com/rajveermalviya/go-wayland/wayland v0.0.0-20230130181619-0ad78d1310b2
 	golang.org/x/sys v0.27.0
 )
+
+require github.com/msteinert/pam/v2 v2.1.0 // indirect
