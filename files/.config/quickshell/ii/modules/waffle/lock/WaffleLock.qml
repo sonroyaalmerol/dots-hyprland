@@ -277,12 +277,13 @@ LockScreen {
                         inputMethodHints: Qt.ImhSensitiveData
                         echoMode: passwordVisibilityButton.pressed ? TextInput.Normal : TextInput.Password
                         color: Looks.darkColors.fg
+                        enabled: !root.context.isLockedOut
 
                         font.pixelSize: 12
                         WText {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: passwordInput.text.length === 0
+                            visible: passwordInput.text.length === 0 && !root.context.isLockedOut
                             text: Translation.tr("Password")
                             font.pixelSize: Looks.font.pixelSize.large
                             color: Looks.darkColors.fg
@@ -320,13 +321,15 @@ LockScreen {
                     PasswordBoxButton {
                         id: passwordVisibilityButton
                         property bool passwordVisible: false
-                        visible: passwordInput.text.length > 0
+                        visible: passwordInput.text.length > 0 && !root.context.isLockedOut
                         onPressed: passwordVisible = true
                         onReleased: passwordVisible = false
                         icon.name: passwordVisible ? "eye-off" : "eye"
                     }
 
                     PasswordBoxButton {
+                        id: passwordSubmitButton
+                        visible: !root.context.isLockedOut
                         onClicked: {
                             root.context.tryUnlock();
                         }
@@ -352,6 +355,25 @@ LockScreen {
                     height: passwordInputWrapper.height
                     radius: passwordInputWrapper.radius
                 }
+            }
+        }
+
+        // Lockout and failure feedback
+        ColumnLayout {
+            id: lockoutFeedback
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 4
+            visible: root.context.isLockedOut || root.context.showFailure
+
+            WText {
+                id: lockoutMessage
+                Layout.alignment: Qt.AlignHCenter
+                text: root.context.isLockedOut
+                    ? Translation.tr("Too many attempts. Try again in %1s").arg(root.context.lockoutSeconds)
+                    : Translation.tr("Wrong password. %1 attempts remaining").arg(root.context.remainingAttempts)
+                color: Looks.colors.error
+                font.pixelSize: 12
+                font.weight: Looks.font.weight.medium
             }
         }
 

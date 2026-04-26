@@ -40,6 +40,7 @@ packages = [
   "wget2",
   "ripgrep",
   "jq",
+  "socat",
   "xdg-utils",
   "rsync",
   "yq"
@@ -66,7 +67,7 @@ packages = [
   "eza",
   "bash-completion",
   "fontconfig",
-  "kitty",
+  "ghostty",
   "florian-karsten-space-grotesk-fonts",
   "starship",
   "jetbrains-mono-nerd-fonts",
@@ -177,8 +178,7 @@ packages = [
 [groups.toolkit]
 packages = [
   "upower",
-  "wtype",
-  "ydotool"
+  "wtype"
 ]
 
 # Widgets
