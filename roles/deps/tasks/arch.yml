@@ -71,7 +71,7 @@
 
 - name: Install Arch packages via paru
   ansible.builtin.command:
-    cmd: "paru -S --needed --noconfirm {{ arch_packages | join(' ') }}"
+    cmd: "paru -S --needed --noconfirm --sudoflags '-n' {{ arch_packages | join(' ') }}"
   become: false
 
 - name: Revoke passwordless sudo for package installation
