@@ -54,12 +54,13 @@
   when: paru_check.rc != 0
 
 - name: Allow passwordless sudo for package installation
-  community.general.sudoers:
-    name: pacman-nopasswd
-    user: "{{ ansible_facts['user_id'] }}"
-    commands: ALL
-    nopassword: true
-    setenv: true
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/pacman-nopasswd
+    content: "{{ ansible_facts['user_id'] }} ALL=(ALL) NOPASSWD: SETENV: ALL\n"
+    owner: root
+    group: root
+    mode: '0440'
+    validate: /usr/sbin/visudo -c -f %s
   become: true
 
 - name: Remove quickshell if installed (replaced by quickshell-git)
