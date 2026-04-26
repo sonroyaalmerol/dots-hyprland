@@ -58,6 +58,7 @@
     name: pacman-nopasswd
     user: "{{ ansible_facts['user_id'] }}"
     commands: ALL
+    nopassword: true
     setenv: true
   become: true
 
