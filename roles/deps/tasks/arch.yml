@@ -53,13 +53,12 @@
   become: false
   when: paru_check.rc != 0
 
-- name: Allow passwordless sudo for pacman
+- name: Allow passwordless sudo for package installation
   community.general.sudoers:
     name: pacman-nopasswd
     user: "{{ ansible_facts['user_id'] }}"
-    commands:
-      - /usr/bin/pacman
-      - /usr/bin/pacman-key
+    commands: ALL
+    setenv: true
   become: true
 
 - name: Remove quickshell if installed (replaced by quickshell-git)
@@ -75,7 +74,7 @@
     cmd: "paru -S --needed --noconfirm {{ arch_packages | join(' ') }}"
   become: false
 
-- name: Revoke passwordless sudo for pacman
+- name: Revoke passwordless sudo for package installation
   ansible.builtin.file:
     path: /etc/sudoers.d/pacman-nopasswd
     state: absent
