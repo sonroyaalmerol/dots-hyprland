@@ -102,6 +102,12 @@ func (s *Service) runOnce(ctx context.Context) error {
 	s.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	s.mu.Unlock()
 
+	// Kill any pre-existing qs instances to prevent duplicate bars.
+	if existing := exec.Command("pkill", "-f", fmt.Sprintf("%s -c %s", s.cfg.Binary, s.cfg.ConfigDir)); existing.Run() == nil {
+		log.Printf("quickshell: killed pre-existing %s -c %s", s.cfg.Binary, s.cfg.ConfigDir)
+		time.Sleep(500 * time.Millisecond)
+	}
+
 	log.Printf("quickshell: starting %s -c %s", s.cfg.Binary, s.cfg.ConfigDir)
 	err := s.cmd.Run()
 	log.Printf("quickshell: process exited: %v", err)
