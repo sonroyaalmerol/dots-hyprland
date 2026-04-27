@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
-import Quickshell.Io
 
 Singleton {
 	id: root
@@ -13,8 +12,6 @@ Singleton {
 	signal lockoutTick(int remainingSeconds)
 
 	property bool connected: false
-
-	readonly property string socketPath: Quickshell.env("XDG_RUNTIME_DIR") + "/snry-daemon.sock"
 
 	function authenticate(password) {
 		sendCommand("auth " + password)
@@ -28,91 +25,27 @@ Singleton {
 		sendCommand("unlock")
 	}
 
+	property var _sendFn: null
+
 	function sendCommand(cmd) {
-		if (!bridgeProc.running) {
-			console.warn("[DaemonSocket] Cannot send command, bridge not running")
-			return
-		}
-		bridgeProc.write(cmd + "\n")
+		if (_sendFn) _sendFn(cmd + "\n")
 	}
 
-	Timer {
-		id: reconnectTimer
-		interval: 3000
-		repeat: false
-		onTriggered: {
-			bridgeProc.running = false
-			bridgeProc.running = true
-		}
-	}
-
-	Process {
-		id: bridgeProc
-		running: true
-
-		command: ["python3", "-u", "-c", `
-import socket, os, sys, select, time
-
-sock_path = os.path.join(os.environ.get('XDG_RUNTIME_DIR', ''), 'snry-daemon.sock')
-
-def relay(s):
-	while True:
-		rlist, _, _ = select.select([s, sys.stdin], [], [], 30)
-		if s in rlist:
-			data = s.recv(65536)
-			if not data:
-				return
-			sys.stdout.buffer.write(data)
-			sys.stdout.buffer.flush()
-		if sys.stdin in rlist:
-			line = sys.stdin.buffer.readline()
-			if not line:
-				return
-			s.sendall(line)
-
-while True:
-	try:
-		if os.path.exists(sock_path):
-			s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-			s.settimeout(2)
-			s.connect(sock_path)
-			s.settimeout(None)
-			print('CONNECTED', flush=True)
-			relay(s)
-			s.close()
-	except Exception:
-		pass
-	time.sleep(2)
-`]
-
-		stdout: SplitParser {
-			onRead: data => {
-				if (data === "CONNECTED") {
-					root.connected = true
-					return
-				}
-				try {
-					const obj = JSON.parse(data)
-					root.dispatchEvent(obj)
-				} catch (e) {
-					console.warn("[DaemonSocket] parse error:", e, data)
-				}
+	// Forward lock events from TabletMode's unified relay.
+	// Connected lazily via Component.onCompleted to avoid circular init.
+	Component.onCompleted: {
+		Qt.callLater(() => {
+			if (typeof TabletMode !== "undefined" && TabletMode.daemonSocket) {
+				root._sendFn = (data) => { TabletMode.daemonSocket.write(data) }
+				root.connected = Qt.binding(() => TabletMode.daemonConnected)
 			}
-		}
-
-		onExited: (exitCode, exitStatus) => {
-			root.connected = false
-			reconnectTimer.start()
-		}
+		})
 	}
 
-	function dispatchEvent(obj) {
-		if (obj.event === "lock_state" && obj.data) {
-			lockStateChanged(obj.data.locked === true)
-		} else if (obj.event === "auth_result" && obj.data) {
-			authResult(obj.data)
-		} else if (obj.event === "lockout_tick" && obj.data) {
-			lockoutTick(obj.data.remainingSeconds || 0)
-		}
+	Connections {
+		target: typeof TabletMode !== "undefined" ? TabletMode : null
+		function onLockStateChanged(locked) { root.lockStateChanged(locked) }
+		function onAuthResult(data) { root.authResult(data) }
+		function onLockoutTick(remainingSeconds) { root.lockoutTick(remainingSeconds) }
 	}
 }
