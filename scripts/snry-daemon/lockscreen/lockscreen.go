@@ -2,6 +2,7 @@ package lockscreen
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -153,6 +154,22 @@ func (s *Service) Lock() {
 	s.emit(EventLockState, true)
 }
 
+// LockWithAutoUnlock tries to auto-unlock if the keyring is already
+// accessible (e.g. unlocked by PAM during login). Returns true if
+// auto-unlock succeeded (screen was NOT locked).
+func (s *Service) LockWithAutoUnlock() bool {
+	if IsKeyringUnlocked() {
+		log.Printf("[LOCKSCREEN] keyring already unlocked, auto-unlocking on startup")
+		s.attempts.Store(0)
+		s.lockedOut.Store(false)
+		s.emit(EventLockState, false)
+		s.emit(EventAuthResult, AuthResult{Success: true, Remaining: s.maxAttempts})
+		return true
+	}
+	s.Lock()
+	return false
+}
+
 // Unlock clears the locked state and resets auth tracking.
 func (s *Service) Unlock() {
 	s.locked.Store(false)
@@ -164,6 +181,23 @@ func (s *Service) Unlock() {
 // IsLocked reports whether the screen is locked.
 func (s *Service) IsLocked() bool {
 	return s.locked.Load()
+}
+
+// TryAutoUnlock checks if the keyring is already unlocked (e.g. by PAM
+// during login). If accessible, it auto-unlocks without requiring a password.
+func (s *Service) TryAutoUnlock() bool {
+	if !IsKeyringUnlocked() {
+		log.Printf("[LOCKSCREEN] keyring not yet unlocked, cannot auto-unlock")
+		return false
+	}
+
+	log.Printf("[LOCKSCREEN] keyring already unlocked, auto-unlocking")
+	s.locked.Store(false)
+	s.attempts.Store(0)
+	s.lockedOut.Store(false)
+	s.emit(EventLockState, false)
+	s.emit(EventAuthResult, AuthResult{Success: true, Remaining: s.maxAttempts})
+	return true
 }
 
 // SetLocked sets the locked state directly (no event emitted).

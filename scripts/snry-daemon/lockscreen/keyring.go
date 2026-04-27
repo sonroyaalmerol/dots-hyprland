@@ -32,6 +32,19 @@ func authenticate(password string) error {
 	return fmt.Errorf("authentication failed")
 }
 
+// IsKeyringUnlocked checks if the keyring is already accessible
+// (e.g. unlocked by PAM/pam_gnome_keyring.so during login).
+func IsKeyringUnlocked() bool {
+	// Try looking up a known keyring entry
+	cmd := exec.Command("secret-tool", "lookup", "service", "snry-shell")
+	if cmd.Run() == nil {
+		return true
+	}
+	// Fallback: check if gnome-keyring-daemon has an unlocked collection
+	cmd = exec.Command("bash", "-c", "echo 'password' | secret-tool store --label=snry-shell-check service snry-shell-check 2>/dev/null && secret-tool clear service snry-shell-check 2>/dev/null")
+	return cmd.Run() == nil
+}
+
 func unlockKeyring(password string) {
 	cmd := exec.Command("secret-tool", "store", "--label=snry-shell", "service", "snry-shell")
 	cmd.Stdin = strings.NewReader(password)
