@@ -48,12 +48,13 @@ type Service struct {
 	onLockCallback func() // called by doLock instead of publishing to internal bus
 
 	// Wayland fields
-	waylandMu       sync.Mutex
-	display         *client.Display
-	manager         *protocol.ExtIdleNotifierV1
-	seat            *client.Seat
-	displayOffNotif *protocol.ExtIdleNotificationV1
-	lockCancel      context.CancelFunc // cancels pending lock-after-display-off goroutine
+	waylandMu        sync.Mutex
+	display          *client.Display
+	manager          *protocol.ExtIdleNotifierV1
+	seat             *client.Seat
+	displayOffNotif  *protocol.ExtIdleNotificationV1
+	lockCancel       context.CancelFunc // cancels pending lock-after-display-off goroutine
+	displayOffForced bool               // suppress setDisplay(true) when true
 }
 
 // New creates the idle service.
@@ -63,6 +64,14 @@ func New(conn dbusutil.DBusConn, cfg Config) *Service {
 		conn: conn,
 		cfg:  cfg,
 	}
+}
+
+// SuppressDisplayOn prevents setDisplay(true) from running when on=true.
+// Used by power-button/lid-close to prevent Wayland resumed events from waking the display.
+func (s *Service) SuppressDisplayOn(suppress bool) {
+	s.mu.Lock()
+	s.displayOffForced = suppress
+	s.mu.Unlock()
 }
 
 // SetOnLock registers a callback invoked by doLock instead of publishing to the internal bus.
@@ -141,6 +150,11 @@ func (s *Service) recreateTimers() {
 
 func (s *Service) setDisplay(on bool) {
 	s.mu.Lock()
+	// Suppress display-on when forced off (power button / lid close)
+	if on && s.displayOffForced {
+		s.mu.Unlock()
+		return
+	}
 	// Cancel pending lock goroutine if display is turned back on
 	if on && s.lockCancel != nil {
 		s.lockCancel()
@@ -216,6 +230,12 @@ func (s *Service) setLocked(locked bool) {
 		s.idleStarted = time.Now()
 	} else {
 		s.idleStarted = time.Time{}
+	}
+	s.mu.Unlock()
+
+	s.mu.Lock()
+	if !locked {
+		s.displayOffForced = false // clear forced-off on unlock
 	}
 	s.mu.Unlock()
 

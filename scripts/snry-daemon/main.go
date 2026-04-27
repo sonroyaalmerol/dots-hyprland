@@ -224,6 +224,9 @@ func dispatchCommand(line string) {
 			idleSvc.Unlock()
 		}
 	case "power-button", "lid-close":
+		if idleSvc != nil {
+			idleSvc.SuppressDisplayOn(true)
+		}
 		if lockscreenSvc != nil {
 			lockscreenSvc.Lock()
 		}
