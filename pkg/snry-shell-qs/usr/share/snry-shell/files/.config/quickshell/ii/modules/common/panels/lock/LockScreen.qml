@@ -95,6 +95,14 @@ Scope {
         DaemonSocket.lock();
     }
 
+    function lockStartup() {
+        if (Config.options.lock.useHyprlock) {
+            DaemonSocket.lock();
+            return;
+        }
+        DaemonSocket.sendCommand("lock-startup");
+    }
+
     IpcHandler {
         target: "lock"
 
@@ -128,7 +136,7 @@ Scope {
     function initIfReady() {
         if (!Config.ready || !Persistent.ready) return;
         if (Config.options.lock.launchOnStartup && Persistent.isNewHyprlandInstance) {
-            root.lock();
+            root.lockStartup();
         } else {
             KeyringStorage.fetchKeyringData();
         }

@@ -215,6 +215,12 @@ func dispatchCommand(line string) {
 		go lockscreenSvc.Authenticate(password)
 	case "lock":
 		if lockscreenSvc != nil {
+			lockscreenSvc.Lock()
+		} else if idleSvc != nil {
+			idleSvc.Lock()
+		}
+	case "lock-startup":
+		if lockscreenSvc != nil {
 			lockscreenSvc.LockWithAutoUnlock()
 		} else if idleSvc != nil {
 			idleSvc.Lock()
