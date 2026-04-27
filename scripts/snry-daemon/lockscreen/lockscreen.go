@@ -3,6 +3,7 @@ package lockscreen
 import (
 	"fmt"
 	"log"
+	"os/exec"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -162,6 +163,18 @@ func (s *Service) LockWithAutoUnlock() bool {
 		log.Printf("[LOCKSCREEN] keyring already unlocked, auto-unlocking on startup")
 		s.attempts.Store(0)
 		s.lockedOut.Store(false)
+
+		// Move any windows off special workspaces and switch to workspace 1.
+		// The lock screen's WlSessionLock may have left windows on special
+		// workspace IDs (e.g. 2147483641+).
+		go func() {
+			exec.Command("bash", "-c",
+				`addrs=$(hyprctl clients -j | jq -r '.[] | select(.workspace.id > 1000) | .address'); `+
+					`for a in $addrs; do hyprctl dispatch movetoworkspacesilent "1,address:$a"; done; `+
+					`hyprctl dispatch workspace 1`,
+			).Run()
+		}()
+
 		s.emit(EventLockState, false)
 		s.emit(EventAuthResult, AuthResult{Success: true, Remaining: s.maxAttempts})
 		return true
