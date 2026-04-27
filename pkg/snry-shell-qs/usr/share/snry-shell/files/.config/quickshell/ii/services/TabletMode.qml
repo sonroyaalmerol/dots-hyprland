@@ -10,15 +10,23 @@ Singleton {
 
 	property bool tabletMode: false
 	property bool textInputActive: false
-	property bool manualOverride: false
-	property bool effectiveTabletMode: manualOverride ? !tabletMode : tabletMode
+
+	// Tri-state mode: "auto" | "tablet" | "desktop"
+	property string mode: "auto"
+	property bool effectiveTabletMode: {
+		if (mode === "tablet") return true
+		if (mode === "desktop") return false
+		return tabletMode
+	}
 	property bool watcherRunning: daemonProc.running
 
 	// Shared daemon connection state
 	property bool daemonConnected: false
 
-	function toggleManualOverride() {
-		root.manualOverride = !root.manualOverride
+	function cycleMode() {
+		if (root.mode === "auto") root.mode = "tablet"
+		else if (root.mode === "tablet") root.mode = "desktop"
+		else root.mode = "auto"
 	}
 
 	// Signals for lockscreen events forwarded from daemon
