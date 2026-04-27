@@ -5,19 +5,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-/**
- * Persistent Unix socket connection to snry-daemon.
- *
- * Input protocol (to daemon): plain text commands, one per line.
- *   auth <password>
- *   lock
- *   unlock
- *
- * Output protocol (from daemon): JSON objects, one per line.
- *   {"event":"lock_state","data":{"locked":true}}
- *   {"event":"auth_result","data":{"success":false,"remaining":2,"lockedOut":false,"message":"..."}}
- *   {"event":"lockout_tick","data":{"remainingSeconds":15}}
- */
 Singleton {
 	id: root
 
@@ -26,7 +13,6 @@ Singleton {
 	signal lockoutTick(int remainingSeconds)
 
 	property bool connected: false
-	property string accumulatedText: ""
 
 	readonly property string socketPath: Quickshell.env("XDG_RUNTIME_DIR") + "/snry-daemon.sock"
 
@@ -43,33 +29,74 @@ Singleton {
 	}
 
 	function sendCommand(cmd) {
-		if (!daemonProc.running) {
-			console.warn("[DaemonSocket] Cannot send command, process not running")
+		if (!bridgeProc.running) {
+			console.warn("[DaemonSocket] Cannot send command, bridge not running")
 			return
 		}
-		daemonProc.write(cmd + "\n")
+		bridgeProc.write(cmd + "\n")
 	}
 
 	Timer {
 		id: reconnectTimer
-		interval: 2000
+		interval: 3000
 		repeat: false
 		onTriggered: {
-			daemonProc.running = false
-			daemonProc.running = true
+			bridgeProc.running = false
+			bridgeProc.running = true
 		}
 	}
 
 	Process {
-		id: daemonProc
+		id: bridgeProc
 		running: true
-		command: ["socat", "-", "UNIX-CONNECT:" + root.socketPath]
 
-		stdout: StdioCollector {
-			id: stdoutCollector
-			onStreamFinished: {
-				root.connected = false
-				reconnectTimer.start()
+		command: ["python3", "-u", "-c", `
+import socket, os, sys, select, time
+
+sock_path = os.path.join(os.environ.get('XDG_RUNTIME_DIR', ''), 'snry-daemon.sock')
+
+def relay(s):
+	while True:
+		rlist, _, _ = select.select([s, sys.stdin], [], [], 30)
+		if s in rlist:
+			data = s.recv(65536)
+			if not data:
+				return
+			sys.stdout.buffer.write(data)
+			sys.stdout.buffer.flush()
+		if sys.stdin in rlist:
+			line = sys.stdin.buffer.readline()
+			if not line:
+				return
+			s.sendall(line)
+
+while True:
+	try:
+		if os.path.exists(sock_path):
+			s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+			s.settimeout(2)
+			s.connect(sock_path)
+			s.settimeout(None)
+			print('CONNECTED', flush=True)
+			relay(s)
+			s.close()
+	except Exception:
+		pass
+	time.sleep(2)
+`]
+
+		stdout: SplitParser {
+			onRead: data => {
+				if (data === "CONNECTED") {
+					root.connected = true
+					return
+				}
+				try {
+					const obj = JSON.parse(data)
+					root.dispatchEvent(obj)
+				} catch (e) {
+					console.warn("[DaemonSocket] parse error:", e, data)
+				}
 			}
 		}
 
@@ -79,38 +106,8 @@ Singleton {
 		}
 	}
 
-	// Poll accumulated stdout and parse JSON lines
-	Timer {
-		interval: 100
-		repeat: true
-		running: true
-		onTriggered: root.parseOutput()
-	}
-
-	function parseOutput() {
-		const raw = stdoutCollector.text
-		if (raw.length === 0)
-			return
-
-		const lines = raw.split("\n")
-		for (let i = 0; i < lines.length - 1; i++) {
-			const line = lines[i].trim()
-			if (line.length === 0)
-				continue
-			try {
-				const obj = JSON.parse(line)
-				dispatchEvent(obj)
-			} catch (e) {
-				console.warn("[DaemonSocket] parse error:", e, line)
-			}
-		}
-		// Keep incomplete last line
-		stdoutCollector.text = lines[lines.length - 1]
-	}
-
 	function dispatchEvent(obj) {
 		if (obj.event === "lock_state" && obj.data) {
-			root.connected = true
 			lockStateChanged(obj.data.locked === true)
 		} else if (obj.event === "auth_result" && obj.data) {
 			authResult(obj.data)
