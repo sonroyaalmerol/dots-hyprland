@@ -7,6 +7,7 @@ import QtQuick
 import QtPositioning
 
 import qs.modules.common
+import qs.services
 
 Singleton {
     id: root
@@ -158,7 +159,7 @@ Singleton {
     }
 
     Timer {
-        running: !root.gpsActive
+        running: !root.gpsActive && !DaemonSocket.powerSuspended
         repeat: true
         interval: root.fetchInterval
         triggeredOnStart: !root.gpsActive

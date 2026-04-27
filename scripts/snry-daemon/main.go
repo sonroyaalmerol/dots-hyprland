@@ -23,6 +23,7 @@ import (
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/idle/dbusutil"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/inputmethod"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/lockscreen"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/powersave"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/quickshell"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/tabletmode"
 	"golang.org/x/sys/unix"
@@ -38,6 +39,7 @@ type event struct {
 var clients sync.Map // map[net.Conn]struct{}
 var idleSvc *idle.Service
 var lockscreenSvc *lockscreen.Service
+var powersaveSvc *powersave.Service
 
 func emit(evt event) {
 	data, err := json.Marshal(evt)
@@ -433,6 +435,9 @@ func main() {
 					"locked": locked,
 				},
 			})
+			if powersaveSvc != nil {
+				powersaveSvc.SetLocked(locked)
+			}
 		case lockscreen.EventAuthResult:
 			r := data.(lockscreen.AuthResult)
 			emitMap(map[string]any{
@@ -460,6 +465,20 @@ func main() {
 			if lockscreenSvc != nil {
 				lockscreenSvc.Lock()
 			}
+		})
+	}
+
+	// ── Power savings ──────────────────────────────────────────────────
+	powersaveSvc = powersave.New(30*time.Second, func(suspended bool) {
+		emitMap(map[string]any{
+			"event": "power_state",
+			"data":  map[string]bool{"suspended": suspended},
+		})
+	})
+
+	if idleSvc != nil && powersaveSvc != nil {
+		idleSvc.SetOnDisplayChange(func(on bool) {
+			powersaveSvc.SetScreenOff(!on)
 		})
 	}
 
@@ -518,6 +537,25 @@ func main() {
 			log.Printf("quickshell: %v", err)
 		}
 	})
+
+	// ── Power savings ticker ──────────────────────────────────────────
+	if powersaveSvc != nil {
+		wg.Go(func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					if powersaveSvc != nil {
+						// Restore balanced on exit
+					}
+					return
+				case <-ticker.C:
+					powersaveSvc.Tick()
+				}
+			}
+		})
+	}
 
 	// ── Wait for shutdown ──────────────────────────────────────────────
 	<-ctx.Done()

@@ -29,10 +29,11 @@ Singleton {
 		else root.mode = "auto"
 	}
 
-	// Signals for lockscreen events forwarded from daemon
+	// Signals for daemon events forwarded to other services
 	signal lockStateChanged(bool locked)
 	signal authResult(var data)
 	signal lockoutTick(int remainingSeconds)
+	signal powerStateChanged(bool suspended)
 
 	// Wrapper exposing .connected and .write() for Ydotool compatibility
 	property alias daemonSocket: daemonBridge
@@ -112,6 +113,9 @@ while True:
 						break
 					case "lockout_tick":
 						if (parsed.data) root.lockoutTick(parsed.data.remainingSeconds || 0)
+						break
+					case "power_state":
+						if (parsed.data) root.powerStateChanged(parsed.data.suspended === true)
 						break
 					}
 				} catch (e) {

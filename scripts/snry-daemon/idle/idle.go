@@ -55,6 +55,7 @@ type Service struct {
 	displayOffNotif  *protocol.ExtIdleNotificationV1
 	lockCancel       context.CancelFunc // cancels pending lock-after-display-off goroutine
 	displayOffForced bool               // suppress setDisplay(true) when true
+	onDisplayChange  func(on bool)
 }
 
 // New creates the idle service.
@@ -71,6 +72,12 @@ func New(conn dbusutil.DBusConn, cfg Config) *Service {
 func (s *Service) SuppressDisplayOn(suppress bool) {
 	s.mu.Lock()
 	s.displayOffForced = suppress
+	s.mu.Unlock()
+}
+
+func (s *Service) SetOnDisplayChange(fn func(on bool)) {
+	s.mu.Lock()
+	s.onDisplayChange = fn
 	s.mu.Unlock()
 }
 
@@ -168,6 +175,13 @@ func (s *Service) setDisplay(on bool) {
 	} else {
 		log.Printf("[idle] turning display OFF")
 		exec.Command("hyprctl", "dispatch", "dpms", "off").Run()
+	}
+
+	s.mu.Lock()
+	cb := s.onDisplayChange
+	s.mu.Unlock()
+	if cb != nil {
+		cb(on)
 	}
 }
 

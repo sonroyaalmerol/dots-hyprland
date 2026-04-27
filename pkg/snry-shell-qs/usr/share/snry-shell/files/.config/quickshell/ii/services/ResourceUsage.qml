@@ -2,6 +2,7 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 import qs.modules.common
+import qs.services
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -61,7 +62,7 @@ Singleton {
 
 	Timer {
 		interval: 1
-        running: true 
+        running: !DaemonSocket.powerSuspended
         repeat: true
 		onTriggered: {
             // Reload files

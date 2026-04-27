@@ -10,8 +10,10 @@ Singleton {
 	signal lockStateChanged(bool locked)
 	signal authResult(var data)
 	signal lockoutTick(int remainingSeconds)
+	signal powerStateChanged(bool suspended)
 
 	property bool connected: false
+	property bool powerSuspended: false
 
 	function authenticate(password) {
 		sendCommand("auth " + password)
@@ -31,8 +33,6 @@ Singleton {
 		if (_sendFn) _sendFn(cmd + "\n")
 	}
 
-	// Forward lock events from TabletMode's unified relay.
-	// Connected lazily via Component.onCompleted to avoid circular init.
 	Component.onCompleted: {
 		Qt.callLater(() => {
 			if (typeof TabletMode !== "undefined" && TabletMode.daemonSocket) {
@@ -47,5 +47,9 @@ Singleton {
 		function onLockStateChanged(locked) { root.lockStateChanged(locked) }
 		function onAuthResult(data) { root.authResult(data) }
 		function onLockoutTick(remainingSeconds) { root.lockoutTick(remainingSeconds) }
+		function onPowerStateChanged(suspended) {
+			root.powerSuspended = suspended
+			root.powerStateChanged(suspended)
+		}
 	}
 }

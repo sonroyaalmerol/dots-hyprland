@@ -2,6 +2,7 @@ pragma Singleton
 
 import qs.modules.common
 import qs.modules.common.functions
+import qs.services
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -29,7 +30,7 @@ Singleton {
     Timer {
         interval: Config.options.updates.checkInterval * 60 * 1000
         repeat: true
-        running: Config.ready && Config.options.updates.enableCheck
+        running: Config.ready && Config.options.updates.enableCheck && !DaemonSocket.powerSuspended
         onTriggered: {
             print("[Updates] Periodic update check due")
             root.refresh();
