@@ -22,7 +22,6 @@ import qs.modules.ii.onScreenKeyboard
 import qs.modules.ii.overlay
 import qs.modules.ii.screenTranslator
 import qs.modules.ii.wallpaperSelector
-import qs.modules.common.panels.appDrawer
 
 Scope {
     PanelLoader { component: WaffleActionCenter {} }
@@ -44,5 +43,4 @@ Scope {
     PanelLoader { component: Overlay {} }
     PanelLoader { component: ScreenTranslator {} }
     PanelLoader { component: WallpaperSelector {} }
-    PanelLoader { extraCondition: Config.options.appDrawer.enabled; component: AppDrawer {} }
 }
