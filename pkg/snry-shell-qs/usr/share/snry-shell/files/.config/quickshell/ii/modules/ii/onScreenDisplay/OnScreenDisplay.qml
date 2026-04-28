@@ -126,7 +126,6 @@ Scope {
 
             implicitWidth: columnLayout.implicitWidth
             implicitHeight: columnLayout.implicitHeight
-            visible: osdLoader.active
 
             ColumnLayout {
                 id: columnLayout
