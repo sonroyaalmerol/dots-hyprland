@@ -100,6 +100,11 @@ Scope {
             id: osdRoot
             color: "transparent"
 
+            onVisibleChanged: {
+                if (!visible)
+                    osdLoader.active = false;
+            }
+
             Connections {
                 target: root
                 function onFocusedScreenChanged() {

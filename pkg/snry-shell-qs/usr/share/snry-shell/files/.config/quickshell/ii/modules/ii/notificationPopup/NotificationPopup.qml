@@ -20,6 +20,11 @@ Scope {
             id: root
             screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? null
 
+            onVisibleChanged: {
+                if (!visible)
+                    notificationPopupLoader.active = false;
+            }
+
             WlrLayershell.namespace: "quickshell:notificationPopup"
             WlrLayershell.layer: WlrLayer.Overlay
             exclusiveZone: 0
