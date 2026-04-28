@@ -1,8 +1,9 @@
 pragma Singleton
+pragma ComponentBehavior: Bound
 
 import qs.modules.common
+import qs.services
 import Quickshell
-import Quickshell.Io
 
 Singleton {
     id: root
@@ -12,9 +13,7 @@ Singleton {
     property list<int> ctrlKeys: [29, 97]
 
     function send(cmd) {
-        if (TabletMode.daemonSocket && TabletMode.daemonSocket.connected) {
-            TabletMode.daemonSocket.write(cmd + "\n")
-        }
+        DaemonSocket.sendCommand(cmd)
     }
 
     function releaseAllKeys() {

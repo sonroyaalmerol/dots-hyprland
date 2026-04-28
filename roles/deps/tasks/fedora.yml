@@ -174,17 +174,20 @@
     path: "{{ venv_path | dirname }}"
     state: directory
     mode: "0755"
+  become: false
 
 - name: Create Python venv at {{ venv_path }}
   ansible.builtin.command:
     cmd: "uv venv --prompt .venv {{ venv_path }} -p 3.12"
     creates: "{{ venv_path }}/bin/activate"
+  become: false
 
 - name: Install Python packages via uv
   ansible.builtin.command:
     cmd: "uv pip install -r {{ repo_root }}/data/python/requirements.txt"
   environment:
     UV_NO_MODIFY_PATH: "1"
+  become: false
 
 - name: Add versionlock for quickshell-git
   ansible.builtin.command:

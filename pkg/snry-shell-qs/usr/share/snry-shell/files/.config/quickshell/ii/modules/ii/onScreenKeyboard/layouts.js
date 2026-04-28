@@ -1,4 +1,3 @@
-// We're going to use ydotool
 // See /usr/include/linux/input-event-codes.h for keycodes
 
 const defaultLayout = "English (US)";

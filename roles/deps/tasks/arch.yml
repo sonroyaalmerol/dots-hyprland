@@ -1,16 +1,14 @@
 ---
 # Arch Linux dependencies installation
 
-- name: Update pacman mirrors
-  community.general.pacman:
-    update_cache: true
-  become: true
-  when: not skip_sysupdate | bool
+- name: Capture the real login user before any become escalation
+  ansible.builtin.set_fact:
+    real_user: "{{ lookup('env', 'USER') }}"
 
-- name: Upgrade all packages
-  community.general.pacman:
-    upgrade: true
+- name: Update pacman mirrors and upgrade packages
+  ansible.builtin.command: pacman -Syu --noconfirm
   become: true
+  changed_when: true
   when: not skip_sysupdate | bool
 
 - name: Gather package facts
@@ -56,12 +54,17 @@
 - name: Allow passwordless sudo for package installation
   ansible.builtin.copy:
     dest: /etc/sudoers.d/pacman-nopasswd
-    content: "{{ ansible_facts['user_id'] }} ALL=(ALL) NOPASSWD: SETENV: ALL\n"
+    content: "{{ real_user }} ALL=(ALL) NOPASSWD: ALL\n"
     owner: root
     group: root
-    mode: '0440'
+    mode: "0440"
     validate: /usr/sbin/visudo -c -f %s
   become: true
+
+- name: Verify passwordless sudo is working
+  ansible.builtin.command: sudo -n true
+  become: false
+  changed_when: false
 
 - name: Remove quickshell if installed (replaced by quickshell-git)
   community.general.pacman:
@@ -73,7 +76,8 @@
 
 - name: Install Arch packages via paru
   ansible.builtin.command:
-    cmd: "paru -S --needed --noconfirm --sudoflags '-n' {{ arch_packages | join(' ') }}"
+    argv: >-
+      {{ ['paru', '-S', '--needed', '--noconfirm'] + arch_packages }}
   become: false
 
 - name: Revoke passwordless sudo for package installation
@@ -95,6 +99,7 @@
     path: "{{ venv_path | dirname }}"
     state: directory
     mode: "0755"
+  become: false
 
 - name: Create Python venv at {{ venv_path }}
   ansible.builtin.command:

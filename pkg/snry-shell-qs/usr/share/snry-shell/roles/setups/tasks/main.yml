@@ -55,36 +55,12 @@
   become: true
   when: is_fedora | bool
 
-- name: Symlink ydotool service
-  ansible.builtin.file:
-    src: /usr/lib/systemd/system/ydotool.service
-    dest: /usr/lib/systemd/user/ydotool.service
-    state: link
-  become: true
-  when: is_fedora | bool
-
 - name: Enable bluetooth service
   ansible.builtin.systemd:
     name: bluetooth
     state: started
     enabled: true
   become: true
-
-- name: Check DBUS_SESSION_BUS_ADDRESS
-  ansible.builtin.set_fact:
-    has_dbus: "{{ lookup('env', 'DBUS_SESSION_BUS_ADDRESS') | length > 0 }}"
-
-- name: Enable ydotool user service with direct systemctl
-  ansible.builtin.command:
-    cmd: "systemctl --user enable ydotool --now"
-  become: true
-  become_user: "{{ ansible_facts.user_id }}"
-  when: has_dbus | bool
-
-- name: Enable ydotool user service via sudo
-  ansible.builtin.command:
-    cmd: "sudo systemctl --machine={{ ansible_facts.user_id }}@.host --user enable ydotool --now"
-  when: not has_dbus | bool
 
 - name: Set font-name gsetting
   ansible.builtin.command:

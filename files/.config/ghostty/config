@@ -13,8 +13,8 @@ cursor-style-blink = true
 window-padding-x = 21
 window-padding-y = 21
 
-# No close confirmation
-confirm-before-close = false
+# Let Hyprland handle Super+Q (close window) instead of Ghostty intercepting it
+keybind = super+q=unbind
 
-# Use bash shell
-command = bash
+# Use zsh shell
+command = zsh

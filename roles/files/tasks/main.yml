@@ -106,7 +106,6 @@
   ansible.builtin.command:
     cmd: go build -o snry-daemon .
     chdir: "{{ repo_root }}/scripts/snry-daemon"
-    creates: "{{ repo_root }}/scripts/snry-daemon/snry-daemon"
   when:
     - not skip_quickshell | bool
     - snry_daemon_src.stat.exists
@@ -166,9 +165,9 @@
       --prefix={{ ansible_facts['user_dir'] }}/.local
       -Dhyprgrass=true
     chdir: "{{ xdg_cache_home }}/snry-shell/hyprgrass"
-    env:
-      HYPRLAND_HEADERS: /usr/include
     creates: "{{ xdg_cache_home }}/snry-shell/hyprgrass/build"
+  environment:
+    HYPRLAND_HEADERS: /usr/include
   when:
     - not skip_hyprland | bool
     - not hyprgrass_plugin_stat.stat.exists
@@ -203,7 +202,7 @@
 
 - name: Install .bashrc
   ansible.builtin.copy:
-    src: "{{ xdg_config_home }}/bash/bashrc"
+    src: "{{ repo_root }}/files/.config/bash/bashrc"
     dest: "{{ ansible_facts['user_dir'] }}/.bashrc"
     mode: "0644"
     backup: true
@@ -218,7 +217,7 @@
 
 - name: Install .bash_profile
   ansible.builtin.copy:
-    src: "{{ xdg_config_home }}/bash/bash_profile"
+    src: "{{ repo_root }}/files/.config/bash/bash_profile"
     dest: "{{ ansible_facts['user_dir'] }}/.bash_profile"
     mode: "0644"
     backup: true
@@ -226,7 +225,7 @@
 
 - name: Install .zprofile
   ansible.builtin.copy:
-    src: "{{ xdg_config_home }}/bash/zprofile"
+    src: "{{ repo_root }}/files/.config/bash/zprofile"
     dest: "{{ ansible_facts['user_dir'] }}/.zprofile"
     mode: "0644"
     backup: true
@@ -234,7 +233,7 @@
 
 - name: Install .inputrc
   ansible.builtin.copy:
-    src: "{{ xdg_config_home }}/bash/inputrc"
+    src: "{{ repo_root }}/files/.config/bash/inputrc"
     dest: "{{ ansible_facts['user_dir'] }}/.inputrc"
     mode: "0644"
     backup: true

@@ -2,14 +2,15 @@
 # Snry Shell Ansible playbook
 
 # XDG paths
-xdg_bin_home: "{{ lookup('env', 'XDG_BIN_HOME') | default(ansible_user_dir ~ '/.local/bin', true) }}"
-xdg_cache_home: "{{ lookup('env', 'XDG_CACHE_HOME') | default(ansible_user_dir ~ '/.cache', true) }}"
-xdg_config_home: "{{ lookup('env', 'XDG_CONFIG_HOME') | default(ansible_user_dir ~ '/.config', true) }}"
-xdg_data_home: "{{ lookup('env', 'XDG_DATA_HOME') | default(ansible_user_dir ~ '/.local/share', true) }}"
-xdg_state_home: "{{ lookup('env', 'XDG_STATE_HOME') | default(ansible_user_dir ~ '/.local/state', true) }}"
+xdg_bin_home: "{{ lookup('env', 'XDG_BIN_HOME') | default(lookup('env', 'HOME') ~ '/.local/bin', true) }}"
+xdg_cache_home: "{{ lookup('env', 'XDG_CACHE_HOME') | default(lookup('env', 'HOME') ~ '/.cache', true) }}"
+xdg_config_home: "{{ lookup('env', 'XDG_CONFIG_HOME') | default(lookup('env', 'HOME') ~ '/.config', true) }}"
+xdg_data_home: "{{ lookup('env', 'XDG_DATA_HOME') | default(lookup('env', 'HOME') ~ '/.local/share', true) }}"
+xdg_state_home: "{{ lookup('env', 'XDG_STATE_HOME') | default(lookup('env', 'HOME') ~ '/.local/state', true) }}"
+backup_dir: "{{ lookup('env', 'BACKUP_DIR') | default(lookup('env', 'HOME') ~ '/ii-original-dots-backup', true) }}"
 
 # Snry Shell specific paths
-backup_dir: "{{ lookup('env', 'BACKUP_DIR') | default(ansible_user_dir ~ '/ii-original-dots-backup', true) }}"
+
 dots_confdir: "{{ xdg_config_home }}/snry-shell"
 installed_listfile: "{{ dots_confdir }}/installed_listfile"
 firstrun_file: "{{ dots_confdir }}/installed_true"
@@ -113,7 +114,6 @@ arch_packages:
   - wf-recorder
   - upower
   - wtype
-  - ydotool
   - fuzzel
   - glib2
   - go
@@ -256,7 +256,6 @@ fedora_packages:
   toolkit:
     - upower
     - wtype
-    - ydotool
   widgets:
     - fuzzel
     - glib2

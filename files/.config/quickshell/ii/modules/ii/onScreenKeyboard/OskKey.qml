@@ -68,7 +68,9 @@ RippleButton {
     }
 
     downAction: () => {
-        Ydotool.press(root.keycode);
+        if (root.type !== "modkey" || !root.toggled) {
+            Ydotool.press(root.keycode);
+        }
         if (isShift && Ydotool.shiftMode == 0) Ydotool.shiftMode = 1;
     }
     releaseAction: () => {

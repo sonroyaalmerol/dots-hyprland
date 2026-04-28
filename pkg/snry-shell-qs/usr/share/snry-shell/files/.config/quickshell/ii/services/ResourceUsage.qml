@@ -21,7 +21,6 @@ Singleton {
 	property real swapUsed: swapTotal - swapFree
     property real swapUsedPercentage: swapTotal > 0 ? (swapUsed / swapTotal) : 0
     property real cpuUsage: 0
-    property var previousCpuStats
 
     property string maxAvailableMemoryString: kbToGbString(ResourceUsage.memoryTotal)
     property string maxAvailableSwapString: kbToGbString(ResourceUsage.swapTotal)
@@ -60,48 +59,18 @@ Singleton {
         updateCpuUsageHistory()
     }
 
-	Timer {
-		interval: 1
-        running: !DaemonSocket.powerSuspended
-        repeat: true
-		onTriggered: {
-            // Reload files
-            fileMeminfo.reload()
-            fileStat.reload()
-
-            // Parse memory and swap usage
-            const textMeminfo = fileMeminfo.text()
-            memoryTotal = Number(textMeminfo.match(/MemTotal: *(\d+)/)?.[1] ?? 1)
-            memoryFree = Number(textMeminfo.match(/MemAvailable: *(\d+)/)?.[1] ?? 0)
-            swapTotal = Number(textMeminfo.match(/SwapTotal: *(\d+)/)?.[1] ?? 1)
-            swapFree = Number(textMeminfo.match(/SwapFree: *(\d+)/)?.[1] ?? 0)
-
-            // Parse CPU usage
-            const textStat = fileStat.text()
-            const firstLine = textStat.split('\n')[0]
-            const fields = firstLine.trim().split(/\s+/)
-            if (fields.length > 4 && fields[0] === 'cpu') {
-                // fields[1..] = user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice
-                const values = fields.slice(1).map(Number)
-                const idle = values[3] + (values[4] || 0)  // idle + iowait
-                const total = values.reduce((a, b) => a + b, 0)
-
-                if (previousCpuStats) {
-                    const totalDiff = total - previousCpuStats.total
-                    const idleDiff = idle - previousCpuStats.idle
-                    cpuUsage = totalDiff > 0 ? (1 - idleDiff / totalDiff) : 0
-                }
-
-                previousCpuStats = { total, idle }
-            }
-
+	Connections {
+		target: DaemonSocket
+		onResourceDataUpdated: function(data) {
+            // Daemon sends memory values in KB (already parsed from /proc)
+            root.memoryTotal = data.memoryTotal || 1
+            root.memoryFree = data.memoryAvailable || data.memoryFree || 0
+            root.swapTotal = data.swapTotal || 1
+            root.swapFree = data.swapFree || 0
+            root.cpuUsage = data.cpuUsage ?? 0
             root.updateHistories()
-            interval = Config.options?.resources?.updateInterval ?? 5000
-        }
+		}
 	}
-
-	FileView { id: fileMeminfo; path: "/proc/meminfo" }
-    FileView { id: fileStat; path: "/proc/stat" }
 
     Process {
         id: findCpuMaxFreqProc

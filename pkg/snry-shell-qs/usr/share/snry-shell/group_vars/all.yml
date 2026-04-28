@@ -113,7 +113,6 @@ arch_packages:
   - wf-recorder
   - upower
   - wtype
-  - ydotool
   - fuzzel
   - glib2
   - go
@@ -254,7 +253,6 @@ fedora_packages:
   toolkit:
     - upower
     - wtype
-    - ydotool
   widgets:
     - fuzzel
     - glib2
