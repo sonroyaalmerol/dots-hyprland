@@ -24,6 +24,20 @@ Singleton {
         root.getData();
     }
 
+    Connections {
+        target: DaemonSocket
+        function onWeatherDataUpdated(data) {
+            if (data.raw) {
+                try {
+                    const parsedData = JSON.parse(data.raw);
+                    root.refineData(parsedData);
+                } catch (e) {
+                    console.error(`[WeatherService] ${e.message}`);
+                }
+            }
+        }
+    }
+
     property var location: ({
         valid: false,
         lat: 0,
@@ -82,21 +96,7 @@ Singleton {
     }
 
     function getData() {
-        let command = "curl -s wttr.in";
-
-        if (root.gpsActive && root.location.valid) {
-            command += `/${root.location.lat},${root.location.long}`;
-        } else {
-            command += `/${formatCityName(root.city)}`;
-        }
-
-        // format as json
-        command += "?format=j1";
-        command += " | ";
-        // only take the current weather, location, asytronmy data
-        command += "jq '{current: .current_condition[0], location: .nearest_area[0], astronomy: .weather[0].astronomy[0]}'";
-        fetcher.command[2] = command;
-        fetcher.running = true;
+        DaemonSocket.sendCommand("weather-refresh");
     }
 
     function formatCityName(cityName) {
@@ -107,24 +107,6 @@ Singleton {
         if (!root.gpsActive) return;
         console.info("[WeatherService] Starting the GPS service.");
         positionSource.start();
-    }
-
-    Process {
-        id: fetcher
-        command: ["bash", "-c", ""]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                if (text.length === 0)
-                    return;
-                try {
-                    const parsedData = JSON.parse(text);
-                    root.refineData(parsedData);
-                    // console.info(`[ data: ${JSON.stringify(parsedData)}`);
-                } catch (e) {
-                    console.error(`[WeatherService] ${e.message}`);
-                }
-            }
-        }
     }
 
     PositionSource {
@@ -158,11 +140,4 @@ Singleton {
         }
     }
 
-    Timer {
-        running: !root.gpsActive && !DaemonSocket.powerSuspended
-        repeat: true
-        interval: root.fetchInterval
-        triggeredOnStart: !root.gpsActive
-        onTriggered: root.getData()
-    }
 }

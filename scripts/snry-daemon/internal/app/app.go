@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/brightness"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/cliphist"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/hyprland"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/idle"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/idle/dbusutil"
@@ -20,6 +22,8 @@ import (
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/socket"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/tabletmode"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/uinput"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/updates"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/weather"
 )
 
 type Config struct {
@@ -30,6 +34,10 @@ type Config struct {
 	PowersaveTimeout time.Duration
 	ResourcesCfg     resources.Config
 	HyprlandCfg      hyprland.Config
+	WeatherCfg       weather.Config
+	UpdatesCfg       updates.Config
+	CliphistCfg      cliphist.Config
+	BrightnessCfg    brightness.Config
 }
 
 func DefaultConfig() Config {
@@ -41,6 +49,10 @@ func DefaultConfig() Config {
 		PowersaveTimeout: 30 * time.Second,
 		ResourcesCfg:     resources.DefaultConfig(),
 		HyprlandCfg:      hyprland.DefaultConfig(),
+		WeatherCfg:       weather.DefaultConfig(),
+		UpdatesCfg:       updates.DefaultConfig(),
+		CliphistCfg:      cliphist.DefaultConfig(),
+		BrightnessCfg:    brightness.DefaultConfig(),
 	}
 }
 
@@ -55,6 +67,10 @@ type App struct {
 	resourcesSvc  *resources.Service
 	hyprlandSvc   *hyprland.Service
 	qsSvc         *quickshell.Service
+	weatherSvc    *weather.Service
+	updatesSvc    *updates.Service
+	cliphistSvc   *cliphist.Service
+	brightnessSvc *brightness.Service
 }
 
 func New(cfg Config) *App {
@@ -96,6 +112,22 @@ func (a *App) Run(ctx context.Context) error {
 	a.hyprlandSvc = hyprland.New(a.cfg.HyprlandCfg, a.socketServer.Emitter().Emit)
 	a.qsSvc = quickshell.New(a.cfg.QuickshellCfg)
 
+	// Wire suspend check for weather and updates
+	isSuspended := func() bool {
+		return a.powersaveSvc != nil && a.powersaveSvc.IsScreenOff()
+	}
+
+	weatherCfg := a.cfg.WeatherCfg
+	weatherCfg.IsSuspended = isSuspended
+	a.weatherSvc = weather.New(weatherCfg, a.socketServer.Emitter().Emit)
+
+	updatesCfg := a.cfg.UpdatesCfg
+	updatesCfg.IsSuspended = isSuspended
+	a.updatesSvc = updates.New(updatesCfg, a.socketServer.Emitter().Emit)
+
+	a.cliphistSvc = cliphist.New(a.cfg.CliphistCfg, a.socketServer.Emitter().Emit)
+	a.brightnessSvc = brightness.New(a.cfg.BrightnessCfg, a.socketServer.Emitter().Emit)
+
 	var wg sync.WaitGroup
 
 	wg.Go(func() { a.runSocketServer(ctx) })
@@ -106,6 +138,10 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runHyprland(ctx) })
 	wg.Go(func() { a.runInputMethod(ctx) })
 	wg.Go(func() { a.runQuickshell(ctx) })
+	wg.Go(func() { a.runWeather(ctx) })
+	wg.Go(func() { a.runUpdates(ctx) })
+	wg.Go(func() { a.runCliphist(ctx) })
+	wg.Go(func() { a.runBrightness(ctx) })
 	wg.Go(func() {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
@@ -121,12 +157,21 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 func (a *App) runSocketServer(ctx context.Context) {
-	snapshots := make([]socket.SnapshotProvider, 0, 2)
+	snapshots := make([]socket.SnapshotProvider, 0, 6)
 	if a.hyprlandSvc != nil {
 		snapshots = append(snapshots, a.hyprlandSvc)
 	}
 	if a.resourcesSvc != nil {
 		snapshots = append(snapshots, a.resourcesSvc)
+	}
+	if a.weatherSvc != nil {
+		snapshots = append(snapshots, a.weatherSvc)
+	}
+	if a.updatesSvc != nil {
+		snapshots = append(snapshots, a.updatesSvc)
+	}
+	if a.brightnessSvc != nil {
+		snapshots = append(snapshots, a.brightnessSvc)
 	}
 	if err := a.socketServer.Run(ctx, a, snapshots); err != nil {
 		log.Printf("socket server: %v", err)
@@ -219,6 +264,42 @@ func (a *App) runQuickshell(ctx context.Context) {
 	log.Printf("quickshell: service goroutine starting")
 	if err := a.qsSvc.Run(ctx); err != nil && err != context.Canceled {
 		log.Printf("quickshell: %v", err)
+	}
+}
+
+func (a *App) runWeather(ctx context.Context) {
+	if a.weatherSvc == nil {
+		return
+	}
+	if err := a.weatherSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("weather: %v", err)
+	}
+}
+
+func (a *App) runUpdates(ctx context.Context) {
+	if a.updatesSvc == nil {
+		return
+	}
+	if err := a.updatesSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("updates: %v", err)
+	}
+}
+
+func (a *App) runCliphist(ctx context.Context) {
+	if a.cliphistSvc == nil {
+		return
+	}
+	if err := a.cliphistSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("cliphist: %v", err)
+	}
+}
+
+func (a *App) runBrightness(ctx context.Context) {
+	if a.brightnessSvc == nil {
+		return
+	}
+	if err := a.brightnessSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("brightness: %v", err)
 	}
 }
 

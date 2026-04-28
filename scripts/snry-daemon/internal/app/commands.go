@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"strconv"
 	"strings"
 )
@@ -93,6 +94,23 @@ func dispatchCommand(a *App, line string) {
 	case "resources":
 		if a.resourcesSvc != nil {
 			a.resourcesSvc.EmitSnapshot(a.socketServer.Emitter().Emit)
+		}
+	case "weather-refresh":
+		if a.weatherSvc != nil {
+			go a.weatherSvc.RefreshNow(context.Background())
+		}
+	case "cliphist-list":
+		if a.cliphistSvc != nil {
+			go a.cliphistSvc.EmitList(context.Background())
+		}
+	case "cliphist-delete":
+		if a.cliphistSvc != nil && len(fields) >= 2 {
+			entry := strings.Join(fields[1:], " ")
+			go a.cliphistSvc.DeleteEntry(context.Background(), entry)
+		}
+	case "cliphist-wipe":
+		if a.cliphistSvc != nil {
+			go a.cliphistSvc.Wipe(context.Background())
 		}
 	}
 }

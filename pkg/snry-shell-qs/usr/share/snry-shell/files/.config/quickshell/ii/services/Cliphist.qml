@@ -46,9 +46,15 @@ Singleton {
         return !!(/^\d+\t\[\[.*binary data.*\d+x\d+.*\]\]$/.test(entry))
     }
 
+    Connections {
+        target: DaemonSocket
+        function onCliphistListUpdated(data) {
+            root.entries = data.entries ?? [];
+        }
+    }
+
     function refresh() {
-        readProc.buffer = []
-        readProc.running = true
+        DaemonSocket.sendCommand("cliphist-list");
     }
 
     function copy(entry) {
@@ -98,53 +104,8 @@ Singleton {
         deleteProc.deleteEntry(entry);
     }
 
-    Process {
-        id: wipeProc
-        command: [root.cliphistBinary, "wipe"]
-        onExited: (exitCode, exitStatus) => {
-            root.refresh();
-        }
-    }
-
     function wipe() {
-        wipeProc.running = true;
-    }
-
-    Connections {
-        target: Quickshell
-        function onClipboardTextChanged() {
-            delayedUpdateTimer.restart()
-        }
-    }
-
-    Timer {
-        id: delayedUpdateTimer
-        interval: Config.options.hacks.arbitraryRaceConditionDelay
-        repeat: false
-        onTriggered: {
-            root.refresh()
-        }
-    }
-
-    Process {
-        id: readProc
-        property list<string> buffer: []
-
-        command: [root.cliphistBinary, "list"]
-
-        stdout: SplitParser {
-            onRead: (line) => {
-                readProc.buffer.push(line)
-            }
-        }
-
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0) {
-                root.entries = readProc.buffer
-            } else {
-                console.error("[Cliphist] Failed to refresh with code", exitCode, "and status", exitStatus)
-            }
-        }
+        DaemonSocket.sendCommand("cliphist-wipe");
     }
 
     IpcHandler {

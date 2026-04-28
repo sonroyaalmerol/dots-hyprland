@@ -93,6 +93,18 @@ func (s *Service) enterPowersave() {
 	}
 }
 
+func (s *Service) IsSuspended() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.active
+}
+
+func (s *Service) IsScreenOff() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.screenOff
+}
+
 func (s *Service) exitPowersave() {
 	if !s.active {
 		return

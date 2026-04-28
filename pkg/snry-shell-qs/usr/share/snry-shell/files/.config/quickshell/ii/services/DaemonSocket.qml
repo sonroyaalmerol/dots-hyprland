@@ -28,6 +28,10 @@ Singleton {
 	signal textFocusChanged(bool active)
 	signal resourceDataUpdated(var data)
 	signal hyprlandDataUpdated(var data)
+	signal weatherDataUpdated(var data)
+	signal updatesDataUpdated(var data)
+	signal cliphistListUpdated(var data)
+	signal brightnessMultiplierUpdated(var data)
 
 	// ── Command senders ─────────────────────────────────────────────────
 	function authenticate(password) { sendCommand("auth " + password) }
@@ -145,6 +149,18 @@ while True:
 			break
 		case "hyprland_data":
 			if (obj.data) root.hyprlandDataUpdated(obj.data)
+			break
+		case "weather":
+			if (obj.data) root.weatherDataUpdated(obj.data)
+			break
+		case "updates":
+			if (obj.data) root.updatesDataUpdated(obj.data)
+			break
+		case "cliphist_list":
+			if (obj.data) root.cliphistListUpdated(obj.data)
+			break
+		case "brightness_multiplier":
+			if (obj.data) root.brightnessMultiplierUpdated(obj.data)
 			break
 		}
 	}
