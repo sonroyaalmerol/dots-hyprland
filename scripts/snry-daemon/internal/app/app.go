@@ -124,7 +124,7 @@ func (a *App) Run(ctx context.Context) error {
 
 	// Wire suspend check for weather and updates
 	isSuspended := func() bool {
-		return a.powersaveSvc != nil && a.powersaveSvc.IsScreenOff()
+		return a.powersaveSvc != nil && a.powersaveSvc.IsSuspended()
 	}
 
 	weatherCfg := a.cfg.WeatherCfg
