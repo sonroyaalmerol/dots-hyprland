@@ -284,6 +284,15 @@ func handleClient(conn net.Conn) {
 	defer clients.Delete(conn)
 
 	log.Printf("client connected: %s", conn.RemoteAddr())
+
+	// Send current state snapshot to new client.
+	if hyprlandSvc != nil {
+		hyprlandSvc.EmitSnapshot(emitMap)
+	}
+	if resourcesSvc != nil {
+		resourcesSvc.EmitSnapshot(emitMap)
+	}
+
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		dispatchCommand(scanner.Text())
