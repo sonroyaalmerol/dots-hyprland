@@ -18,14 +18,14 @@ const (
 type StateCallback func(suspended bool)
 
 type Service struct {
-	mu            sync.Mutex
-	conn          *dbus.Conn
-	active        bool
-	since         time.Time
-	threshold     time.Duration
-	onStateChange StateCallback
-	screenOff     bool
-	locked        bool
+	mu             sync.Mutex
+	conn           *dbus.Conn
+	active         bool
+	since          time.Time
+	threshold      time.Duration
+	onStateChange  StateCallback
+	screenOff      bool
+	lockedProvider func() bool
 }
 
 func New(threshold time.Duration, cb StateCallback) *Service {
@@ -41,27 +41,28 @@ func New(threshold time.Duration, cb StateCallback) *Service {
 	}
 }
 
+func (s *Service) SetLockedProvider(fn func() bool) {
+	s.mu.Lock()
+	s.lockedProvider = fn
+	s.mu.Unlock()
+}
+
+func (s *Service) isLocked() bool {
+	if s.lockedProvider != nil {
+		return s.lockedProvider()
+	}
+	return false
+}
+
 func (s *Service) SetScreenOff(off bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	previous := s.screenOff
 	s.screenOff = off
-	if off && !previous && s.locked {
+	if off && !previous && s.isLocked() {
 		s.since = time.Now()
 	}
 	if !off && s.active {
-		s.exitPowersave()
-	}
-}
-
-func (s *Service) SetLocked(locked bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.locked = locked
-	if locked && s.screenOff {
-		s.since = time.Now()
-	}
-	if !locked && s.active {
 		s.exitPowersave()
 	}
 }
@@ -72,7 +73,7 @@ func (s *Service) Tick() {
 	if s.active {
 		return
 	}
-	if !s.screenOff || !s.locked || s.since.IsZero() {
+	if !s.screenOff || !s.isLocked() || s.since.IsZero() {
 		return
 	}
 	if time.Since(s.since) >= s.threshold {

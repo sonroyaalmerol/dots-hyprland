@@ -96,6 +96,7 @@ func (a *App) Run(ctx context.Context) error {
 		log.Printf("system bus: %v (idle service disabled)", err)
 	} else {
 		a.idleSvc = idle.New(dbusutil.NewRealConn(idleConn), a.cfg.IdleCfg)
+		a.idleSvc.SetLockedProvider(a.lockscreenSvc.IsLocked)
 		a.idleSvc.SetOnLock(func() {
 			if a.lockscreenSvc != nil {
 				a.lockscreenSvc.Lock()
@@ -106,6 +107,15 @@ func (a *App) Run(ctx context.Context) error {
 				a.powersaveSvc.SetScreenOff(!on)
 			}
 		})
+		a.idleSvc.SetOnLogindUnlock(func() {
+			if a.lockscreenSvc != nil {
+				a.lockscreenSvc.Unlock()
+			}
+		})
+	}
+
+	if a.powersaveSvc != nil {
+		a.powersaveSvc.SetLockedProvider(a.lockscreenSvc.IsLocked)
 	}
 
 	a.resourcesSvc = resources.New(a.cfg.ResourcesCfg, a.socketServer.Emitter().Emit)
@@ -332,10 +342,7 @@ func (a *App) onLockscreenEvent(t lockscreen.EventType, data any) {
 	case lockscreen.EventLockState:
 		locked := data.(bool)
 		if a.idleSvc != nil {
-			a.idleSvc.SetLocked(locked)
-		}
-		if a.powersaveSvc != nil {
-			a.powersaveSvc.SetLocked(locked)
+			a.idleSvc.NotifyLockChanged()
 		}
 		a.socketServer.Emitter().Emit(map[string]any{
 			"event": "lock_state",

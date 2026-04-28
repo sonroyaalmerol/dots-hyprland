@@ -42,10 +42,12 @@ type Service struct {
 	cfg  Config
 
 	mu             sync.Mutex
-	locked         bool
 	idleStarted    time.Time
 	inhibited      bool
 	onLockCallback func() // called by doLock instead of publishing to internal bus
+	lockedProvider func() bool
+	lastLocked     bool
+	onLogindUnlock func()
 
 	// Wayland fields
 	waylandMu        sync.Mutex
@@ -88,9 +90,25 @@ func (s *Service) SetOnLock(fn func()) {
 	s.mu.Unlock()
 }
 
-// SetLocked is the exported wrapper around setLocked.
-func (s *Service) SetLocked(locked bool) {
-	s.setLocked(locked)
+// SetLockedProvider registers a function that returns the authoritative locked state.
+func (s *Service) SetLockedProvider(fn func() bool) {
+	s.mu.Lock()
+	s.lockedProvider = fn
+	s.mu.Unlock()
+}
+
+// SetOnLogindUnlock registers a callback invoked when logind sends an Unlock signal.
+func (s *Service) SetOnLogindUnlock(fn func()) {
+	s.mu.Lock()
+	s.onLogindUnlock = fn
+	s.mu.Unlock()
+}
+
+func (s *Service) isLocked() bool {
+	if s.lockedProvider != nil {
+		return s.lockedProvider()
+	}
+	return false
 }
 
 // SetDisplay is the exported wrapper around setDisplay.
@@ -106,8 +124,8 @@ func (s *Service) recreateTimers() {
 
 	s.mu.Lock()
 	cfg := s.cfg
-	locked := s.locked
 	s.mu.Unlock()
+	locked := s.isLocked()
 
 	if locked {
 		// Locked: one timer at LockDisplayOffTimeout
@@ -196,11 +214,6 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 
 	// Subscribe to internal bus events
-	s.bus.subscribe(topicScreenLock, func(e busEvent) {
-		locked, _ := e.Data.(bool)
-		s.setLocked(locked)
-	})
-
 	s.bus.subscribe(topicIdleInhibit, func(e busEvent) {
 		active, _ := e.Data.(bool)
 		s.mu.Lock()
@@ -236,19 +249,18 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 
-func (s *Service) setLocked(locked bool) {
+// NotifyLockChanged re-reads the locked state from the provider and
+// triggers side effects (display on, timer recreation) if the state changed.
+func (s *Service) NotifyLockChanged() {
+	locked := s.isLocked()
+
 	s.mu.Lock()
-	changed := s.locked != locked
-	s.locked = locked
+	changed := s.lastLocked != locked
+	s.lastLocked = locked
 	if locked {
 		s.idleStarted = time.Now()
 	} else {
 		s.idleStarted = time.Time{}
-	}
-	s.mu.Unlock()
-
-	s.mu.Lock()
-	if !locked {
 		s.displayOffForced = false // clear forced-off on unlock
 	}
 	s.mu.Unlock()
@@ -269,10 +281,10 @@ func (s *Service) setLocked(locked bool) {
 func (s *Service) tick() {
 	s.mu.Lock()
 	cfg := s.cfg
-	locked := s.locked
 	started := s.idleStarted
 	inhibited := s.inhibited
 	s.mu.Unlock()
+	locked := s.isLocked()
 
 	if inhibited || !locked || started.IsZero() {
 		return
@@ -389,7 +401,7 @@ func (s *Service) initAndDispatch(ctx context.Context) error {
 
 func (s *Service) doLock() {
 	s.mu.Lock()
-	if s.locked || s.inhibited {
+	if s.isLocked() || s.inhibited {
 		s.mu.Unlock()
 		return
 	}
@@ -432,17 +444,10 @@ func (s *Service) Lock() {
 }
 
 // Unlock triggers an unlock externally (e.g. from a socket command).
+// The actual lock state is managed by the lockscreen service via the provider.
 func (s *Service) Unlock() {
-	s.mu.Lock()
-	cb := s.onLockCallback
-	s.mu.Unlock()
-
-	if cb != nil {
-		// The callback (set by main.go) handles lockscreenSvc.Unlock().
-		s.setLocked(false)
-	} else {
-		s.bus.publish(topicScreenLock, false)
-	}
+	// Ensure display is on when unlocking.
+	s.setDisplay(true)
 }
 
 func (s *Service) monitorLogind(ctx context.Context) {
@@ -484,7 +489,10 @@ func (s *Service) monitorLogind(ctx context.Context) {
 			case dbusutil.LogindSession + ".Lock":
 				s.doLock()
 			case dbusutil.LogindSession + ".Unlock":
-				s.setLocked(false)
+				if s.onLogindUnlock != nil {
+					s.onLogindUnlock()
+				}
+				s.setDisplay(true)
 			}
 		}
 	}
