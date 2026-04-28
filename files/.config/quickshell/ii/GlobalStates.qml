@@ -9,6 +9,7 @@ pragma ComponentBehavior: Bound
 
 Singleton {
     id: root
+    property bool appDrawerOpen: false
     property bool barOpen: true
     property bool crosshairOpen: false
     property bool sidebarRightOpen: false
@@ -29,6 +30,19 @@ Singleton {
     property bool superReleaseMightTrigger: true
     property bool wallpaperSelectorOpen: false
     property bool workspaceShowNumbers: false
+
+    onAppDrawerOpenChanged: {
+        if (appDrawerOpen) {
+            searchOpen = false;
+            overviewOpen = false;
+        }
+    }
+
+    onSearchOpenChanged: {
+        if (searchOpen) {
+            appDrawerOpen = false;
+        }
+    }
 
     onSidebarRightOpenChanged: {
         if (GlobalStates.sidebarRightOpen) {
