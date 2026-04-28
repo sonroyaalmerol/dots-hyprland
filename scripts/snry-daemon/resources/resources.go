@@ -73,7 +73,7 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 type cpuStat struct {
-	user, nice, system, idle, iowait, irq, softirq uint64
+	user, nice, system, idle, iowait, irq, softirq, steal, guest, guestNice uint64
 }
 
 func (s *Service) readResources() (map[string]any, error) {
@@ -122,7 +122,7 @@ func parseMemValue(line string) uint64 {
 	if err != nil {
 		return 0
 	}
-	return val * 1024
+	return val
 }
 
 func (s *Service) calculateCPU(prev cpuStat, initialized bool) (float64, cpuStat) {
@@ -137,18 +137,33 @@ func (s *Service) calculateCPU(prev cpuStat, initialized bool) (float64, cpuStat
 	}
 
 	fields := strings.Fields(lines[0])
-	if len(fields) < 8 || fields[0] != "cpu" {
+	if len(fields) < 5 || fields[0] != "cpu" {
 		return 0, prev
 	}
 
 	stat := cpuStat{
-		user:    parseUint64(fields[1]),
-		nice:    parseUint64(fields[2]),
-		system:  parseUint64(fields[3]),
-		idle:    parseUint64(fields[4]),
-		iowait:  parseUint64(fields[5]),
-		irq:     parseUint64(fields[6]),
-		softirq: parseUint64(fields[7]),
+		user:   parseUint64(fields[1]),
+		nice:   parseUint64(fields[2]),
+		system: parseUint64(fields[3]),
+		idle:   parseUint64(fields[4]),
+	}
+	if len(fields) > 5 {
+		stat.iowait = parseUint64(fields[5])
+	}
+	if len(fields) > 6 {
+		stat.irq = parseUint64(fields[6])
+	}
+	if len(fields) > 7 {
+		stat.softirq = parseUint64(fields[7])
+	}
+	if len(fields) > 8 {
+		stat.steal = parseUint64(fields[8])
+	}
+	if len(fields) > 9 {
+		stat.guest = parseUint64(fields[9])
+	}
+	if len(fields) > 10 {
+		stat.guestNice = parseUint64(fields[10])
 	}
 
 	if !initialized || prev.idle == 0 {
@@ -158,8 +173,8 @@ func (s *Service) calculateCPU(prev cpuStat, initialized bool) (float64, cpuStat
 	currentIdle := stat.idle + stat.iowait
 	prevIdle := prev.idle + prev.iowait
 
-	currentTotal := stat.user + stat.nice + stat.system + stat.idle + stat.iowait + stat.irq + stat.softirq
-	prevTotal := prev.user + prev.nice + prev.system + prev.idle + prev.iowait + prev.irq + prev.softirq
+	currentTotal := stat.user + stat.nice + stat.system + stat.idle + stat.iowait + stat.irq + stat.softirq + stat.steal + stat.guest + stat.guestNice
+	prevTotal := prev.user + prev.nice + prev.system + prev.idle + prev.iowait + prev.irq + prev.softirq + prev.steal + prev.guest + prev.guestNice
 
 	totalDiff := int64(currentTotal - prevTotal)
 	idleDiff := int64(currentIdle - prevIdle)

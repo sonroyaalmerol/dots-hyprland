@@ -62,7 +62,7 @@ Singleton {
 	Connections {
 		target: DaemonSocket
 		onResourceDataUpdated: function(data) {
-            // Daemon sends memory values in KB (already parsed from /proc)
+            // Daemon sends memory values in kB (parsed from /proc, no unit conversion)
             root.memoryTotal = data.memoryTotal || 1
             root.memoryFree = data.memoryAvailable || data.memoryFree || 0
             root.swapTotal = data.swapTotal || 1
