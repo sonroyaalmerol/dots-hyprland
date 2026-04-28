@@ -23,13 +23,17 @@ Singleton {
     property WifiAccessPoint wifiConnectTarget
     readonly property list<WifiAccessPoint> wifiNetworks: []
     readonly property WifiAccessPoint active: wifiNetworks.find(n => n.active) ?? null
-    readonly property list<var> friendlyWifiNetworks: [...wifiNetworks].sort((a, b) => {
-        if (a.active && !b.active)
-            return -1;
-        if (!a.active && b.active)
-            return 1;
-        return b.strength - a.strength;
-    })
+    property list<var> friendlyWifiNetworks: []
+
+    function updateFriendlyNetworks() {
+        friendlyWifiNetworks = [...wifiNetworks].sort((a, b) => {
+            if (a.active && !b.active)
+                return -1;
+            if (!a.active && b.active)
+                return 1;
+            return b.strength - a.strength;
+        });
+    }
     property string wifiStatus: "disconnected"
 
     property string networkName: ""
@@ -154,10 +158,17 @@ Singleton {
 
     // Status update
     function update() {
+        // TODO: These first 3 calls can be combined into a single nmcli invocation later
         updateConnectionType.startCheck();
         wifiStatusProcess.running = true
         updateNetworkName.running = true;
         updateNetworkStrength.running = true;
+    }
+
+    Timer {
+        id: networkDebounce
+        interval: 500
+        onTriggered: root.update()
     }
 
     Process {
@@ -165,7 +176,7 @@ Singleton {
         running: true
         command: ["nmcli", "monitor"]
         stdout: SplitParser {
-            onRead: root.update()
+            onRead: networkDebounce.restart()
         }
     }
 
@@ -320,6 +331,8 @@ Singleton {
                         }));
                     }
                 }
+
+                root.updateFriendlyNetworks();
             }
         }
     }

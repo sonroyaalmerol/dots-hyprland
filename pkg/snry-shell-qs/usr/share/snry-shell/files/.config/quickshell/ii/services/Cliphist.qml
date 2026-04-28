@@ -12,7 +12,7 @@ Singleton {
     // property string cliphistBinary: FileUtils.trimFileProtocol(`${Directories.home}/.cargo/bin/stash`)
     property string cliphistBinary: "cliphist"
     property real pasteDelay: 0.05
-    property string pressPasteCommand: "ydotool key -d 1 29:1 47:1 47:0 29:0"
+    property string pressPasteCommand: "$HOME/.local/bin/snry-daemon send combo 29 47"
     property bool sloppySearch: Config.options?.search.sloppy ?? false
     property real scoreThreshold: 0.2
     property list<string> entries: []

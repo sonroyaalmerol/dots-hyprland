@@ -185,7 +185,7 @@ Singleton {
 
     // Anti-flashbang
     property int workspaceAnimationDelay: 500
-    property int contentSwitchDelay: 30
+    property int contentSwitchDelay: 500
     property string screenshotDir: "/tmp/quickshell/brightness/antiflashbang"
     function brightnessMultiplierForLightness(x: real): real {
         // I hand picked some values and fitted an exponential curve for this
@@ -218,8 +218,9 @@ Singleton {
                 id: screenshotTimer
                 interval: 700 // This is what I have for a Hyprland ws anim
                 onTriggered: {
-                    screenshotProc.running = false;
-                    screenshotProc.running = true;
+                    if (!screenshotProc.running) {
+                        screenshotProc.running = true;
+                    }
                 }
             }
 
@@ -228,7 +229,7 @@ Singleton {
                 command: ["bash", "-c",
                     `mkdir -p '${StringUtils.shellSingleQuoteEscape(root.screenshotDir)}'`
                     + ` && grim -o '${StringUtils.shellSingleQuoteEscape(screenScope.screenName)}' -`
-                    + ` | magick png:- -colorspace Gray -format "%[fx:mean*100]" info:`
+                    + ` | magick png:- -resize 64x64 -colorspace Gray -format "%[fx:mean*100]" info:`
                 ]
                 stdout: StdioCollector {
                     id: lightnessCollector

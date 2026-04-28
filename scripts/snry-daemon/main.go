@@ -19,12 +19,14 @@ import (
 	"unsafe"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/hyprland"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/idle"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/idle/dbusutil"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/inputmethod"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/lockscreen"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/powersave"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/quickshell"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/resources"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/tabletmode"
 	"golang.org/x/sys/unix"
 )
@@ -40,6 +42,8 @@ var clients sync.Map // map[net.Conn]struct{}
 var idleSvc *idle.Service
 var lockscreenSvc *lockscreen.Service
 var powersaveSvc *powersave.Service
+var resourcesSvc *resources.Service
+var hyprlandSvc *hyprland.Service
 
 func emit(evt event) {
 	data, err := json.Marshal(evt)
@@ -266,6 +270,10 @@ func dispatchCommand(line string) {
 		for i := len(codes) - 1; i >= 0; i-- {
 			uinputSend(evKey, codes[i], 0)
 			uinputSyn()
+		}
+	case "resources":
+		if resourcesSvc != nil {
+			resourcesSvc.EmitSnapshot(emitMap)
 		}
 	}
 }
@@ -501,6 +509,22 @@ func main() {
 	})
 	wg.Go(func() {
 		tm.Run(ctx)
+	})
+
+	// ── Resource monitor ───────────────────────────────────────────────
+	resourcesSvc = resources.New(resources.DefaultConfig(), emitMap)
+	wg.Go(func() {
+		if err := resourcesSvc.Run(ctx); err != nil && err != context.Canceled {
+			log.Printf("resources: %v", err)
+		}
+	})
+
+	// ── Hyprland event stream ────────────────────────────────────────────
+	hyprlandSvc = hyprland.New(hyprland.DefaultConfig(), emitMap)
+	wg.Go(func() {
+		if err := hyprlandSvc.Run(ctx); err != nil && err != context.Canceled {
+			log.Printf("hyprland: %v", err)
+		}
 	})
 
 	// ── Input method (text focus) watcher ──────────────────────────────

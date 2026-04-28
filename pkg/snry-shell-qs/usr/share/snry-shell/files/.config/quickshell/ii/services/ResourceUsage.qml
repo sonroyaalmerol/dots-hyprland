@@ -37,19 +37,19 @@ Singleton {
     }
 
     function updateMemoryUsageHistory() {
-        memoryUsageHistory = [...memoryUsageHistory, memoryUsedPercentage]
+        memoryUsageHistory.push(memoryUsedPercentage)
         if (memoryUsageHistory.length > historyLength) {
             memoryUsageHistory.shift()
         }
     }
     function updateSwapUsageHistory() {
-        swapUsageHistory = [...swapUsageHistory, swapUsedPercentage]
+        swapUsageHistory.push(swapUsedPercentage)
         if (swapUsageHistory.length > historyLength) {
             swapUsageHistory.shift()
         }
     }
     function updateCpuUsageHistory() {
-        cpuUsageHistory = [...cpuUsageHistory, cpuUsage]
+        cpuUsageHistory.push(cpuUsage)
         if (cpuUsageHistory.length > historyLength) {
             cpuUsageHistory.shift()
         }
@@ -94,7 +94,7 @@ Singleton {
             }
 
             root.updateHistories()
-            interval = Config.options?.resources?.updateInterval ?? 3000
+            interval = Config.options?.resources?.updateInterval ?? 5000
         }
 	}
 
