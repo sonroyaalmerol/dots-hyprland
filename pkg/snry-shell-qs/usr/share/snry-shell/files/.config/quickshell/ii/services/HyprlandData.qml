@@ -3,204 +3,92 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
+import qs.services
 
 /**
  * Provides access to some Hyprland data not available in Quickshell.Hyprland.
  */
 Singleton {
-    id: root
-    property var windowList: []
-    property var addresses: []
-    property var windowByAddress: ({})
-    property var workspaces: []
-    property var workspaceIds: []
-    property var workspaceById: ({})
-    property var activeWorkspace: null
-    property var monitors: []
-    property var layers: ({})
+	id: root
+	property var windowList: []
+	property var addresses: []
+	property var windowByAddress: ({})
+	property var workspaces: []
+	property var workspaceIds: []
+	property var workspaceById: ({})
+	property var activeWorkspace: null
+	property var monitors: []
+	property var layers: ({})
 
-    // Convenient stuff
+	// Convenient stuff
 
-    function toplevelsForWorkspace(workspace) {
-        return ToplevelManager.toplevels.values.filter(toplevel => {
-            const address = `0x${toplevel.HyprlandToplevel?.address}`;
-            var win = HyprlandData.windowByAddress[address];
-            return win?.workspace?.id === workspace;
-        })
-    }
+	function toplevelsForWorkspace(workspace) {
+		return ToplevelManager.toplevels.values.filter(toplevel => {
+			const address = `0x${toplevel.HyprlandToplevel?.address}`;
+			var win = HyprlandData.windowByAddress[address];
+			return win?.workspace?.id === workspace;
+		})
+	}
 
-    function hyprlandClientsForWorkspace(workspace) {
-        return root.windowList.filter(win => win.workspace.id === workspace);
-    }
+	function hyprlandClientsForWorkspace(workspace) {
+		return root.windowList.filter(win => win.workspace.id === workspace);
+	}
 
-    function clientForToplevel(toplevel) {
-        if (!toplevel || !toplevel.HyprlandToplevel) {
-            return null;
-        }
-        const address = `0x${toplevel?.HyprlandToplevel?.address}`;
-        return root.windowByAddress[address];
-    }
+	function clientForToplevel(toplevel) {
+		if (!toplevel || !toplevel.HyprlandToplevel) {
+			return null;
+		}
+		const address = `0x${toplevel?.HyprlandToplevel?.address}`;
+		return root.windowByAddress[address];
+	}
 
-    // Internals
+	function biggestWindowForWorkspace(workspaceId) {
+		const windowsInThisWorkspace = HyprlandData.windowList.filter(w => w.workspace.id == workspaceId);
+		return windowsInThisWorkspace.reduce((maxWin, win) => {
+			const maxArea = (maxWin?.size?.[0] ?? 0) * (maxWin?.size?.[1] ?? 0);
+			const winArea = (win?.size?.[0] ?? 0) * (win?.size?.[1] ?? 0);
+			return winArea > maxArea ? win : maxWin;
+		}, null);
+	}
 
-    function updateWindowList() {
-        getClients.running = true;
-    }
+	Component.onCompleted: {}
 
-    function updateLayers() {
-        getLayers.running = true;
-    }
-
-    function updateMonitors() {
-        getMonitors.running = true;
-    }
-
-    function updateWorkspaces() {
-        getWorkspaces.running = true;
-        getActiveWorkspace.running = true;
-    }
-
-    function updateActiveWorkspace() {
-        getActiveWorkspace.running = true;
-    }
-
-    function updateAll() {
-        updateWindowList();
-        updateMonitors();
-        updateLayers();
-        updateWorkspaces();
-    }
-
-    function biggestWindowForWorkspace(workspaceId) {
-        const windowsInThisWorkspace = HyprlandData.windowList.filter(w => w.workspace.id == workspaceId);
-        return windowsInThisWorkspace.reduce((maxWin, win) => {
-            const maxArea = (maxWin?.size?.[0] ?? 0) * (maxWin?.size?.[1] ?? 0);
-            const winArea = (win?.size?.[0] ?? 0) * (win?.size?.[1] ?? 0);
-            return winArea > maxArea ? win : maxWin;
-        }, null);
-    }
-
-    Component.onCompleted: {
-        updateAll();
-    }
-
-    property string pendingEvent: ""
-
-    Connections {
-        target: Hyprland
-
-        function onRawEvent(event) {
-            if (event.name === "screencast") return;
-            pendingEvent = event.name;
-            debounceTimer.restart();
-        }
-    }
-
-    Timer {
-        id: debounceTimer
-        interval: 250
-        onTriggered: {
-            const ev = pendingEvent;
-            pendingEvent = "";
-
-            const windowEvents = [
-                "activewindowv2", "changefloatingmin", "movewindowv2",
-                "windowtitlev2", "fullscreen", "pin", "forcenorender",
-                "togglespecialworkspace"
-            ];
-            const workspaceEvents = [
-                "workspacev2", "createworkspace", "destroyworkspace",
-                "moveworkspace"
-            ];
-            const monitorEvents = ["monitoradded", "monitorremoved"];
-            const layerEvents = ["openlayer", "closelayer"];
-
-            if (windowEvents.includes(ev)) {
-                updateWindowList();
-            } else if (workspaceEvents.includes(ev)) {
-                updateWorkspaces();
-                updateActiveWorkspace();
-            } else if (monitorEvents.includes(ev)) {
-                updateMonitors();
-            } else if (layerEvents.includes(ev)) {
-                updateLayers();
-            } else {
-                updateAll();
-            }
-        }
-    }
-
-    Process {
-        id: getClients
-        command: ["hyprctl", "clients", "-j"]
-        stdout: StdioCollector {
-            id: clientsCollector
-            onStreamFinished: {
-                root.windowList = JSON.parse(clientsCollector.text)
-                let tempWinByAddress = {};
-                for (var i = 0; i < root.windowList.length; ++i) {
-                    var win = root.windowList[i];
-                    tempWinByAddress[win.address] = win;
-                }
-                root.windowByAddress = tempWinByAddress;
-                root.addresses = root.windowList.map(win => win.address);
-            }
-        }
-    }
-
-    Process {
-        id: getMonitors
-        command: ["hyprctl", "monitors", "-j"]
-        stdout: StdioCollector {
-            id: monitorsCollector
-            onStreamFinished: {
-                root.monitors = JSON.parse(monitorsCollector.text);
-            }
-        }
-    }
-
-    Process {
-        id: getLayers
-        command: ["hyprctl", "layers", "-j"]
-        stdout: StdioCollector {
-            id: layersCollector
-            onStreamFinished: {
-                root.layers = JSON.parse(layersCollector.text);
-            }
-        }
-    }
-
-    Process {
-        id: getWorkspaces
-        command: ["hyprctl", "workspaces", "-j"]
-        stdout: StdioCollector {
-            id: workspacesCollector
-            onStreamFinished: {
-                var rawWorkspaces = JSON.parse(workspacesCollector.text);
-                // Filter out invalid workspace ids (e.g. lock-screen temp workspace 2147483647 - N)
-                root.workspaces = rawWorkspaces.filter(ws => ws.id >= 1 && ws.id <= 100);
-                let tempWorkspaceById = {};
-                for (var i = 0; i < root.workspaces.length; ++i) {
-                    var ws = root.workspaces[i];
-                    tempWorkspaceById[ws.id] = ws;
-                }
-                root.workspaceById = tempWorkspaceById;
-                root.workspaceIds = root.workspaces.map(ws => ws.id);
-            }
-        }
-    }
-
-    Process {
-        id: getActiveWorkspace
-        command: ["hyprctl", "activeworkspace", "-j"]
-        stdout: StdioCollector {
-            id: activeWorkspaceCollector
-            onStreamFinished: {
-                root.activeWorkspace = JSON.parse(activeWorkspaceCollector.text);
-            }
-        }
-    }
+	Connections {
+		target: DaemonSocket
+		onHyprlandDataUpdated: function(data) {
+			if (data.windows) {
+				root.windowList = data.windows
+				let tempWinByAddress = {};
+				for (var i = 0; i < root.windowList.length; ++i) {
+					var win = root.windowList[i];
+					tempWinByAddress[win.address] = win;
+				}
+				root.windowByAddress = tempWinByAddress;
+				root.addresses = root.windowList.map(win => win.address);
+			}
+			if (data.monitors) {
+				root.monitors = data.monitors;
+			}
+			if (data.workspaces) {
+				// Filter out invalid workspace ids (e.g. lock-screen temp workspace 2147483647 - N)
+				var rawWorkspaces = data.workspaces;
+				root.workspaces = rawWorkspaces.filter(ws => ws.id >= 1 && ws.id <= 100);
+				let tempWorkspaceById = {};
+				for (var i = 0; i < root.workspaces.length; ++i) {
+					var ws = root.workspaces[i];
+					tempWorkspaceById[ws.id] = ws;
+				}
+				root.workspaceById = tempWorkspaceById;
+				root.workspaceIds = root.workspaces.map(ws => ws.id);
+			}
+			if (data.layers) {
+				root.layers = data.layers;
+			}
+			if (data.activeWorkspace) {
+				root.activeWorkspace = data.activeWorkspace;
+			}
+		}
+	}
 }
