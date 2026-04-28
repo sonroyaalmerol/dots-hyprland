@@ -93,3 +93,6 @@ else
 fi
 
 # apply_qt & # Qt theming is already handled by kde-material-colors
+
+# Neovim theming
+"$SCRIPT_DIR/nvim_apply_colors.sh" &
