@@ -339,6 +339,13 @@ Singleton {
                 property list<string> pinnedApps: [ "org.kde.dolphin", "kitty", "cmake-gui"]
             }
 
+            property JsonObject appDrawer: JsonObject {
+                property bool enabled: true
+                property int columns: 6
+                property bool showSearchBar: true
+                property real scrimOpacity: 0.5
+            }
+
             property JsonObject light: JsonObject {
                 property JsonObject night: JsonObject {
                     property bool automatic: true
