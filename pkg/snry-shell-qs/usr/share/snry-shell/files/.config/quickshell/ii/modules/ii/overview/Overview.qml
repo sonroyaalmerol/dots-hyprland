@@ -2,7 +2,6 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.common.panels.appDrawer
 import Qt.labs.synchronizer
 import QtQuick
 import QtQuick.Controls
@@ -69,17 +68,14 @@ Scope {
             searchWidget.focusFirstItem();
         }
 
-        StyledFlickable {
-            id: flickable
+        Column {
+            id: columnLayout
             visible: GlobalStates.overviewOpen
             anchors {
                 horizontalCenter: parent.horizontalCenter
                 top: parent.top
-                bottom: parent.bottom
             }
-            width: columnLayout.implicitWidth
-            contentWidth: columnLayout.implicitWidth
-            contentHeight: columnLayout.implicitHeight
+            spacing: -8
 
             Keys.onPressed: event => {
                 if (event.key === Qt.Key_Escape) {
@@ -93,100 +89,21 @@ Scope {
                 }
             }
 
-            Column {
-                id: columnLayout
-                spacing: -8
-
-                SearchWidget {
-                    id: searchWidget
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    Synchronizer on searchingText {
-                        property alias source: panelWindow.searchingText
-                    }
+            SearchWidget {
+                id: searchWidget
+                anchors.horizontalCenter: parent.horizontalCenter
+                Synchronizer on searchingText {
+                    property alias source: panelWindow.searchingText
                 }
+            }
 
-                Loader {
-                    id: overviewLoader
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    active: GlobalStates.overviewOpen && (Config?.options.overview.enable ?? true)
-                    sourceComponent: OverviewWidget {
-                        screen: panelWindow.screen
-                        visible: (panelWindow.searchingText == "")
-                    }
-                }
-
-                Loader {
-                    id: appDrawerLoader
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    active: GlobalStates.overviewOpen && panelWindow.searchingText === "" && (Config?.options.appDrawer.enabled ?? true)
-                    visible: active && status === Loader.Ready
-                    sourceComponent: Item {
-                        implicitWidth: drawerCard.implicitWidth
-                        implicitHeight: drawerCard.implicitHeight
-
-                        StyledRectangularShadow { target: drawerCard }
-                        Rectangle {
-                            id: drawerCard
-                            anchors.fill: parent
-                            anchors.margins: Appearance.sizes.elevationMargin
-                            property real padding: 16
-                            implicitWidth: drawerColumn.implicitWidth + padding * 2
-                            implicitHeight: drawerColumn.implicitHeight + padding * 2
-                            radius: Appearance.rounding.large + padding
-                            color: Appearance.colors.colBackgroundSurfaceContainer
-                            clip: true
-
-                            property var pinnedEntries: {
-                                const pinnedIds = Config.options.launcher.pinnedApps;
-                                return pinnedIds.map(id => DesktopEntries.byId(id)).filter(Boolean);
-                            }
-                            property var allEntries: {
-                                const all = AppSearch.list;
-                                return [...all].sort((a, b) => a.name.localeCompare(b.name));
-                            }
-
-                            ColumnLayout {
-                                id: drawerColumn
-                                anchors.centerIn: parent
-                                spacing: 12
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    visible: drawerCard.pinnedEntries.length > 0
-                                    StyledText {
-                                        text: Translation.tr("Pinned")
-                                        color: Appearance.colors.colOnSurface
-                                        font.pixelSize: Appearance.font.pixelSize.normal
-                                        font.bold: true
-                                    }
-                                    Item { Layout.fillWidth: true }
-                                }
-
-                                AppDrawerGrid {
-                                    visible: drawerCard.pinnedEntries.length > 0
-                                    desktopEntries: drawerCard.pinnedEntries
-                                    gridColumns: Config.options.appDrawer.columns
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    StyledText {
-                                        text: Translation.tr("All apps")
-                                        color: Appearance.colors.colOnSurface
-                                        font.pixelSize: Appearance.font.pixelSize.normal
-                                        font.bold: true
-                                    }
-                                    Item { Layout.fillWidth: true }
-                                }
-
-                                AppDrawerGrid {
-                                    id: allAppsGrid
-                                    desktopEntries: drawerCard.allEntries
-                                    gridColumns: Config.options.appDrawer.columns
-                                }
-                            }
-                        }
-                    }
+            Loader {
+                id: overviewLoader
+                anchors.horizontalCenter: parent.horizontalCenter
+                active: GlobalStates.overviewOpen && (Config?.options.overview.enable ?? true)
+                sourceComponent: OverviewWidget {
+                    screen: panelWindow.screen
+                    visible: (panelWindow.searchingText == "")
                 }
             }
         }
