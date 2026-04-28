@@ -63,6 +63,10 @@ Singleton {
         getActiveWorkspace.running = true;
     }
 
+    function updateActiveWorkspace() {
+        getActiveWorkspace.running = true;
+    }
+
     function updateAll() {
         updateWindowList();
         updateMonitors();
@@ -83,13 +87,49 @@ Singleton {
         updateAll();
     }
 
+    property string pendingEvent: ""
+
     Connections {
         target: Hyprland
 
         function onRawEvent(event) {
-            // console.log("Hyprland raw event:", event.name);
-            if (["openlayer", "closelayer", "screencast"].includes(event.name)) return;
-            updateAll()
+            if (event.name === "screencast") return;
+            pendingEvent = event.name;
+            debounceTimer.restart();
+        }
+    }
+
+    Timer {
+        id: debounceTimer
+        interval: 250
+        onTriggered: {
+            const ev = pendingEvent;
+            pendingEvent = "";
+
+            const windowEvents = [
+                "activewindowv2", "changefloatingmin", "movewindowv2",
+                "windowtitlev2", "fullscreen", "pin", "forcenorender",
+                "togglespecialworkspace"
+            ];
+            const workspaceEvents = [
+                "workspacev2", "createworkspace", "destroyworkspace",
+                "moveworkspace"
+            ];
+            const monitorEvents = ["monitoradded", "monitorremoved"];
+            const layerEvents = ["openlayer", "closelayer"];
+
+            if (windowEvents.includes(ev)) {
+                updateWindowList();
+            } else if (workspaceEvents.includes(ev)) {
+                updateWorkspaces();
+                updateActiveWorkspace();
+            } else if (monitorEvents.includes(ev)) {
+                updateMonitors();
+            } else if (layerEvents.includes(ev)) {
+                updateLayers();
+            } else {
+                updateAll();
+            }
         }
     }
 
