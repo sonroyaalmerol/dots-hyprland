@@ -12,9 +12,9 @@ import (
 
 	"github.com/godbus/dbus/v5"
 	"github.com/rajveermalviya/go-wayland/wayland/client"
-	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/idle/dbusutil"
-	protocol "github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/idle/protocol"
-	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/waylandutil"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/idle/dbusutil"
+	protocol "github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/idle/protocol"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/waylandutil"
 )
 
 // Config holds tunable idle parameters.

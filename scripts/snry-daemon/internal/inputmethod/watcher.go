@@ -5,8 +5,8 @@ import (
 	"log"
 
 	"github.com/rajveermalviya/go-wayland/wayland/client"
-	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/inputmethod/protocol"
-	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/waylandutil"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/inputmethod/protocol"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/waylandutil"
 )
 
 // Watcher monitors zwp_input_method_v2 activate/deactivate events on the

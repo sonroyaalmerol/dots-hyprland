@@ -13,8 +13,8 @@ cursor-style-blink = true
 window-padding-x = 21
 window-padding-y = 21
 
-# Let Hyprland handle Super+Q (close window) instead of Ghostty intercepting it
-keybind = super+q=unbind
+# Pass Super+Q through to Hyprland (close window) instead of Ghostty consuming it
+keybind = super+q=ignore
 
 # Use zsh shell
 command = zsh
