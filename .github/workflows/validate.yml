@@ -1,4 +1,4 @@
-name: Validate
+name: CI
 
 on:
   push:
@@ -6,40 +6,87 @@ on:
   pull_request:
 
 jobs:
-  validate:
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ansible-core
-        run: pip install ansible-core
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
 
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install community.general ansible.posix
+      - name: Build
+        run: go build ./...
 
-      - name: Validate YAML syntax
+      - name: Vet
+        run: go vet ./...
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Test
+        run: go test -race -count=1 ./...
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          args: --timeout=5m
+
+  pkgbuild:
+    name: PKGBUILD
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate PKGBUILD shell syntax
+        run: bash -n PKGBUILD
+
+      - name: Validate install script shell syntax
+        run: bash -n snry-shell-qs.install
+
+      - name: Check PKGBUILD variables
         run: |
-          python3 -c "
-          import yaml, glob, sys
-          files = ['setup.yml', 'group_vars/all.yml'] + glob.glob('roles/*/tasks/*.yml')
-          errors = []
-          for f in files:
-            try:
-              yaml.safe_load(open(f))
-            except Exception as e:
-              errors.append(f'{f}: {e}')
-          if errors:
-            for e in errors: print(e)
-            sys.exit(1)
-          print(f'All {len(files)} YAML files valid')
-          "
-
-      - name: Validate playbook syntax
-        run: ansible-playbook setup.yml --syntax-check
-
-      - name: Lint PKGBUILD
-        run: |
-          # Basic PKGBUILD validation
-          bash -n PKGBUILD
           source PKGBUILD
           echo "Package: $pkgname $pkgver-$pkgrel"
+          echo "Arch: ${arch[*]}"
+          echo "Depends: ${#depends[@]} packages"
+          echo "Make depends: ${makedepends[*]}"
+
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Check gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "Files not formatted:"
+            echo "$out"
+            exit 1
+          fi
+          echo "All files formatted correctly"
