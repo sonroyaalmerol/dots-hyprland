@@ -327,13 +327,41 @@ func syncFontconfig(cfg Config) error {
 func syncMiscConfigs(cfg Config) error {
 	var allSteps []syncengine.SyncStep
 
-	// Fuzzel, wlogout dirs
-	for _, dir := range []string{"fuzzel", "wlogout"} {
+	// Directories to sync
+	dirs := []string{"fuzzel", "wlogout", "foot", "ghostty", "Kvantum", "matugen", "mpv", "kde-material-you-colors", "zshrc.d", "xdg-desktop-portal"}
+	for _, dir := range dirs {
 		src := cfg.ConfigsDir() + "/" + dir
 		if _, err := os.Stat(src); err != nil {
 			src = cfg.RepoRoot + "/configs/" + dir
 		}
-		allSteps = append(allSteps, smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/"+dir, dir)...)
+		if _, err := os.Stat(src); err == nil {
+			allSteps = append(allSteps, smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/"+dir, dir)...)
+		}
+	}
+
+	// Individual files to sync
+	files := map[string]string{
+		"starship.toml":      "starship.toml",
+		"darklyrc":           "darklyrc",
+		"dolphinrc":          "dolphinrc",
+		"kdeglobals":         "kdeglobals",
+		"konsolerc":          "konsolerc",
+		"chrome-flags.conf":  "chrome-flags.conf",
+		"code-flags.conf":    "code-flags.conf",
+		"thorium-flags.conf": "thorium-flags.conf",
+	}
+	for filename, relPath := range files {
+		srcFile := cfg.ConfigsDir() + "/" + filename
+		if _, err := os.Stat(srcFile); err != nil {
+			srcFile = cfg.RepoRoot + "/configs/" + filename
+		}
+		if _, err := os.Stat(srcFile); err == nil {
+			allSteps = append(allSteps, syncengine.SyncStep{
+				UpstreamPath: srcFile,
+				DeployPath:   cfg.XDG.ConfigHome + "/" + filename,
+				RelPath:      relPath,
+			})
+		}
 	}
 
 	// Konsole profile
