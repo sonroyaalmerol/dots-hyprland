@@ -77,7 +77,9 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 
 	// Ensure screenshot directory exists
-	os.MkdirAll(s.cfg.ScreenshotDir, 0o755)
+	if err := os.MkdirAll(s.cfg.ScreenshotDir, 0o755); err != nil {
+		log.Printf("[brightness] failed to create screenshot dir: %v", err)
+	}
 
 	// Initial monitor detection
 	s.refreshMonitors()
@@ -142,7 +144,7 @@ func (s *Service) subscribeEvents(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("connect event socket %s: %w", sockPath, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	eventCh := make(chan string, 64)
 	doneCh := make(chan error, 1)
@@ -262,7 +264,7 @@ func (s *Service) calculateBrightness(screen string) (float64, error) {
 	}
 
 	out, err := magick.Output()
-	grim.Wait()
+	_ = grim.Wait()
 
 	if err != nil {
 		return 0, err

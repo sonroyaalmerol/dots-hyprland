@@ -75,12 +75,12 @@ func querySocket(cmd string) ([]byte, error) {
 	}
 	defer conn.Close()
 
-	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	conn.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck // best-effort deadline on Unix socket
 	if _, err := conn.Write([]byte(cmd)); err != nil {
 		return nil, fmt.Errorf("write %s: %w", cmd, err)
 	}
 
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck // best-effort deadline on Unix socket
 	var buf []byte
 	tmp := make([]byte, 4096)
 	for {

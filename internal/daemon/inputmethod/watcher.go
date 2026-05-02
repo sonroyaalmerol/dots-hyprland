@@ -36,7 +36,7 @@ func New(cb func(active bool)) (*Watcher, error) {
 	registry, err := display.GetRegistry()
 	if err != nil {
 		log.Printf("[inputmethod] cannot get registry: %v", err)
-		display.Destroy()
+		_ = display.Destroy()
 		return nil, nil
 	}
 
@@ -63,7 +63,7 @@ func New(cb func(active bool)) (*Watcher, error) {
 	// Round-trip to receive global events.
 	if err := waylandutil.Roundtrip(display); err != nil {
 		log.Printf("[inputmethod] registry round-trip failed: %v", err)
-		display.Destroy()
+		_ = display.Destroy()
 		return nil, nil
 	}
 
@@ -74,7 +74,7 @@ func New(cb func(active bool)) (*Watcher, error) {
 		if seatName == 0 {
 			log.Printf("[inputmethod] %s not advertised by compositor", seatInterface)
 		}
-		display.Destroy()
+		_ = display.Destroy()
 		return nil, nil
 	}
 
@@ -82,28 +82,28 @@ func New(cb func(active bool)) (*Watcher, error) {
 	manager := protocol.NewInputMethodManager(display.Context())
 	if err := waylandutil.FixedBind(registry, imManagerName, imInterfaceName, min(imManagerVer, imVersion), manager); err != nil {
 		log.Printf("[inputmethod] bind %s failed: %v", imInterfaceName, err)
-		display.Destroy()
+		_ = display.Destroy()
 		return nil, nil
 	}
 
 	seat := client.NewSeat(display.Context())
 	if err := waylandutil.FixedBind(registry, seatName, seatInterface, min(seatVer, seatVersion), seat); err != nil {
 		log.Printf("[inputmethod] bind %s failed: %v", seatInterface, err)
-		display.Destroy()
+		_ = display.Destroy()
 		return nil, nil
 	}
 
 	// Wait for Binds to process.
 	if err := waylandutil.Roundtrip(display); err != nil {
 		log.Printf("[inputmethod] bind round-trip failed: %v", err)
-		display.Destroy()
+		_ = display.Destroy()
 		return nil, nil
 	}
 
 	im, err := manager.GetInputMethod(seat)
 	if err != nil {
 		log.Printf("[inputmethod] GetInputMethod failed: %v", err)
-		display.Destroy()
+		_ = display.Destroy()
 		return nil, nil
 	}
 
@@ -139,10 +139,10 @@ func (w *Watcher) Run(ctx context.Context) {
 	d := w.display
 	go func() {
 		<-ctx.Done()
-		d.Context().Close()
+		_ = d.Context().Close()
 	}()
 
-	defer d.Context().Close()
+	defer func() { _ = d.Context().Close() }()
 
 	for {
 		if err := d.Context().Dispatch(); err != nil {
