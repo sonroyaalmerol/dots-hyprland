@@ -28,8 +28,7 @@ package() {
 exec /usr/bin/snry-daemon setup "$@"
 SCRIPT
 
-  # Install shared data (configs, data, frontend)
+  # Install shared data
   install -dm755 "$pkgdir/usr/share/snry-shell"
   cp -a configs data frontend "$pkgdir/usr/share/snry-shell/"
-  cp -a files files-extra "$pkgdir/usr/share/snry-shell/" 2>/dev/null || true
 }

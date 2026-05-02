@@ -168,7 +168,7 @@ func syncQuickshell(cfg Config) error {
 	dst := cfg.XDG.ConfigHome + "/quickshell"
 	if _, err := os.Stat(src); err != nil {
 		// Try old path
-		src = cfg.RepoRoot + "/files/.config/quickshell"
+		src = cfg.RepoRoot + "/configs/quickshell"
 	}
 	return SyncDirectory(context.Background(), SyncOptions{
 		Src:    src,
@@ -182,7 +182,7 @@ func syncHyprland(cfg Config) error {
 	src := cfg.ConfigsDir() + "/hypr/hyprland"
 	dst := cfg.XDG.ConfigHome + "/hypr/hyprland"
 	if _, err := os.Stat(src); err != nil {
-		src = cfg.RepoRoot + "/files/.config/hypr/hyprland"
+		src = cfg.RepoRoot + "/configs/hypr/hyprland"
 	}
 	if err := SyncDirectory(context.Background(), SyncOptions{Src: src, Dst: dst, Delete: true}); err != nil {
 		return err
@@ -193,7 +193,7 @@ func syncHyprland(cfg Config) error {
 	for _, f := range confFiles {
 		srcFile := cfg.ConfigsDir() + "/hyprland-entries/" + f
 		if _, err := os.Stat(srcFile); err != nil {
-			srcFile = cfg.RepoRoot + "/files/.config/hypr/" + f
+			srcFile = cfg.RepoRoot + "/configs/hypr/" + f
 		}
 		dstFile := cfg.XDG.ConfigHome + "/hypr/" + f
 
@@ -215,7 +215,7 @@ func syncHyprland(cfg Config) error {
 	customSrc := cfg.ConfigsDir() + "/hypr/custom"
 	customDst := cfg.XDG.ConfigHome + "/hypr/custom"
 	if _, err := os.Stat(customSrc); err != nil {
-		customSrc = cfg.RepoRoot + "/files/.config/hypr/custom"
+		customSrc = cfg.RepoRoot + "/configs/hypr/custom"
 	}
 	return SyncDirectory(context.Background(), SyncOptions{Src: customSrc, Dst: customDst, Delete: false})
 }
@@ -224,7 +224,7 @@ func syncBash(cfg Config) error {
 	src := cfg.ConfigsDir() + "/bash"
 	dst := cfg.XDG.ConfigHome + "/bash"
 	if _, err := os.Stat(src); err != nil {
-		src = cfg.RepoRoot + "/files/.config/bash"
+		src = cfg.RepoRoot + "/configs/bash"
 	}
 	if err := SyncDirectory(context.Background(), SyncOptions{Src: src, Dst: dst, Delete: true}); err != nil {
 		return err
@@ -255,9 +255,9 @@ func syncFontconfig(cfg Config) error {
 		src = cfg.ConfigsDir() + "/fontsets/" + cfg.FontsetDirName
 	}
 	if _, err := os.Stat(src); err != nil {
-		src = cfg.RepoRoot + "/files/.config/fontconfig"
+		src = cfg.RepoRoot + "/configs/fontconfig"
 		if cfg.FontsetDirName != "" {
-			src = cfg.RepoRoot + "/files-extra/fontsets/" + cfg.FontsetDirName
+			src = cfg.RepoRoot + "/configs/extra/fontsets/" + cfg.FontsetDirName
 		}
 	}
 	return SyncDirectory(context.Background(), SyncOptions{
@@ -273,7 +273,7 @@ func syncMiscConfigs(cfg Config) error {
 	for _, dir := range miscDirs {
 		src := cfg.ConfigsDir() + "/" + dir
 		if _, err := os.Stat(src); err != nil {
-			src = cfg.RepoRoot + "/files/.config/" + dir
+			src = cfg.RepoRoot + "/configs/" + dir
 		}
 		dst := cfg.XDG.ConfigHome + "/" + dir
 		if err := SyncDirectory(context.Background(), SyncOptions{Src: src, Dst: dst, Delete: true}); err != nil {
@@ -282,7 +282,7 @@ func syncMiscConfigs(cfg Config) error {
 	}
 
 	// Konsole profile
-	konsoleSrc := cfg.RepoRoot + "/files/.local/share/konsole"
+	konsoleSrc := cfg.RepoRoot + "/configs/local/share/konsole"
 	if _, err := os.Stat(konsoleSrc); err == nil {
 		_ = SyncDirectory(context.Background(), SyncOptions{
 			Src: konsoleSrc, Dst: cfg.XDG.DataHome + "/konsole", Delete: true,
@@ -395,7 +395,7 @@ func installGoogleSansFlex(cfg Config) error {
 }
 
 func installIcon(cfg Config) error {
-	src := cfg.RepoRoot + "/files/.local/share/icons/snry-shell.svg"
+	src := cfg.RepoRoot + "/configs/local/share/icons/snry-shell.svg"
 	dst := cfg.XDG.DataHome + "/icons/snry-shell.svg"
 	if _, err := os.Stat(src); err != nil {
 		return nil

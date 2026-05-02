@@ -168,7 +168,7 @@ func setupLogind(ctx context.Context, cfg Config) error {
 	customConf := cfg.ConfigsDir() + "/hyprland/custom/logind.conf"
 	if _, err := os.Stat(customConf); err != nil {
 		// Try the old path
-		customConf = cfg.RepoRoot + "/files/.config/hypr/custom/logind.conf"
+		customConf = cfg.RepoRoot + "/configs/hypr/custom/logind.conf"
 	}
 	if _, err := os.Stat(customConf); err != nil {
 		fmt.Println("  No custom logind.conf found, skipping.")
