@@ -8,11 +8,21 @@ post_install() {
 		return 0
 	fi
 
+	local uid
+	uid=$(id -u "$user")
+
 	echo ">>> Setting up Snry Shell for user: $user"
 
-	# System setup (we are root)
-	sudo -u "$user" XDG_RUNTIME_DIR="/run/user/$(id -u "$user")" \
-		snry-daemon setup 2>/dev/null || true
+	# Phase 1: System setup (we are root — groups, services, PAM, logind)
+	snry-daemon setups 2>/dev/null || true
+
+	# Phase 2: Config sync + daemon binary (as the user)
+	sudo -u "$user" XDG_RUNTIME_DIR="/run/user/$uid" \
+		snry-daemon files 2>/dev/null || true
+
+	# Enable the systemd user unit
+	sudo -u "$user" XDG_RUNTIME_DIR="/run/user/$uid" \
+		systemctl --user enable snry-daemon.service 2>/dev/null || true
 
 	echo ""
 	echo ">>> Snry Shell installed and configured!"

@@ -119,11 +119,28 @@ func HomeDir() string {
 	if home := os.Getenv("SUDO_HOME"); home != "" {
 		return home
 	}
-	if u := RealUser(); u != "" {
-		if home, err := os.UserHomeDir(); err == nil {
-			return home
+	u := RealUser()
+	if u != "" && u != "root" {
+		// When not running as root, prefer $HOME
+		if !IsRoot() {
+			if home, err := os.UserHomeDir(); err == nil {
+				return home
+			}
+		}
+		// Running as root — look up home from passwd entry
+		f, err := os.Open("/etc/passwd")
+		if err == nil {
+			defer f.Close()
+			scanner := bufio.NewScanner(f)
+			for scanner.Scan() {
+				fields := strings.Split(scanner.Text(), ":")
+				if len(fields) >= 6 && fields[0] == u {
+					return fields[5]
+				}
+			}
 		}
 	}
+	// Fallback
 	home, _ := os.UserHomeDir()
 	return home
 }
