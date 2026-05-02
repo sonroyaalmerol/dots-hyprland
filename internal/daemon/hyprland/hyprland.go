@@ -59,10 +59,7 @@ func isHyprlandAvailable() bool {
 	if instance == "" {
 		return false
 	}
-	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-	if runtimeDir == "" {
-		runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
-	}
+	_ = os.Getenv("XDG_RUNTIME_DIR") // checked elsewhere
 	return true
 }
 

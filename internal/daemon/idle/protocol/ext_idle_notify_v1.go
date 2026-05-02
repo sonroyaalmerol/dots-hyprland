@@ -24,7 +24,7 @@ func (i *ExtIdleNotifierV1) Destroy() error {
 	const opcode = 0
 	const _reqBufLen = 8
 	var _reqBuf [_reqBufLen]byte
-	l := 0
+	l := 0 //nolint:ineffassign
 	client.PutUint32(_reqBuf[l:4], i.ID())
 	l += 4
 	client.PutUint32(_reqBuf[l:l+4], uint32(_reqBufLen<<16|opcode&0x0000ffff))
@@ -38,7 +38,7 @@ func (i *ExtIdleNotifierV1) GetIdleNotification(timeout uint32, seat *client.Sea
 	const opcode = 1
 	const _reqBufLen = 8 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
-	l := 0
+	l := 0 //nolint:ineffassign
 	client.PutUint32(_reqBuf[l:4], i.ID())
 	l += 4
 	client.PutUint32(_reqBuf[l:l+4], uint32(_reqBufLen<<16|opcode&0x0000ffff))
@@ -58,7 +58,7 @@ func (i *ExtIdleNotifierV1) GetInputIdleNotification(timeout uint32, seat *clien
 	const opcode = 2
 	const _reqBufLen = 8 + 4 + 4 + 4
 	var _reqBuf [_reqBufLen]byte
-	l := 0
+	l := 0 //nolint:ineffassign
 	client.PutUint32(_reqBuf[l:4], i.ID())
 	l += 4
 	client.PutUint32(_reqBuf[l:l+4], uint32(_reqBufLen<<16|opcode&0x0000ffff))
@@ -93,7 +93,7 @@ func (i *ExtIdleNotificationV1) Destroy() error {
 	const opcode = 0
 	const _reqBufLen = 8
 	var _reqBuf [_reqBufLen]byte
-	l := 0
+	l := 0 //nolint:ineffassign
 	client.PutUint32(_reqBuf[l:4], i.ID())
 	l += 4
 	client.PutUint32(_reqBuf[l:l+4], uint32(_reqBufLen<<16|opcode&0x0000ffff))

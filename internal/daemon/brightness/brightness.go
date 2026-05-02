@@ -50,12 +50,6 @@ func New(cfg Config, cb func(map[string]any)) *Service {
 	}
 }
 
-func hyprSocketPath() string {
-	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-	instance := os.Getenv("HYPRLAND_INSTANCE_SIGNATURE")
-	return runtimeDir + "/hypr/" + instance + "/.socket.sock"
-}
-
 func hyprEventSocketPath() string {
 	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
 	instance := os.Getenv("HYPRLAND_INSTANCE_SIGNATURE")
