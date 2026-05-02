@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/idle"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/idle/dbusutil"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/inputmethod"
+	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/lock"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/lockscreen"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/powersave"
 	"github.com/sonroyaalmerol/dots-hyprland/scripts/snry-daemon/internal/quickshell"
@@ -28,6 +30,7 @@ import (
 
 type Config struct {
 	SocketPath       string
+	LockPath         string
 	QuickshellCfg    quickshell.Config
 	IdleCfg          idle.Config
 	LockscreenCfg    lockscreen.Config
@@ -43,6 +46,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		SocketPath:       os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.sock",
+		LockPath:         os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.lock",
 		QuickshellCfg:    quickshell.DefaultConfig(),
 		IdleCfg:          idle.DefaultConfig(),
 		LockscreenCfg:    lockscreen.DefaultConfig(),
@@ -59,6 +63,7 @@ func DefaultConfig() Config {
 type App struct {
 	cfg Config
 
+	lockFile      *os.File
 	uinput        *uinput.Keyboard
 	socketServer  *socket.Server
 	idleSvc       *idle.Service
@@ -81,6 +86,12 @@ func (a *App) HyprlandSvc() *hyprland.Service   { return a.hyprlandSvc }
 func (a *App) ResourcesSvc() *resources.Service { return a.resourcesSvc }
 
 func (a *App) Run(ctx context.Context) error {
+	lockFile, err := lock.Acquire(a.cfg.LockPath)
+	if err != nil {
+		return fmt.Errorf("singleton lock: %w", err)
+	}
+	a.lockFile = lockFile
+
 	a.uinput = uinput.NewKeyboard()
 	if err := a.uinput.Init(); err != nil {
 		log.Printf("uinput: %v (virtual keyboard disabled)", err)
@@ -162,6 +173,9 @@ func (a *App) Run(ctx context.Context) error {
 	log.Printf("shutting down...")
 	a.qsSvc.Stop()
 	a.uinput.Close()
+	if a.lockFile != nil {
+		a.lockFile.Close()
+	}
 	wg.Wait()
 	return nil
 }
