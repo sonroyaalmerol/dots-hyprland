@@ -1,66 +1,82 @@
-# Contributing
+# Contributing to snry Shell
 
-- Please, please, please, make multiple PRs if you have many features/fixes, and don't shove your personal changes along with the PR, including changed defaults
-- We can accept features that we do not personally want, but in that case we will ask you to make it configurable/optionally loaded.
-- If you want to start working on something _big_ to contribute, it might be a good idea to ask first to not waste your effort (but if you've already done it for yourself, it doesn't hurt to submit).
+Thanks for your interest in contributing to snry Shell! This document covers code style, setup instructions, and the contribution workflow.
 
-# Translations
+## Pull Requests
 
-See `files/.config/quickshell/ii/translations/tools`
+- **One feature or fix per PR.** Don't bundle unrelated changes together.
+- Don't include personal config changes or altered defaults in your PR.
+- We'll happily accept features we don't personally use — just make them configurable and optionally loaded (off by default if impractical for daily use).
+- Before starting something big, ask first. If you've already built it for yourself, submit it anyway — no harm in that.
 
-# Code
+## Translations
 
-## Dynamic loading
+See `files/.config/quickshell/ii/translations/tools` for the translation management tool suite. Refer to `translations/tools/README.md` for full documentation.
 
-- If something's not always necessary, especially when guarded by a config option to enable/disable, put it in a `Loader`
-  - Note that you will need to declare positioning properties (like `anchors`) in the `Loader`, not the `sourceComponent`
-  - When something that's to be dynamically loaded doesn't affect its parent layout, you can have a fading animation by using FadeLoader and set the `shown` prop instead of `active` and `visible`
+## Code Style
 
-## Practical concerns
+### Dynamic loading
 
-- Make sure what you add does not require significant resources for a minor purpose or harm usability just for the sake of looking nice. The dotfiles must remain practical for daily driving.
-- If there is something really fancy and impractical anyway, add a config option for it and make sure it's disabled by default (example: constantly rotating background clock)
+- If a component isn't always needed (especially when guarded by a config toggle), wrap it in a `Loader`.
+  - Declare positioning properties (like `anchors`) in the `Loader`, not the `sourceComponent`.
+  - For components that don't affect parent layout, use `FadeLoader` and its `shown` property instead of toggling `active` and `visible`.
 
-## Style
+### Practical concerns
 
-- Spaces
-  - Space properties and children data into meaningful groups. (but of course, don't use 2+ blanks in a row)
-  - Put spaces between text and operators: `if (condition) { ... } else { ... }` instead of `if(condition){ ... }else{ ... }`
-- As you can see, it's pretty easy to use lots of nesting. There's no hard limit, end-4 himself nests a lot too, but avoid/mitigate that:
-  - Prefer early return: Use something like `if (!condition) return; doStuff();` instead of `if (condition) { doStuff() }`
-  - If you feel it's a bother to refractor something into a new file, remember there's `component` to declare reusable components in the same file.
+- Don't add anything that drains significant resources for a minor visual effect. snry Shell must remain practical for daily driving.
+- If a feature is flashy but impractical, make it configurable and **disabled by default** (e.g., a constantly rotating background clock).
 
-# Setting up
+### Formatting
 
-The following instruction assumes that you have an Arch(-based) Linux system.
+- Use **spaces** for indentation.
+- Space around operators and keywords: `if (condition) { ... } else { ... }` — not `if(condition){...}else{...}`.
+- Group spacing: space properties and children into meaningful blocks, but don't use 2+ blank lines in a row.
+- Keep nesting shallow where possible:
+  - Prefer early returns: `if (!condition) return; doStuff();`
+  - Use `component` declarations to extract reusable pieces without leaving the file.
 
-## Complete
+## Development Setup
 
-_Might not be necessary depending on what you change, but this is recommended._
+These instructions assume an Arch(-based) Linux system.
 
-- Install the dotfiles via `paru -S snry-shell` or `ansible-playbook setup.yml` (if you don't wanna replace your stuff completely, do it on a new user).
-- Make changes, copy changes to a fork, create PR.
+### Full install
 
-## Partially working shell
+_Safest — gives you a working environment matching production._
 
-_Most stuff in the shell will work but not everything._
+```bash
+paru -S snry-shell-qs    # or: ansible-playbook setup.yml
+# (use a new user account if you don't want to overwrite your existing config)
+```
 
-- Install Hyprland and the development version of Quickshell (`paru -S hyprland quickshell-git`).
-- Copy `files/.config/quickshell` folder to your home directory.
+Make your changes, push to a fork, and open a PR.
 
-## Extra setup for Quickshell
+### Partial shell
 
-- Quickshell-specific LSP setup: Run `touch ~/.config/quickshell/ii/.qmlls.ini` for proper LSP support.
-- Hint for VSCode: Get the official "Qt Qml" extension, go to its settings and change custom exe path to `/usr/bin/qmlls6`.
+_Most shell features work, but not all._
 
-## Python
+```bash
+paru -S hyprland quickshell-git
+cp -r files/.config/quickshell ~/
+```
 
-If your changes involves using python package or script, please use the virtual environment created by uv as described in `data/python/README.md`.
+### Quickshell LSP setup
 
-# Running
+```bash
+touch ~/.config/quickshell/ii/.qmlls.ini
+```
 
-- Launch Hyprland (not the "uwsm-managed" one)
-- For the shell:
-  - Open `~/.config/quickshell/ii` in your code editor.
-  - In a terminal run `pkill qs; qs -c ii` to start the shell in the terminal (for logs).
-  - Make edits in the opened folder. Changes are reloaded live.
+**VS Code:** Install the official "Qt Qml" extension and set its custom executable path to `/usr/bin/qmlls6`.
+
+### Python
+
+If your changes involve Python packages or scripts, use the `uv` virtual environment as described in `data/python/README.md`.
+
+## Running
+
+1. Launch Hyprland (not the uwsm-managed variant).
+2. Open `~/.config/quickshell/ii` in your editor.
+3. Start the shell in a terminal for live logs:
+   ```bash
+   pkill qs; qs -c ii
+   ```
+4. Edit files in the opened folder — changes reload live.

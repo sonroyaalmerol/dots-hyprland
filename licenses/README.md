@@ -1,3 +1,3 @@
 # Licenses
 
-This repository contains code from other repositories. Files containing such code should include a license notice, and a copy should be stored in this folder.
+This directory contains license copies for third-party code used in snry Shell. Files incorporating such code should include an inline license notice and have a corresponding copy stored here.

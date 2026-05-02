@@ -1,7 +1,6 @@
 ## Describe your changes
 
-<!--- ONE FEATURE PER PULL REQUEST ONLY -->
+<!--- ONE FEATURE / FIX PER PULL REQUEST -->
 
-## Is it ready? Questions/feedback needed?
-
+## Is it ready? Questions / feedback needed?
 

@@ -1,12 +1,12 @@
-# App Drawer Feature Architecture
+# App Drawer — Architecture
 
-## 1. Overview
+## Overview
 
 An Android-style full-screen app drawer overlay that shows all installed applications in a scrollable grid, with a top row of pinned favorite apps. It is a distinct interaction from the existing start menu / search overlay — it's a **pure browsing surface** for visually scanning and launching apps without typing.
 
 ---
 
-## 2. New Files
+## New Files
 
 | # | Path | Responsibility |
 |---|------|---------------|
@@ -20,7 +20,7 @@ An Android-style full-screen app drawer overlay that shows all installed applica
 
 ---
 
-## 3. Existing Files to Modify
+## Existing Files to Modify
 
 | File | Change |
 |------|--------|
@@ -31,7 +31,7 @@ An Android-style full-screen app drawer overlay that shows all installed applica
 
 ---
 
-## 4. Trigger Mechanism
+## Trigger Mechanism
 
 ### Primary: Keybind (GlobalShortcut)
 
@@ -51,13 +51,13 @@ Default keybind suggestion: `Super+A` or a dedicated keybind configured by the u
 
 Touchpad swipe-up gestures require **snry-daemon** changes (see section 9) because QML/Wayland does not expose multi-finger gesture events to layer surfaces. The daemon would listen for `libinput` gesture events and call `quickshell appDrawer toggle` via the existing `IpcHandler` pattern.
 
-### Tertiary: Bar/Dock button
+### Tertiary: Bar / Dock button
 
 Both the ii bar and waffle bar can include a small launcher button that calls `GlobalStates.appDrawerOpen = !GlobalStates.appDrawerOpen`. This is a trivial addition inside each bar's button row.
 
 ---
 
-## 5. Panel Lifecycle (Opening / Closing)
+## Panel Lifecycle (Opening / Closing)
 
 Follows the exact pattern from `WaffleStartMenu.qml`:
 
@@ -101,7 +101,7 @@ An `IpcHandler` with `target: "appDrawer"` provides `toggle()`, `open()`, `close
 
 ---
 
-## 6. Pinning Integration
+## Pinning Integration
 
 **Reuse `LauncherApps`** (the existing singleton in `ii/services/LauncherApps.qml`) rather than introducing a separate pinned list.
 
@@ -116,7 +116,7 @@ If in the future a user wants separate pin lists per surface, we can add `Config
 
 ---
 
-## 7. Relationship to Existing Start Menu / Search
+## Relationship to Existing Start Menu / Search
 
 | Feature | Start Menu (Waffle) | Search (ii) | App Drawer (new) |
 |---------|-------------------|-------------|-------------------|
@@ -143,7 +143,7 @@ onSearchOpenChanged: {
 
 ---
 
-## 8. Internal Architecture
+## Internal Architecture
 
 ### `AppDrawerContent.qml`
 
@@ -182,7 +182,7 @@ onSearchOpenChanged: {
 
 ---
 
-## 9. Daemon Changes Required
+## Daemon Changes Required
 
 For **touchpad gesture support** only. The core feature (keybind-triggered) is pure QML.
 
@@ -193,7 +193,7 @@ For **touchpad gesture support** only. The core feature (keybind-triggered) is p
 
 ---
 
-## 10. Config Schema
+## Config Schema
 
 Add inside `configOptionsJsonAdapter` in `Config.qml`:
 
@@ -211,7 +211,7 @@ property JsonObject appDrawer: JsonObject {
 
 ---
 
-## 11. Key Design Decisions & Rationale
+## Key Design Decisions & Rationale
 
 1. **Shared module, not family-specific**: The drawer is a fundamental DE interaction (like overview, lock, OSK). Putting it in `common/panels/` means both families get it immediately. Visual differences (fonts, colors) are already handled by `Appearance.qml` / `Looks.qml` which are family-aware singletons.
 
