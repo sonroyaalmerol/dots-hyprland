@@ -298,24 +298,29 @@ func syncMiscConfigs(cfg Config) error {
 }
 
 func installDaemonBinary(cfg Config) error {
-	// Check for locally built binary first
 	localBin := cfg.XDG.BinHome + "/snry-daemon"
 
-	// Try to build from source
-	srcDir := cfg.RepoRoot
-	if _, err := os.Stat(srcDir + "/cmd/snry-daemon/main.go"); err == nil {
-		fmt.Println("  Building snry-daemon from source...")
-		cmd := exec.Command("go", "build", "-o", localBin, "./cmd/snry-daemon")
-		cmd.Dir = srcDir
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
+	// If already installed system-wide, just symlink
+	systemBin := "/usr/bin/snry-daemon"
+	if _, err := os.Stat(systemBin); err == nil {
+		_ = os.Remove(localBin)
+		if err := os.Symlink(systemBin, localBin); err != nil {
+			fmt.Printf("  Linked %s -> %s\n", localBin, systemBin)
+		}
+		return nil
 	}
 
-	// Fall back to package-installed binary
-	pkgBin := "/usr/share/snry-shell/scripts/snry-daemon/snry-daemon"
-	if _, err := os.Stat(pkgBin); err == nil {
-		return CopyFile(context.Background(), pkgBin, localBin, 0o755)
+	// Try to build from source (dev mode)
+	srcDir := cfg.RepoRoot
+	if _, err := os.Stat(srcDir + "/cmd/snry-daemon/main.go"); err == nil {
+		if _, err := os.Stat(srcDir + "/go.mod"); err == nil {
+			fmt.Println("  Building snry-daemon from source...")
+			cmd := exec.Command("go", "build", "-o", localBin, "./cmd/snry-daemon")
+			cmd.Dir = srcDir
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
+		}
 	}
 
 	fmt.Println("  No snry-daemon source or package binary found, skipping.")

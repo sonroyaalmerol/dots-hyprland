@@ -6,7 +6,7 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/snry-daemon daemon
+ExecStart=/usr/bin/snry-daemon daemon
 Restart=on-failure
 RestartSec=5
 
