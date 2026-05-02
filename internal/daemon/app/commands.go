@@ -112,5 +112,11 @@ func dispatchCommand(a *App, line string) {
 		if a.cliphistSvc != nil {
 			go a.cliphistSvc.Wipe(context.Background())
 		}
+	case "autoscale":
+		go a.handleAutoscale()
+	case "checkdeps":
+		go a.handleCheckdeps()
+	case "diagnose":
+		go a.handleDiagnose()
 	}
 }

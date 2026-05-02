@@ -121,6 +121,12 @@ func FilesSteps(cfg Config) []Step {
 			Optional: true,
 		},
 		{
+			Name: "deploy-systemd-user-unit",
+			Fn: func(ctx context.Context) error {
+				return deploySystemdUnit(cfg)
+			},
+		},
+		{
 			Name: "start-quickshell",
 			Fn: func(ctx context.Context) error {
 				return startQuickshell()
@@ -444,5 +450,27 @@ func startQuickshell() error {
 		cmd.Stderr = os.Stderr
 		return cmd.Start()
 	}
+	return nil
+}
+
+func deploySystemdUnit(cfg Config) error {
+	src := cfg.ConfigsDir() + "/systemd/user/snry-daemon.service"
+	if _, err := os.Stat(src); err != nil {
+		fmt.Println("  No systemd unit found, skipping.")
+		return nil
+	}
+
+	userDir := cfg.XDG.ConfigHome + "/systemd/user"
+	if err := EnsureDir(userDir, 0o755); err != nil {
+		return err
+	}
+
+	dst := userDir + "/snry-daemon.service"
+	if err := CopyFile(context.Background(), src, dst, 0o644); err != nil {
+		return fmt.Errorf("deploy systemd unit: %w", err)
+	}
+
+	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	fmt.Println("  Deployed snry-daemon.service to systemd user directory.")
 	return nil
 }

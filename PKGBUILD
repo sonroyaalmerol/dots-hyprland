@@ -31,4 +31,7 @@ SCRIPT
   # Install shared data
   install -dm755 "$pkgdir/usr/share/snry-shell"
   cp -a configs data frontend "$pkgdir/usr/share/snry-shell/"
+
+  # Install systemd user unit
+  install -Dm644 configs/systemd/user/snry-daemon.service "$pkgdir/usr/lib/systemd/user/snry-daemon.service"
 }

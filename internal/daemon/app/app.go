@@ -26,6 +26,8 @@ import (
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/uinput"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/updates"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/weather"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/manager"
+	"path/filepath"
 )
 
 type Config struct {
@@ -390,6 +392,74 @@ func (a *App) onPowerState(suspended bool) {
 		"event": "power_state",
 		"data":  map[string]bool{"suspended": suspended},
 	})
+}
+
+func (a *App) handleAutoscale() {
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "autoscale_start",
+	})
+	err := manager.Autoscale(context.Background())
+	if err != nil {
+		a.socketServer.Emitter().Emit(map[string]any{
+			"event": "autoscale_error",
+			"data":  map[string]string{"error": err.Error()},
+		})
+		return
+	}
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "autoscale_done",
+	})
+}
+
+func (a *App) handleCheckdeps() {
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "checkdeps_start",
+	})
+	// Use the repo root from the running daemon's location
+	repoRoot := a.repoRoot()
+	cfg := manager.DefaultConfig(repoRoot)
+	err := manager.CheckDeps(context.Background(), cfg)
+	if err != nil {
+		a.socketServer.Emitter().Emit(map[string]any{
+			"event": "checkdeps_error",
+			"data":  map[string]string{"error": err.Error()},
+		})
+		return
+	}
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "checkdeps_done",
+	})
+}
+
+func (a *App) handleDiagnose() {
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "diagnose_start",
+	})
+	repoRoot := a.repoRoot()
+	cfg := manager.DefaultConfig(repoRoot)
+	err := manager.Diagnose(context.Background(), cfg)
+	if err != nil {
+		a.socketServer.Emitter().Emit(map[string]any{
+			"event": "diagnose_error",
+			"data":  map[string]string{"error": err.Error()},
+		})
+		return
+	}
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "diagnose_done",
+	})
+}
+
+func (a *App) repoRoot() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "."
+	}
+	shareDir := filepath.Join(filepath.Dir(exe), "..", "share", "snry-shell")
+	if _, err := os.Stat(shareDir); err == nil {
+		return shareDir
+	}
+	return "."
 }
 
 func (a *App) DispatchCommand(line string) {

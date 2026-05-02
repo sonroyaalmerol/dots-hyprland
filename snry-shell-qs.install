@@ -17,6 +17,6 @@ post_remove() {
   echo ">>> Snry Shell has been removed."
   echo ">>> Config files in ~/.config/ were NOT deleted."
   echo ">>> To fully clean up, run (before removing this package):"
-  echo ">>>   snry-shell --tags uninstall"
+  echo ">>>   snry-daemon uninstall"
   echo ""
 }

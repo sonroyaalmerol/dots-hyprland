@@ -24,6 +24,12 @@ Singleton {
 	signal lockStateChanged(bool locked)
 	signal authResult(var data)
 	signal lockoutTick(int remainingSeconds)
+	signal autoscaleDone()
+	signal autoscaleError(string error)
+	signal checkdepsDone()
+	signal checkdepsError(string error)
+	signal diagnoseDone()
+	signal diagnoseError(string error)
 
 	property bool connected: false
 	property string accumulatedText: ""
@@ -116,6 +122,18 @@ Singleton {
 			authResult(obj.data)
 		} else if (obj.event === "lockout_tick" && obj.data) {
 			lockoutTick(obj.data.remainingSeconds || 0)
+		} else if (obj.event === "autoscale_done") {
+			autoscaleDone()
+		} else if (obj.event === "autoscale_error" && obj.data) {
+			autoscaleError(obj.data.error || "unknown error")
+		} else if (obj.event === "checkdeps_done") {
+			checkdepsDone()
+		} else if (obj.event === "checkdeps_error" && obj.data) {
+			checkdepsError(obj.data.error || "unknown error")
+		} else if (obj.event === "diagnose_done") {
+			diagnoseDone()
+		} else if (obj.event === "diagnose_error" && obj.data) {
+			diagnoseError(obj.data.error || "unknown error")
 		}
 	}
 }
