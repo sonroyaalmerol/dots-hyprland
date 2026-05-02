@@ -3,8 +3,6 @@ package syncengine
 import (
 	"os"
 	"strings"
-
-	"github.com/sonroyaalmerol/snry-shell-qs/internal/manager"
 )
 
 type TemplateVars struct {
@@ -21,22 +19,22 @@ type TemplateVars struct {
 	Custom     map[string]string
 }
 
-func ResolveTemplateVars(cfg manager.Config) TemplateVars {
+func ResolveTemplateVars(home, configDir, dataDir, stateDir, binDir, cacheDir, runtimeDir, venvPath, fontset string) TemplateVars {
 	user := os.Getenv("USER")
 	if user == "" {
 		user = os.Getenv("LOGNAME")
 	}
 	return TemplateVars{
 		User:       user,
-		Home:       cfg.Home,
-		ConfigDir:  cfg.XDG.ConfigHome,
-		DataDir:    cfg.XDG.DataHome,
-		StateDir:   cfg.XDG.StateHome,
-		BinDir:     cfg.XDG.BinHome,
-		CacheDir:   cfg.XDG.CacheHome,
-		RuntimeDir: cfg.XDG.RuntimeDir,
-		VenvPath:   cfg.VenvPath(),
-		Fontset:    cfg.FontsetDirName,
+		Home:       home,
+		ConfigDir:  configDir,
+		DataDir:    dataDir,
+		StateDir:   stateDir,
+		BinDir:     binDir,
+		CacheDir:   cacheDir,
+		RuntimeDir: runtimeDir,
+		VenvPath:   venvPath,
+		Fontset:    fontset,
 		Custom:     make(map[string]string),
 	}
 }

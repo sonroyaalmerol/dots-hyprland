@@ -6,8 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/platform"
+	syncengine "github.com/sonroyaalmerol/snry-shell-qs/internal/syncengine"
 )
 
 // FilesSteps returns steps for syncing config files to XDG directories.
@@ -17,6 +19,12 @@ func FilesSteps(cfg Config) []Step {
 			Name: "create-xdg-dirs",
 			Fn: func(ctx context.Context) error {
 				return createXDGDirs(cfg)
+			},
+		},
+		{
+			Name: "ensure-sync-manifest",
+			Fn: func(ctx context.Context) error {
+				return syncengine.EnsureManifest(cfg.DotsConfDir() + "/sync-manifest.json")
 			},
 		},
 		{
@@ -169,90 +177,136 @@ func backupConfigs(cfg Config) error {
 	return nil
 }
 
+func smartSyncSteps(cfg Config, srcDir string, dstDir string, relPrefix string) []syncengine.SyncStep {
+	var steps []syncengine.SyncStep
+	filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		rel := strings.TrimPrefix(path, srcDir+"/")
+		steps = append(steps, syncengine.SyncStep{
+			UpstreamPath: path,
+			DeployPath:   dstDir + "/" + rel,
+			RelPath:      relPrefix + "/" + rel,
+		})
+		return nil
+	})
+	return steps
+}
+
+func runSmartSync(cfg Config, steps []syncengine.SyncStep) error {
+	engine := syncengine.New(syncengine.Config{
+		ManifestPath: cfg.DotsConfDir() + "/sync-manifest.json",
+		Variables:    syncengine.ResolveTemplateVars(cfg.Home, cfg.XDG.ConfigHome, cfg.XDG.DataHome, cfg.XDG.StateHome, cfg.XDG.BinHome, cfg.XDG.CacheHome, cfg.XDG.RuntimeDir, cfg.VenvPath(), cfg.FontsetDirName),
+		Categorizer:  syncengine.DefaultCategorizer(),
+	})
+	results := engine.Run(context.Background(), steps)
+	var errs []string
+	for _, r := range results {
+		if r.Err != nil {
+			fmt.Fprintf(os.Stderr, "  [sync] %s: %v\n", r.RelPath, r.Err)
+			errs = append(errs, r.RelPath)
+		} else if r.Conflict != nil {
+			fmt.Fprintf(os.Stderr, "  [conflict] %s: %s\n", r.RelPath, r.Conflict.Reason)
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("sync failed for %d files", len(errs))
+	}
+	return nil
+}
+
 func syncQuickshell(cfg Config) error {
 	src := cfg.ConfigsDir() + "/quickshell"
-	dst := cfg.XDG.ConfigHome + "/quickshell"
 	if _, err := os.Stat(src); err != nil {
-		// Try old path
 		src = cfg.RepoRoot + "/configs/quickshell"
 	}
-	return SyncDirectory(context.Background(), SyncOptions{
-		Src:    src,
-		Dst:    dst,
-		Delete: true,
-	})
+	steps := smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/quickshell", "quickshell")
+	return runSmartSync(cfg, steps)
 }
 
 func syncHyprland(cfg Config) error {
-	// Sync hyprland config dir
-	src := cfg.ConfigsDir() + "/hypr/hyprland"
-	dst := cfg.XDG.ConfigHome + "/hypr/hyprland"
-	if _, err := os.Stat(src); err != nil {
-		src = cfg.RepoRoot + "/configs/hypr/hyprland"
-	}
-	if err := SyncDirectory(context.Background(), SyncOptions{Src: src, Dst: dst, Delete: true}); err != nil {
-		return err
-	}
+	var allSteps []syncengine.SyncStep
 
-	// Individual config files (only overwrite if firstrun or force)
-	confFiles := []string{"hyprlock.conf", "monitors.conf", "workspaces.conf", "hyprland.conf", "hypridle.conf"}
+	// Sync hyprland config dir
+	hyprlandSrc := cfg.ConfigsDir() + "/hypr/hyprland"
+	if _, err := os.Stat(hyprlandSrc); err != nil {
+		hyprlandSrc = cfg.RepoRoot + "/configs/hypr/hyprland"
+	}
+	allSteps = append(allSteps, smartSyncSteps(cfg, hyprlandSrc, cfg.XDG.ConfigHome+"/hypr/hyprland", "hypr/hyprland")...)
+
+	// Individual config files
+	confFiles := []string{"hyprlock.conf", "hyprland.conf", "hypridle.conf"}
 	for _, f := range confFiles {
 		srcFile := cfg.ConfigsDir() + "/hyprland-entries/" + f
 		if _, err := os.Stat(srcFile); err != nil {
 			srcFile = cfg.RepoRoot + "/configs/hypr/" + f
 		}
-		dstFile := cfg.XDG.ConfigHome + "/hypr/" + f
-
-		if !cfg.Force && !cfg.IsFirstrun() {
-			if _, err := os.Stat(dstFile); err == nil {
-				continue // skip if already exists
-			}
+		if _, err := os.Stat(srcFile); err != nil {
+			continue
 		}
+		allSteps = append(allSteps, syncengine.SyncStep{
+			UpstreamPath: srcFile,
+			DeployPath:   cfg.XDG.ConfigHome + "/hypr/" + f,
+			RelPath:      "hypr/" + f,
+		})
+	}
 
-		if err := CopyFile(context.Background(), srcFile, dstFile, 0o644); err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return fmt.Errorf("copy %s: %w", f, err)
+	// monitors.conf and workspaces.conf (skip-if-exists via categorizer)
+	for _, f := range []string{"monitors.conf", "workspaces.conf"} {
+		srcFile := cfg.ConfigsDir() + "/hyprland-entries/" + f
+		if _, err := os.Stat(srcFile); err != nil {
+			srcFile = cfg.RepoRoot + "/configs/hypr/" + f
 		}
+		if _, err := os.Stat(srcFile); err != nil {
+			continue
+		}
+		allSteps = append(allSteps, syncengine.SyncStep{
+			UpstreamPath: srcFile,
+			DeployPath:   cfg.XDG.ConfigHome + "/hypr/" + f,
+			RelPath:      "hypr/" + f,
+		})
 	}
 
 	// Custom dir (don't delete existing)
 	customSrc := cfg.ConfigsDir() + "/hypr/custom"
-	customDst := cfg.XDG.ConfigHome + "/hypr/custom"
 	if _, err := os.Stat(customSrc); err != nil {
 		customSrc = cfg.RepoRoot + "/configs/hypr/custom"
 	}
-	return SyncDirectory(context.Background(), SyncOptions{Src: customSrc, Dst: customDst, Delete: false})
+	allSteps = append(allSteps, smartSyncSteps(cfg, customSrc, cfg.XDG.ConfigHome+"/hypr/custom", "hypr/custom")...)
+
+	return runSmartSync(cfg, allSteps)
 }
 
 func syncBash(cfg Config) error {
-	src := cfg.ConfigsDir() + "/bash"
-	dst := cfg.XDG.ConfigHome + "/bash"
-	if _, err := os.Stat(src); err != nil {
-		src = cfg.RepoRoot + "/configs/bash"
-	}
-	if err := SyncDirectory(context.Background(), SyncOptions{Src: src, Dst: dst, Delete: true}); err != nil {
-		return err
+	bashSrc := cfg.ConfigsDir() + "/bash"
+	if _, err := os.Stat(bashSrc); err != nil {
+		bashSrc = cfg.RepoRoot + "/configs/bash"
 	}
 
-	// Install dotfiles
-	files := map[string]string{
+	var allSteps []syncengine.SyncStep
+	allSteps = append(allSteps, smartSyncSteps(cfg, bashSrc, cfg.XDG.ConfigHome+"/bash", "bash")...)
+
+	// Install dotfiles to home dir
+	dotfiles := map[string]string{
 		"bashrc":       cfg.Home + "/.bashrc",
 		"bash_profile": cfg.Home + "/.bash_profile",
 		"zprofile":     cfg.Home + "/.zprofile",
 		"inputrc":      cfg.Home + "/.inputrc",
 	}
-	for name, dstPath := range files {
-		srcPath := src + "/" + name
+	for name, dstPath := range dotfiles {
+		srcPath := bashSrc + "/" + name
 		if _, err := os.Stat(srcPath); err != nil {
 			continue
 		}
-		if err := CopyFile(context.Background(), srcPath, dstPath, 0o644); err != nil {
-			fmt.Fprintf(os.Stderr, "  [warn] copy %s: %v\n", name, err)
-		}
+		allSteps = append(allSteps, syncengine.SyncStep{
+			UpstreamPath: srcPath,
+			DeployPath:   dstPath,
+			RelPath:      "bash/" + name,
+		})
 	}
-	return nil
+
+	return runSmartSync(cfg, allSteps)
 }
 
 func syncFontconfig(cfg Config) error {
@@ -266,35 +320,32 @@ func syncFontconfig(cfg Config) error {
 			src = cfg.RepoRoot + "/configs/extra/fontsets/" + cfg.FontsetDirName
 		}
 	}
-	return SyncDirectory(context.Background(), SyncOptions{
-		Src:    src,
-		Dst:    cfg.XDG.ConfigHome + "/fontconfig",
-		Delete: true,
-	})
+	steps := smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/fontconfig", "fontconfig")
+	return runSmartSync(cfg, steps)
 }
 
 func syncMiscConfigs(cfg Config) error {
-	// Fuzzel, wlogout, etc.
-	miscDirs := []string{"fuzzel", "wlogout"}
-	for _, dir := range miscDirs {
+	var allSteps []syncengine.SyncStep
+
+	// Fuzzel, wlogout dirs
+	for _, dir := range []string{"fuzzel", "wlogout"} {
 		src := cfg.ConfigsDir() + "/" + dir
 		if _, err := os.Stat(src); err != nil {
 			src = cfg.RepoRoot + "/configs/" + dir
 		}
-		dst := cfg.XDG.ConfigHome + "/" + dir
-		if err := SyncDirectory(context.Background(), SyncOptions{Src: src, Dst: dst, Delete: true}); err != nil {
-			fmt.Fprintf(os.Stderr, "  [warn] sync %s: %v\n", dir, err)
-		}
+		allSteps = append(allSteps, smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/"+dir, dir)...)
 	}
 
 	// Konsole profile
 	konsoleSrc := cfg.RepoRoot + "/configs/local/share/konsole"
 	if _, err := os.Stat(konsoleSrc); err == nil {
-		_ = SyncDirectory(context.Background(), SyncOptions{
-			Src: konsoleSrc, Dst: cfg.XDG.DataHome + "/konsole", Delete: true,
-		})
+		allSteps = append(allSteps, smartSyncSteps(cfg, konsoleSrc, cfg.XDG.DataHome+"/konsole", "konsole")...)
 	}
-	return nil
+
+	if len(allSteps) == 0 {
+		return nil
+	}
+	return runSmartSync(cfg, allSteps)
 }
 
 func installDaemonBinary(cfg Config) error {
