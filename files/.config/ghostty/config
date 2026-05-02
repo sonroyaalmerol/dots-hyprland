@@ -13,6 +13,9 @@ cursor-style-blink = true
 window-padding-x = 21
 window-padding-y = 21
 
+# Touch scroll sensitivity (too fast by default)
+mouse-scroll-multiplier = precision:0.3
+
 # Pass Super+Q through to Hyprland (close window) instead of Ghostty consuming it
 keybind = super+q=ignore
 

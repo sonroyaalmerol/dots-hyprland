@@ -10,13 +10,13 @@ An Android-style full-screen app drawer overlay that shows all installed applica
 
 | # | Path | Responsibility |
 |---|------|---------------|
-| 1 | `ii/modules/common/panels/appDrawer/AppDrawer.qml` | Full-screen PanelWindow overlay (entry point; `Scope` with `Loader` + `PanelWindow` + `HyprlandFocusGrab`, same pattern as `WaffleStartMenu.qml`) |
+| 1 | `ii/modules/common/panels/appDrawer/AppDrawer.qml` | Full-screen PanelWindow overlay (entry point; `Scope` with `Loader` + `PanelWindow` + `HyprlandFocusGrab`) |
 | 2 | `ii/modules/common/panels/appDrawer/AppDrawerContent.qml` | Content layout: search bar at top, pinned row, then scrollable all-apps grid |
 | 3 | `ii/modules/common/panels/appDrawer/AppDrawerGrid.qml` | Reusable grid component that takes a `property list<DesktopEntry> desktopEntries` and renders `AppDrawerButton` items in a `GridLayout` |
 | 4 | `ii/modules/common/panels/appDrawer/AppDrawerButton.qml` | Single app button (icon + label), right-click context menu with pin/unpin actions. Reuses `LauncherApps` for pinning. |
 | 5 | `ii/modules/common/panels/appDrawer/AppDrawerSearchBar.qml` | Lightweight search/filter bar at top of drawer (optional; filters `AppSearch.list` in-place) |
 
-**Rationale for `modules/common/panels/appDrawer/`**: The app drawer is a panel-level overlay (like lock, overview, cheatsheet), not a waffle-specific or ii-specific visual. Placing it in `common/panels/` allows both families to instantiate it with different styling wrappers if needed, while keeping the core logic shared. It parallels `common/panels/lock/` which is also shared.
+**Rationale for `modules/common/panels/appDrawer/`**: The app drawer is a panel-level overlay (like lock, overview, cheatsheet). Placing it in `common/panels/` keeps the core logic shared alongside other panels such as `common/panels/lock/`.
 
 ---
 
@@ -27,7 +27,7 @@ An Android-style full-screen app drawer overlay that shows all installed applica
 | `ii/GlobalStates.qml` | Add `property bool appDrawerOpen: false` (mirrors `searchOpen`, `overviewOpen`, etc.) |
 | `ii/modules/common/Config.qml` | Add `property JsonObject appDrawer` under `configOptionsJsonAdapter` with: `property string trigger: "swipe-up"` (values: `"swipe-up"`, `"keybind"`, `"both"`), `property int columns: 6`, `property int pinnedColumns: 6`, `property bool showSearchBar: true`, `property bool enabled: true` |
 | `ii/panelFamilies/IllogicalImpulseFamily.qml` | Add `PanelLoader { component: AppDrawer {} }` |
-| `ii/panelFamilies/WaffleFamily.qml` | Add `PanelLoader { component: AppDrawer {} }` |
+
 
 ---
 
@@ -53,13 +53,11 @@ Touchpad swipe-up gestures require **snry-daemon** changes (see section 9) becau
 
 ### Tertiary: Bar / Dock button
 
-Both the ii bar and waffle bar can include a small launcher button that calls `GlobalStates.appDrawerOpen = !GlobalStates.appDrawerOpen`. This is a trivial addition inside each bar's button row.
+The bar can include a small launcher button that calls `GlobalStates.appDrawerOpen = !GlobalStates.appDrawerOpen`. This is a trivial addition inside the bar's button row.
 
 ---
 
 ## Panel Lifecycle (Opening / Closing)
-
-Follows the exact pattern from `WaffleStartMenu.qml`:
 
 ```qml
 // AppDrawer.qml (Scope)
@@ -110,21 +108,19 @@ An `IpcHandler` with `target: "appDrawer"` provides `toggle()`, `open()`, `close
 - `LauncherApps.moveToFront/moveLeft/moveRight(appId)` — reorder
 - `Config.options.launcher.pinnedApps` — the persisted list
 
-The app drawer's pinned section renders the same data as the waffle start menu's pinned section: `Config.options.launcher.pinnedApps.map(id => DesktopEntries.byId(id))`. This means pinning from either surface (drawer or start menu) affects both. This is desirable — the user's "favorites" are a single canonical set.
-
-If in the future a user wants separate pin lists per surface, we can add `Config.options.appDrawer.pinnedApps` as a separate array. But for V1, reusing `launcher.pinnedApps` avoids config duplication and mental model confusion.
+The app drawer's pinned section renders `Config.options.launcher.pinnedApps.map(id => DesktopEntries.byId(id))`.
 
 ---
 
 ## Relationship to Existing Start Menu / Search
 
-| Feature | Start Menu (Waffle) | Search (ii) | App Drawer (new) |
-|---------|-------------------|-------------|-------------------|
-| Invoked by | Super key (press/release) | Super key (press/release) | Super+A or swipe-up |
-| Primary UX | Search-first, with pinned + all-apps tabs | Search-only | Browse-first, no typing required |
-| Full-screen | No (panel-sized) | No (panel-sized) | Yes |
-| Grid layout | Small grid in tab | N/A | Large full-screen grid |
-| Pinned apps | Same list (`launcher.pinnedApps`) | N/A | Same list |
+| Feature | Search (ii) | App Drawer (new) |
+|---------|-------------|-------------------|
+| Invoked by | Super key (press/release) | Super+A or swipe-up |
+| Primary UX | Search-only | Browse-first, no typing required |
+| Full-screen | No (panel-sized) | Yes |
+| Grid layout | N/A | Large full-screen grid |
+| Pinned apps | N/A | Same list |
 
 The app drawer is designed to **co-exist** with both. When `GlobalStates.appDrawerOpen` becomes `true`, we should also set `GlobalStates.searchOpen = false` (and vice versa) to prevent overlapping overlays. This is the same mutual exclusion pattern used by other globals — add to `GlobalStates`:
 
@@ -167,18 +163,18 @@ onSearchOpenChanged: {
 └─────────────────────────────────────────┘
 ```
 
-- **Background**: Semi-transparent blur overlay (same approach as `WaffleBackground.qml` — layer at `WlrLayer.Bottom` with darkened scrim, or a translucent `Item` with `MultiEffect { blur ... }` inside the panel).
+- **Background**: Semi-transparent blur overlay — layer at `WlrLayer.Bottom` with darkened scrim, or a translucent `Item` with `MultiEffect { blur ... }` inside the panel.
 - **Search bar**: Filters `AppSearch.list` using `AppSearch.fuzzyQuery()`. When empty, shows all apps. Optional per config.
 - **Pinned section**: Uses `Config.options.launcher.pinnedApps` → `DesktopEntries.byId()` lookups.
 - **All-apps grid**: Uses `AppSearch.list` (already deduped desktop entries). Alphabetically sorted.
-- **AppDrawerButton**: Adapted from `StartAppButton.qml` but with larger icon size (48px vs 34px) for touch-friendly targets.
+- **AppDrawerButton**: Larger icon size (48px) for touch-friendly targets.
 
 ### Keyboard Navigation
 
 - `Esc` closes the drawer
 - Arrow keys move focus between grid cells
 - `Enter` launches the focused app
-- Typing characters auto-focuses the search bar and filters (same pattern as `StartMenuContent.qml`)
+- Typing characters auto-focuses the search bar and filters
 
 ---
 
@@ -213,7 +209,7 @@ property JsonObject appDrawer: JsonObject {
 
 ## Key Design Decisions & Rationale
 
-1. **Shared module, not family-specific**: The drawer is a fundamental DE interaction (like overview, lock, OSK). Putting it in `common/panels/` means both families get it immediately. Visual differences (fonts, colors) are already handled by `Appearance.qml` / `Looks.qml` which are family-aware singletons.
+1. **Shared module in `common/panels/`**: The drawer is a fundamental DE interaction (like overview, lock, OSK). Placing it here alongside other shared panels keeps the logic centralized.
 
 2. **Reuse `LauncherApps` for pinning**: A single source of truth for "pinned apps" reduces confusion. Users expect one set of favorites. The alternative (separate drawer pinned list) creates UX inconsistency and extra config surface area for little gain.
 

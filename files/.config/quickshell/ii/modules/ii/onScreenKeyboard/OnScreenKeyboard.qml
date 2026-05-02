@@ -17,6 +17,7 @@ Scope { // Scope
     // Auto-show/hide state tracking
     property bool autoShown: false
     property bool manualDismissed: false
+    property bool overviewForcedOsk: false
 
     Timer {
         id: autoShowTimer
@@ -52,14 +53,34 @@ Scope { // Scope
         }
 
         function onEffectiveTabletModeChanged() {
-            if (!TabletMode.effectiveTabletMode && root.autoShown) {
-                // Left tablet mode — auto-hide
-                autoShowTimer.stop()
-                GlobalStates.oskOpen = false
-                root.autoShown = false
-            } else if (TabletMode.effectiveTabletMode && TabletMode.textInputActive && !root.manualDismissed && !GlobalStates.oskOpen) {
+            if (!TabletMode.effectiveTabletMode) {
+                if (root.autoShown || root.overviewForcedOsk) {
+                    // Left tablet mode — auto-hide
+                    autoShowTimer.stop()
+                    GlobalStates.oskOpen = false
+                    root.autoShown = false
+                    root.overviewForcedOsk = false
+                }
+            } else if (TabletMode.textInputActive && !root.manualDismissed && !GlobalStates.oskOpen) {
                 // Entered tablet mode with active text focus — auto-show
                 autoShowTimer.start()
+            }
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+
+        function onOverviewOpenChanged() {
+            if (GlobalStates.overviewOpen && TabletMode.effectiveTabletMode) {
+                // Overview opened in tablet mode — force OSK open
+                GlobalStates.oskOpen = true
+                root.overviewForcedOsk = true
+                root.autoShown = false
+            } else if (!GlobalStates.overviewOpen && root.overviewForcedOsk) {
+                // Overview closed — hide OSK if it was only open for overview
+                GlobalStates.oskOpen = false
+                root.overviewForcedOsk = false
             }
         }
     }

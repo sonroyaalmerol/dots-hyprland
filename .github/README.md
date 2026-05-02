@@ -31,7 +31,6 @@
 - **Anti-flashbang** — automatic brightness management
 - **Material theming** — wallpaper-driven color generation via matugen
 - **Settings app** — GUI for shell configuration
-- **Dual panel families** — "ii" (default) and "Waffle" styles, switchable live with `Super+Alt+W`
 - **Transparent install** — Ansible-driven, every command shown before execution
 
 <div align="center">
@@ -70,7 +69,6 @@ ansible-playbook setup.yml
 |---------|--------|
 | `Super` + `/` | Show keybind list |
 | `Super` + `Enter` | Open terminal |
-| `Super` + `Alt` + `W` | Switch panel family (ii ↔ Waffle) |
 
 > Full keybind list is available in-app via `Super+/`.
 
