@@ -112,7 +112,7 @@ func (m *Manager) BuildMicroTeX(ctx context.Context, pkgbuildDir string) error {
 
 	buildDir := "/tmp/build-microtex"
 	_ = os.RemoveAll(buildDir)
-	defer os.RemoveAll(buildDir)
+	defer func() { _ = os.RemoveAll(buildDir) }()
 
 	// Copy PKGBUILD to build directory
 	if err := copyDir(pkgbuildDir, buildDir); err != nil {
@@ -160,7 +160,7 @@ func (m *Manager) ensureParu(ctx context.Context) error {
 
 	buildDir := "/tmp/buildparu"
 	_ = os.RemoveAll(buildDir)
-	defer os.RemoveAll(buildDir)
+	defer func() { _ = os.RemoveAll(buildDir) }()
 
 	cloneCmd := exec.CommandContext(ctx, "git", "clone", "https://aur.archlinux.org/paru.git", buildDir)
 	if err := cloneCmd.Run(); err != nil {

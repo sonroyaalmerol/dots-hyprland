@@ -19,9 +19,11 @@ func TestDetectReturnsValidFamily(t *testing.T) {
 
 func TestHomeDir(t *testing.T) {
 	orig := os.Getenv("HOME")
-	defer os.Setenv("HOME", orig)
+	defer func() {
+		_ = os.Setenv("HOME", orig)
+	}()
 
-	os.Setenv("HOME", "/test/home")
+	_ = os.Setenv("HOME", "/test/home")
 	if got := HomeDir(); got != "/test/home" {
 		t.Errorf("got %q, want /test/home", got)
 	}
@@ -32,17 +34,17 @@ func TestRealUser(t *testing.T) {
 	origSudo := os.Getenv("SUDO_USER")
 	origUser := os.Getenv("USER")
 	defer func() {
-		os.Setenv("SUDO_USER", origSudo)
-		os.Setenv("USER", origUser)
+		_ = os.Setenv("SUDO_USER", origSudo)
+		_ = os.Setenv("USER", origUser)
 	}()
 
-	os.Unsetenv("SUDO_USER")
-	os.Setenv("USER", "testuser")
+	_ = os.Unsetenv("SUDO_USER")
+	_ = os.Setenv("USER", "testuser")
 	if got := RealUser(); got != "testuser" {
 		t.Errorf("got %q, want testuser", got)
 	}
 
-	os.Setenv("SUDO_USER", "realuser")
+	_ = os.Setenv("SUDO_USER", "realuser")
 	if got := RealUser(); got != "realuser" {
 		t.Errorf("got %q, want realuser", got)
 	}

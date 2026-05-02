@@ -37,7 +37,7 @@ func Detect() Family {
 	if err != nil {
 		return FamilyUnknown
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	id, idLike := "", ""
 	scanner := bufio.NewScanner(f)
@@ -94,7 +94,7 @@ func detectFirstNormalUser() string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {

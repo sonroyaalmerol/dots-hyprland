@@ -6,22 +6,21 @@ import (
 )
 
 func TestResolveDefaults(t *testing.T) {
-	// Save and restore env vars
 	orig := map[string]string{}
 	for _, key := range []string{
 		"XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
 		"XDG_STATE_HOME", "XDG_BIN_HOME", "HOME",
 	} {
 		orig[key] = os.Getenv(key)
-		os.Unsetenv(key)
+		_ = os.Unsetenv(key)
 	}
 	defer func() {
 		for k, v := range orig {
-			os.Setenv(k, v)
+			_ = os.Setenv(k, v)
 		}
 	}()
 
-	os.Setenv("HOME", "/home/testuser")
+	_ = os.Setenv("HOME", "/home/testuser")
 
 	p := Resolve()
 
@@ -52,15 +51,15 @@ func TestResolveOverride(t *testing.T) {
 	}
 	defer func() {
 		for k, v := range orig {
-			os.Setenv(k, v)
+			_ = os.Setenv(k, v)
 		}
 	}()
 
-	os.Setenv("XDG_CONFIG_HOME", "/custom/config")
-	os.Setenv("XDG_CACHE_HOME", "/custom/cache")
-	os.Setenv("XDG_DATA_HOME", "/custom/data")
-	os.Setenv("XDG_STATE_HOME", "/custom/state")
-	os.Setenv("XDG_BIN_HOME", "/custom/bin")
+	_ = os.Setenv("XDG_CONFIG_HOME", "/custom/config")
+	_ = os.Setenv("XDG_CACHE_HOME", "/custom/cache")
+	_ = os.Setenv("XDG_DATA_HOME", "/custom/data")
+	_ = os.Setenv("XDG_STATE_HOME", "/custom/state")
+	_ = os.Setenv("XDG_BIN_HOME", "/custom/bin")
 
 	p := Resolve()
 

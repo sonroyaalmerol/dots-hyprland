@@ -1,0 +1,27 @@
+version: "2"
+
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 5
+  exclude-rules:
+    # Pre-existing daemon runtime code — errors handled via logging, not returns
+    - path: internal/daemon/
+      linters:
+        - errcheck
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+
+  settings:
+    errcheck:
+      exclude-functions:
+        - (net.Conn).Close
+        - (*os.File).Close

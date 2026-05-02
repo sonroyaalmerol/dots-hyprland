@@ -355,9 +355,9 @@ func (e *SyncEngine) handleMergeSection(step SyncStep, decision SyncDecision, or
 }
 
 func (e *SyncEngine) handleConflict(step SyncStep, current, upstream []byte, conflict *ConflictInfo) {
-	WriteConflictBackups(step.DeployPath, current, upstream)
+	_ = WriteConflictBackups(step.DeployPath, current, upstream)
 	conflictsPath := filepathDir(step.DeployPath) + "/../snry-shell/conflicts.jsonl"
-	LogConflict(conflictsPath, *conflict)
+	_ = LogConflict(conflictsPath, *conflict)
 }
 
 func readOrigFromManifest(step SyncStep, origSHA string) []byte {
