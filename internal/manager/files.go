@@ -177,10 +177,13 @@ func backupConfigs(cfg Config) error {
 	return nil
 }
 
-func smartSyncSteps(cfg Config, srcDir string, dstDir string, relPrefix string) []syncengine.SyncStep {
+func smartSyncSteps(cfg Config, srcDir string, dstDir string, relPrefix string) ([]syncengine.SyncStep, error) {
 	var steps []syncengine.SyncStep
-	filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+	err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
 			return nil
 		}
 		rel := strings.TrimPrefix(path, srcDir+"/")
@@ -191,7 +194,10 @@ func smartSyncSteps(cfg Config, srcDir string, dstDir string, relPrefix string) 
 		})
 		return nil
 	})
-	return steps
+	if err != nil {
+		return nil, fmt.Errorf("walk %s: %w", srcDir, err)
+	}
+	return steps, nil
 }
 
 func runSmartSync(cfg Config, steps []syncengine.SyncStep) error {
@@ -221,7 +227,10 @@ func syncQuickshell(cfg Config) error {
 	if _, err := os.Stat(src); err != nil {
 		src = cfg.RepoRoot + "/configs/quickshell"
 	}
-	steps := smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/quickshell", "quickshell")
+	steps, err := smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/quickshell", "quickshell")
+	if err != nil {
+		return fmt.Errorf("scan %s: %w", src, err)
+	}
 	return runSmartSync(cfg, steps)
 }
 
@@ -233,7 +242,11 @@ func syncHyprland(cfg Config) error {
 	if _, err := os.Stat(hyprlandSrc); err != nil {
 		hyprlandSrc = cfg.RepoRoot + "/configs/hypr/hyprland"
 	}
-	allSteps = append(allSteps, smartSyncSteps(cfg, hyprlandSrc, cfg.XDG.ConfigHome+"/hypr/hyprland", "hypr/hyprland")...)
+	hyprlandSteps, err := smartSyncSteps(cfg, hyprlandSrc, cfg.XDG.ConfigHome+"/hypr/hyprland", "hypr/hyprland")
+	if err != nil {
+		return fmt.Errorf("scan %s: %w", hyprlandSrc, err)
+	}
+	allSteps = append(allSteps, hyprlandSteps...)
 
 	// Individual config files
 	confFiles := []string{"hyprlock.conf", "hyprland.conf", "hypridle.conf"}
@@ -273,7 +286,11 @@ func syncHyprland(cfg Config) error {
 	if _, err := os.Stat(customSrc); err != nil {
 		customSrc = cfg.RepoRoot + "/configs/hypr/custom"
 	}
-	allSteps = append(allSteps, smartSyncSteps(cfg, customSrc, cfg.XDG.ConfigHome+"/hypr/custom", "hypr/custom")...)
+	customSteps, err := smartSyncSteps(cfg, customSrc, cfg.XDG.ConfigHome+"/hypr/custom", "hypr/custom")
+	if err != nil {
+		return fmt.Errorf("scan %s: %w", customSrc, err)
+	}
+	allSteps = append(allSteps, customSteps...)
 
 	return runSmartSync(cfg, allSteps)
 }
@@ -285,7 +302,11 @@ func syncBash(cfg Config) error {
 	}
 
 	var allSteps []syncengine.SyncStep
-	allSteps = append(allSteps, smartSyncSteps(cfg, bashSrc, cfg.XDG.ConfigHome+"/bash", "bash")...)
+	bashSteps, err := smartSyncSteps(cfg, bashSrc, cfg.XDG.ConfigHome+"/bash", "bash")
+	if err != nil {
+		return fmt.Errorf("scan %s: %w", bashSrc, err)
+	}
+	allSteps = append(allSteps, bashSteps...)
 
 	// Install dotfiles to home dir
 	dotfiles := map[string]string{
@@ -320,7 +341,10 @@ func syncFontconfig(cfg Config) error {
 			src = cfg.RepoRoot + "/configs/extra/fontsets/" + cfg.FontsetDirName
 		}
 	}
-	steps := smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/fontconfig", "fontconfig")
+	steps, err := smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/fontconfig", "fontconfig")
+	if err != nil {
+		return fmt.Errorf("scan %s: %w", src, err)
+	}
 	return runSmartSync(cfg, steps)
 }
 
@@ -335,7 +359,11 @@ func syncMiscConfigs(cfg Config) error {
 			src = cfg.RepoRoot + "/configs/" + dir
 		}
 		if _, err := os.Stat(src); err == nil {
-			allSteps = append(allSteps, smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/"+dir, dir)...)
+			steps, err := smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/"+dir, dir)
+			if err != nil {
+				return fmt.Errorf("scan %s: %w", src, err)
+			}
+			allSteps = append(allSteps, steps...)
 		}
 	}
 
@@ -367,7 +395,11 @@ func syncMiscConfigs(cfg Config) error {
 	// Konsole profile
 	konsoleSrc := cfg.RepoRoot + "/configs/local/share/konsole"
 	if _, err := os.Stat(konsoleSrc); err == nil {
-		allSteps = append(allSteps, smartSyncSteps(cfg, konsoleSrc, cfg.XDG.DataHome+"/konsole", "konsole")...)
+		konsoleSteps, err := smartSyncSteps(cfg, konsoleSrc, cfg.XDG.DataHome+"/konsole", "konsole")
+		if err != nil {
+			return fmt.Errorf("scan %s: %w", konsoleSrc, err)
+		}
+		allSteps = append(allSteps, konsoleSteps...)
 	}
 
 	if len(allSteps) == 0 {

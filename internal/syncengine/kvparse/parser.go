@@ -5,6 +5,31 @@ import (
 	"strings"
 )
 
+// findCommentPos finds the first unquoted # or ; in the string.
+func findCommentPos(s string) int {
+	inDouble := false
+	inSingle := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if ch == '\\' && (inDouble || inSingle) && i+1 < len(s) {
+			i++ // skip escaped char
+			continue
+		}
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			continue
+		}
+		if ch == '\'' && !inDouble {
+			inSingle = !inSingle
+			continue
+		}
+		if !inDouble && !inSingle && (ch == '#' || ch == ';') {
+			return i
+		}
+	}
+	return -1
+}
+
 type KVDocument struct {
 	Sections []KVSection
 	Comments []string // leading comments before first section
@@ -75,12 +100,9 @@ func Parse(data []byte) *KVDocument {
 			key := strings.TrimSpace(trimmed[:eqIdx])
 			rest := trimmed[eqIdx+1:]
 
-			value := rest
+			value := strings.TrimSpace(rest)
 			var comment string
-			if commentIdx := strings.Index(rest, "#"); commentIdx >= 0 {
-				value = strings.TrimSpace(rest[:commentIdx])
-				comment = rest[commentIdx:]
-			} else if commentIdx := strings.Index(rest, ";"); commentIdx >= 0 {
+			if commentIdx := findCommentPos(rest); commentIdx >= 0 {
 				value = strings.TrimSpace(rest[:commentIdx])
 				comment = rest[commentIdx:]
 			}

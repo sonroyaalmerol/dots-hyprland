@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -86,9 +87,44 @@ func PersistMonitorConfig(monitors []monitor) error {
 			m.Name, m.Width, m.Height, pos, idealScale))
 	}
 
-	_ = path
+	// Read existing content
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+
+	// Replace existing monitor= lines or append
 	configLine := strings.Join(lines, "\n")
-	fmt.Printf("  Monitor config line: %s\n", configLine)
-	_ = configLine
-	return nil
+	existing := string(data)
+	if strings.Contains(existing, "monitor=") {
+		// Replace first monitor= line and remove others
+		linesSlice := strings.Split(existing, "\n")
+		var newLines []string
+		monitorWritten := false
+		for _, line := range linesSlice {
+			if strings.HasPrefix(strings.TrimSpace(line), "monitor=") {
+				if !monitorWritten {
+					newLines = append(newLines, strings.Split(configLine, "\n")...)
+					monitorWritten = true
+				}
+				continue
+			}
+			newLines = append(newLines, line)
+		}
+		if !monitorWritten {
+			newLines = append(newLines, strings.Split(configLine, "\n")...)
+		}
+		existing = strings.Join(newLines, "\n")
+	} else {
+		if existing != "" && !strings.HasSuffix(existing, "\n") {
+			existing += "\n"
+		}
+		existing += configLine + "\n"
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	fmt.Printf("  Writing monitor config to %s\n", path)
+	return os.WriteFile(path, []byte(existing), 0o644)
 }

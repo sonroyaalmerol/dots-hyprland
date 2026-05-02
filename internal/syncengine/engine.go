@@ -156,13 +156,27 @@ func (e *SyncEngine) syncFile(_ context.Context, step SyncStep) SyncResult {
 		if err := atomicWrite(step.DeployPath, result, 0o644); err != nil {
 			return SyncResult{RelPath: step.RelPath, Decision: decision, Strategy: strategy, Err: fmt.Errorf("write: %w", err)}
 		}
+		// Write .orig backup on first deploy to preserve baseline for 3-way merge
+		if entry == nil || entry.OriginalSHA256 == "" {
+			_ = atomicWrite(step.DeployPath+".orig", result, 0o644)
+		}
+	}
+
+	newOrigSHA := upstreamSHA
+	if entry != nil && entry.OriginalSHA256 != "" {
+		newOrigSHA = entry.OriginalSHA256
+	}
+
+	newCurrentSHA := upstreamSHA
+	if decision == DecisionKeep {
+		newCurrentSHA = currentSHA
 	}
 
 	newEntry := &FileEntry{
 		RelPath:        step.RelPath,
 		Strategy:       string(strategy),
-		OriginalSHA256: upstreamSHA,
-		CurrentSHA256:  upstreamSHA,
+		OriginalSHA256: newOrigSHA,
+		CurrentSHA256:  newCurrentSHA,
 		UpstreamSHA256: upstreamSHA,
 		DeployPath:     step.DeployPath,
 		UpstreamPath:   step.UpstreamPath,
@@ -212,6 +226,11 @@ func handleOverwrite(decision SyncDecision, current, upstream []byte) ([]byte, *
 	switch decision {
 	case DecisionNoop, DecisionKeep:
 		return current, nil
+	case DecisionConflict:
+		// On conflict, keep user's version but log the conflict
+		return current, &ConflictInfo{
+			Reason: "both modified: keeping current, upstream deferred",
+		}
 	default:
 		return upstream, nil
 	}
@@ -374,10 +393,7 @@ func readOrigFromManifest(step SyncStep, origSHA string) []byte {
 	if err != nil {
 		return []byte{}
 	}
-	if sha256Of(data) == origSHA {
-		return data
-	}
-	return []byte{}
+	return data
 }
 
 func filepathDir(path string) string {

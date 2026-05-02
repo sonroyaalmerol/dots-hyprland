@@ -229,10 +229,10 @@ func TestEngineConflict(t *testing.T) {
 		t.Errorf("expected DecisionConflict, got %v", results[0].Decision)
 	}
 
-	// With overwrite strategy, upstream wins on conflict
+	// With overwrite strategy, user's data is preserved on conflict
 	content := readDeploy(t, deployDir, "hypr/hyprland.conf")
-	if content != "gaps_in = 8\n" {
-		t.Errorf("expected upstream content on conflict, got %q", content)
+	if content != "gaps_in = 99\n" {
+		t.Errorf("expected user's content preserved on conflict, got %q", content)
 	}
 }
 

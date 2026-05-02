@@ -66,52 +66,51 @@ func (c *Categorizer) Categorize(relPath string) SyncStrategy {
 func matchPattern(pattern, path string) bool {
 	if !strings.Contains(pattern, "**") {
 		matched, err := filepath.Match(pattern, path)
-		if err == nil && matched {
-			return true
-		}
-		return false
+		return err == nil && matched
 	}
 
-	// Handle ** patterns
 	if pattern == "**" {
 		return true
 	}
 
-	prefix := ""
-	suffix := ""
-	if before, after, ok := strings.Cut(pattern, "**"); ok {
-		prefix = before
-		suffix = after
+	before, after, _ := strings.Cut(pattern, "**")
+
+	// The path must start with the prefix (if any)
+	if before != "" && !strings.HasPrefix(path, before) {
+		return false
 	}
 
-	if prefix != "" {
-		if !strings.HasPrefix(path, prefix) {
-			return false
-		}
+	// Handle the suffix after **
+	if after == "" {
+		return true // pattern is "prefix/**" which matches anything under prefix
 	}
-	if suffix != "" {
-		if !strings.HasSuffix(path, suffix) {
-			matched, _ := filepath.Match("*"+suffix, filepath.Base(path))
-			if !matched {
-				return false
+
+	// after is like "/*.conf" or "/*" or "/something"
+	// The * in the suffix matches exactly one path segment (no /)
+	suffix := after
+	if strings.HasPrefix(suffix, "/*") {
+		// ** matches any number of segments, then /* matches exactly one segment
+		// So the path must end with the part after *, and have a / before it
+		suffixExt := suffix[2:] // e.g. ".conf"
+		if suffixExt == "" {
+			// "**/*" matches any file (at any depth)
+			if before != "" {
+				return strings.HasPrefix(path, before)
 			}
+			return true
 		}
-		if strings.Contains(suffix, "/") {
-			// suffix contains path separator, check against full path suffix
-			if !strings.HasSuffix(path, suffix) {
-				return false
-			}
+		// Find last segment of path and check it ends with suffixExt
+		lastSlash := strings.LastIndex(path, "/")
+		if lastSlash < 0 {
+			// No slash — ** matched zero segments, just check filename
+			return strings.HasSuffix(path, suffixExt)
 		}
+		filename := path[lastSlash+1:]
+		return strings.HasSuffix(filename, suffixExt)
 	}
 
-	if prefix != "" && suffix != "" {
-		rest := path[len(prefix):]
-		if !strings.HasSuffix(rest, suffix) {
-			return false
-		}
-	}
-
-	return true
+	// Literal suffix after ** (e.g. "**/foo.conf")
+	return strings.HasSuffix(path, suffix)
 }
 
 var templateVarPatterns = []string{
