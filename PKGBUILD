@@ -1,12 +1,12 @@
 # Maintainer: Snry Shell <snry@shell.dev>
 pkgname=snry-shell-qs
-pkgver=1.0.0
+pkgver=2.0.0
 pkgrel=1
-pkgdesc='Snry Shell - Hyprland dotfiles managed by Ansible'
+pkgdesc='Snry Shell - Hyprland dotfiles managed by snry-daemon'
 arch=('any')
 url='https://github.com/sonroyaalmerol/dots-hyprland'
 license=('MIT')
-depends=('ansible-core' 'git' 'rsync' 'python' 'uv' 'sudo' 'findutils' 'which')
+depends=('git' 'rsync' 'python' 'uv' 'sudo' 'findutils')
 makedepends=('git' 'go')
 source=("git+https://github.com/sonroyaalmerol/dots-hyprland.git")
 sha256sums=('SKIP')
@@ -15,24 +15,21 @@ install=snry-shell-qs.install
 
 package() {
   cd "$srcdir/dots-hyprland"
-  install -dm755 "$pkgdir/usr/share/snry-shell"
-  cp -a ansible.cfg inventory.ini requirements.yml setup.yml uninstall.yml diagnose.yml checkdeps.yml group_vars roles data files files-extra "$pkgdir/usr/share/snry-shell/"
 
-  # Build and ship snry-daemon
-  cd "$srcdir/dots-hyprland/scripts/snry-daemon"
-  go build -o snry-daemon .
-  install -dm755 "$pkgdir/usr/share/snry-shell/scripts/snry-daemon"
-  install -Dm755 snry-daemon "$pkgdir/usr/share/snry-shell/scripts/snry-daemon/snry-daemon"
+  # Build snry-daemon binary
+  go build -o snry-daemon ./cmd/snry-daemon
+
+  # Install snry-daemon binary
+  install -Dm755 snry-daemon "$pkgdir/usr/bin/snry-daemon"
+
+  # Install snry-shell wrapper
   install -Dm755 /dev/stdin "$pkgdir/usr/bin/snry-shell" <<'SCRIPT'
 #!/bin/bash
-BASE=/usr/share/snry-shell
-ansible-galaxy collection install -r $BASE/requirements.yml "$@"
-
-case "${1:-}" in
-  uninstall)  exec ansible-playbook --ask-become-pass $BASE/uninstall.yml "${@:2}" ;;
-  diagnose)   exec ansible-playbook --ask-become-pass $BASE/diagnose.yml "${@:2}" ;;
-  checkdeps)  exec ansible-playbook --ask-become-pass $BASE/checkdeps.yml "${@:2}" ;;
-  *)          exec ansible-playbook --ask-become-pass $BASE/setup.yml "$@" ;;
-esac
+exec /usr/bin/snry-daemon setup "$@"
 SCRIPT
+
+  # Install shared data (configs, data, frontend)
+  install -dm755 "$pkgdir/usr/share/snry-shell"
+  cp -a configs data frontend "$pkgdir/usr/share/snry-shell/"
+  cp -a files files-extra "$pkgdir/usr/share/snry-shell/" 2>/dev/null || true
 }

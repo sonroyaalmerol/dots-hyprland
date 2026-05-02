@@ -18,6 +18,8 @@ __pycache__/
 scripts/osk-watcher/osk-watcher
 
 # Built binaries
+/snry-daemon
+/cmd/snry-daemon/snry-daemon
 scripts/snry-daemon/snry-daemon
 scripts/snry-daemon/osk-watcher
 
