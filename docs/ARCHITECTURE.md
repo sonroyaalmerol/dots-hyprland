@@ -1,8 +1,8 @@
 # snry-daemon Architecture
 
 snry-daemon is the central manager for the snry-shell desktop environment. It handles
-installation, configuration, runtime services, and system management — replacing the
-previous Ansible-based setup.
+installation, configuration, runtime services, and system management — all implemented
+natively in Go, with no external automation tool dependencies.
 
 ## Directory Structure
 
@@ -12,92 +12,97 @@ snry-shell-qs/
 │   └── snry-daemon/           # CLI entrypoint
 │       └── main.go
 ├── internal/
-│   ├── app/                   # Application orchestration (daemon mode)
-│   │   ├── app.go
-│   │   └── commands.go
-│   ├── daemon/                # Runtime services (existing daemon features)
+│   ├── daemon/                # Application orchestration + runtime services
+│   │   ├── app/               # Daemon mode app + command dispatch
+│   │   │   ├── app.go
+│   │   │   └── commands.go
 │   │   ├── brightness/
 │   │   ├── cliphist/
 │   │   ├── hyprland/
 │   │   ├── idle/
-│   │   │   ├── bus.go
-│   │   │   ├── dbusutil/
-│   │   │   ├── idle.go
-│   │   │   ├── protocol/
-│   │   │   └── screensaver.go
 │   │   ├── inputmethod/
 │   │   ├── lock/
 │   │   ├── lockscreen/
 │   │   ├── powersave/
 │   │   ├── quickshell/
 │   │   ├── resources/
-│   │   ├── socket/
+│   │   ├── socket/            # Unix socket server for runtime commands
 │   │   ├── tabletmode/
 │   │   ├── uinput/
 │   │   ├── updates/
 │   │   └── weather/
-│   ├── manager/               # Installation & config management (replaces Ansible)
+│   ├── manager/               # Installation & config management
 │   │   ├── manager.go         # Manager interface + orchestrator
-│   │   ├── config.go          # TOML config loading (replaces group_vars/all.yml)
-│   │   ├── filesync.go        # File sync engine (replaces ansible synchronize)
+│   │   ├── config.go          # Config struct with XDG path resolution
+│   │   ├── filesync.go        # Low-level file ops (CopyFile, EnsureDir, etc.)
+│   │   ├── files.go           # Smart sync steps for all config categories
 │   │   ├── diagnose.go        # System diagnostics
 │   │   ├── autoscale.go       # Monitor autoscale
 │   │   ├── checkdeps.go       # Dependency checking
 │   │   ├── steps.go           # Step runner with progress reporting
+│   │   ├── setup.go           # System setup (groups, systemd, PAM, etc.)
+│   │   ├── uninstall.go       # Clean removal of all deployed files
 │   │   ├── arch/              # Arch Linux implementation
-│   │   │   ├── deps.go        # Package installation via paru
-│   │   │   ├── microtex.go    # MicroTeX AUR build
-│   │   │   └── checkdeps.go   # AUR package existence check
-│   │   ├── fedora/            # Fedora implementation
-│   │   │   └── deps.go        # Package installation via dnf + COPR
-│   │   └── setup.go           # System setup (groups, systemd, PAM, etc.)
-│   ├── platform/              # OS detection + shared platform utilities
-│   │   ├── detect.go          # Distro detection
-│   │   └── exec.go            # Privileged command execution helpers
+│   │   │   └── deps.go        # Package installation via paru
+│   │   └── fedora/            # Fedora implementation
+│   │       └── deps.go        # Package installation via dnf + COPR
+│   ├── syncengine/            # Smart config sync engine
+│   │   ├── engine.go          # SyncEngine orchestrator
+│   │   ├── manifest.go        # JSON manifest with SHA256 checksum tracking
+│   │   ├── categorize.go      # File → strategy rule matching
+│   │   ├── template.go        # Safe variable substitution
+│   │   ├── conflict.go        # Conflict logging (.orig/.new + JSONL)
+│   │   ├── hyprparse/         # Hyprland config parser + section-aware merge
+│   │   ├── kvparse/           # INI/key-value parser + three-way merge
+│   │   └── sectionparse/      # Marker-block parser + section merge
+│   ├── platform/              # OS detection + root-aware helpers
+│   │   └── detect.go
 │   └── xdg/                   # XDG base directory resolution
 │       └── xdg.go
-├── frontend/                  # Quickshell QML/UI (moved from files/.config/quickshell/)
+├── frontend/                  # Quickshell QML/UI
 │   └── ii/
 │       ├── shell.qml
 │       ├── modules/
 │       ├── services/
+│       │   └── DaemonSocket.qml   # Socket client for daemon IPC
 │       └── ...
-├── data/                      # Package manifests (kept, read by manager)
+├── data/                      # Package manifests
 │   ├── arch/
 │   │   ├── packages.conf
 │   │   └── microtex-git/
-│   │       └── PKGBUILD
 │   ├── fedora/
 │   │   ├── feddeps.toml
 │   │   └── SPECS/
 │   └── python/
 │       ├── requirements.in
 │       └── requirements.txt
-├── configs/                   # Config templates (moved from files/ + files-extra/)
-│   ├── quickshell/            # → synced to $XDG_CONFIG_HOME/quickshell/
-│   ├── hypr/                  # → synced to $XDG_CONFIG_HOME/hypr/
-│   ├── bash/                  # → synced to $XDG_CONFIG_HOME/bash/
-│   ├── fontconfig/            # → synced to $XDG_CONFIG_HOME/fontconfig/
-│   ├── fuzzel/
-│   ├── wlogout/
-│   ├── kvantum/
-│   ├── starship.toml
-│   ├── konsole/
-│   ├── portal/
-│   ├── hyprland-entries/      # hyprland.conf, hyprlock.conf, etc.
-│   ├── fedora/
-│   ├── fontsets/
-│   ├── swaylock/
-│   ├── fcitx5/
+├── configs/                   # Config templates (synced to XDG paths)
+│   ├── quickshell/            # → $XDG_CONFIG_HOME/quickshell/
+│   ├── hypr/                  # → $XDG_CONFIG_HOME/hypr/
+│   ├── bash/                  # → $XDG_CONFIG_HOME/bash/ + ~/dotfiles
+│   ├── fontconfig/            # → $XDG_CONFIG_HOME/fontconfig/
+│   ├── fuzzel/                # → $XDG_CONFIG_HOME/fuzzel/
+│   ├── wlogout/               # → $XDG_CONFIG_HOME/wlogout/
+│   ├── foot/                  # → $XDG_CONFIG_HOME/foot/
+│   ├── ghostty/               # → $XDG_CONFIG_HOME/ghostty/
+│   ├── Kvantum/               # → $XDG_CONFIG_HOME/Kvantum/
+│   ├── matugen/               # → $XDG_CONFIG_HOME/matugen/
+│   ├── mpv/                   # → $XDG_CONFIG_HOME/mpv/
+│   ├── kde-material-you-colors/
 │   ├── zshrc.d/
-│   └── icons/
-├── scripts/                   # Shell scripts used by quickshell modules
-│   └── osk-watcher/
+│   ├── xdg-desktop-portal/
+│   ├── systemd/user/          # → $XDG_CONFIG_HOME/systemd/user/
+│   ├── starship.toml, darklyrc, dolphinrc, kdeglobals, konsolerc
+│   ├── *-flags.conf           # chrome/code/thorium flags
+│   └── extra/fontsets/        # Alternate font configurations
 ├── go.mod
 ├── go.sum
 ├── PKGBUILD
+├── snry-shell-qs.install      # AUR post_install/post_upgrade hooks
 ├── LICENSE
 └── docs/
+    ├── ARCHITECTURE.md
+    └── SMART_SYNC.md
 ```
 
 ## CLI Subcommands
@@ -107,14 +112,27 @@ snry-daemon              # Start daemon (default, no subcommand)
 snry-daemon daemon       # Explicit daemon start
 snry-daemon setup        # Full installation (deps + files + setups)
 snry-daemon deps         # Install packages only
-snry-daemon files        # Sync config files only
+snry-daemon files        # Smart-sync config files only
 snry-daemon setups       # System setup only (groups, systemd, PAM)
 snry-daemon diagnose     # Collect system diagnostics
 snry-daemon checkdeps    # Check missing packages
 snry-daemon autoscale    # Auto-set monitor scale
 snry-daemon uninstall    # Remove installed files and revert changes
-snry-daemon send <cmd>   # Send command to running daemon
+snry-daemon send <cmd>   # Send command to running daemon via Unix socket
 ```
+
+### Socket Commands (runtime daemon)
+
+The daemon listens on `$XDG_RUNTIME_DIR/snry-daemon.sock` for line-based text commands:
+
+| Command | Response |
+|---------|----------|
+| `brightness-up` | Increase display brightness |
+| `brightness-down` | Decrease display brightness |
+| `autoscale` | Auto-set monitor scale factor |
+| `checkdeps` | Check for missing packages |
+| `diagnose` | Return system diagnostics |
+| `reload-hyprland` | Reload Hyprland config |
 
 ## Manager Architecture
 
@@ -123,21 +141,14 @@ snry-daemon send <cmd>   # Send command to running daemon
 ```go
 // internal/manager/manager.go
 
-// PackageManager handles OS-specific package installation.
 type PackageManager interface {
-    // InstallPackages installs the listed packages.
     InstallPackages(ctx context.Context, packages []string) error
-    // InstallBuildDeps installs build dependencies.
     InstallBuildDeps(ctx context.Context) error
-    // UpdateSystem performs a full system upgrade.
     UpdateSystem(ctx context.Context) error
-    // CheckPackages returns packages not available in any repo.
     CheckPackages(ctx context.Context, packages []string) ([]string, error)
-    // Distro returns the detected distro family.
     Distro() distro.Family
 }
 
-// Step represents a single setup operation with progress reporting.
 type Step struct {
     Name     string
     Fn       func(ctx context.Context) error
@@ -147,49 +158,54 @@ type Step struct {
 
 ### Privilege Escalation
 
-The manager runs as the current user. Privileged operations use `sudo` internally:
+The manager runs as the current user. Privileged operations use `sudo` internally.
+When running as root (e.g. from AUR `post_install`), sudo is skipped automatically:
 
 ```go
-// internal/platform/exec.go
+// internal/platform/detect.go
 
-func SudoCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
-    cmd := exec.CommandContext(ctx, "sudo", append([]string{name}, args...)...)
-    cmd.Stdin = os.Stdin // allows password prompt
-    return cmd
-}
+func IsRoot() bool
+func RealUser() (string, error)  // resolves real user even when running as root
+func HomeDir() string            // resolves real $HOME from /etc/passwd when root
+
+// SudoCmd/SudoCmd skip sudo prefix when already root
+func RunSudo(ctx context.Context, args ...string) error
 ```
 
-Sudo credentials are cached per-invocation (sudo's default `timestamp_timeout`).
-The setup flow prompts for sudo once at the beginning for system-level operations.
+### Smart Config Sync Engine
 
-### File Sync Engine
+All config file deployment uses the smart sync engine (`internal/syncengine/`).
+It replaces simple file copying with a three-way merge system that preserves
+user customizations across updates.
 
-Replaces `ansible.builtin.synchronize` with a Go-native rsync wrapper:
+**Sync flow for each file:**
+1. Load SHA256 manifest (tracks what was previously deployed)
+2. Categorize file → determine merge strategy
+3. Compare three checksums: original (manifest), current (disk), upstream (repo)
+4. Decide: noop / update / keep / conflict / new
+5. Apply strategy-specific merge algorithm
+6. Write result atomically (temp file + rename)
+7. Update manifest with new checksums
 
-```go
-// internal/manager/filesync.go
+**Merge strategies:**
 
-type SyncOptions struct {
-    Src      string
-    Dst      string
-    Delete   bool   // --delete
-    Excludes []string
-}
+| Strategy | For files | Behavior |
+|----------|-----------|----------|
+| `overwrite` | SVGs, PNGs, fonts, quickshell QML | Always replace |
+| `merge-hyprland` | `hypr/hyprland/*.conf` | Section-aware merge with key-value + bind/exec set merging |
+| `merge-kv` | hyprlock.conf, hypridle.conf, fuzzel.ini | Key-value level three-way merge |
+| `merge-section` | bashrc, bash_profile, zprofile | Only merge content between `# >>> snry-shell >>>` markers |
+| `skip-if-exists` | monitors.conf, workspaces.conf | Only deploy on first install |
+| `template` | Files with `{{.User}}` etc. | Render variables first, then apply underlying strategy |
 
-func SyncDirectory(ctx context.Context, opts SyncOptions) error {
-    // Uses rsync if available, falls back to filepath.Walk + io.Copy
-}
-```
+See `docs/SMART_SYNC.md` for full design details.
 
-### Config Loading
-
-Replaces `group_vars/all.yml` with a Go-native config:
+### Config
 
 ```go
 // internal/manager/config.go
 
 type Config struct {
-    // Skip flags
     SkipSysUpdate   bool
     SkipQuickshell  bool
     SkipHyprland    bool
@@ -199,18 +215,15 @@ type Config struct {
     SkipBackup      bool
     Force           bool
 
-    // Fontset override
     FontsetDirName string
 
-    // Paths (resolved from XDG env vars)
     XDG  xdg.Paths
     Home string
+    RepoRoot string
 }
 ```
 
 ### Step Runner
-
-Each setup phase is broken into steps with progress reporting:
 
 ```go
 // internal/manager/steps.go
@@ -223,44 +236,21 @@ type StepResult struct {
 
 type ProgressFunc func(step string, current, total int)
 
-func RunSteps(ctx context.Context, steps []Step, progress ProgressFunc) []StepResult {
-    results := make([]StepResult, 0, len(steps))
-    for i, step := range steps {
-        select {
-        case <-ctx.Done():
-            return results
-        default:
-        }
-        progress(step.Name, i+1, len(steps))
-        err := step.Fn(ctx)
-        if err != nil && !step.Optional {
-            return results
-        }
-        results = append(results, StepResult{Name: step.Name, Err: err})
-    }
-    return results
-}
+func RunSteps(ctx context.Context, steps []Step, progress ProgressFunc) []StepResult
 ```
+
+Steps run sequentially. Optional steps log errors but don't halt. Context
+cancellation stops the pipeline immediately.
 
 ## Memory Management Patterns
 
 1. **Context propagation**: Every operation accepts `context.Context` as first param.
-   Cancellation stops in-flight operations and cleans up resources.
-
-2. **No goroutine leaks**: Every goroutine has a `select { case <-ctx.Done(): return }`
-   exit path. Use `errgroup` for concurrent operations.
-
-3. **Resource cleanup**: Use `defer` for file handles, network connections, temp files.
-   Temp directories use `t.TempDir()` in tests.
-
-4. **No mutable globals**: All state is in structs, injected via constructors.
-
-5. **Proper error wrapping**: Use `fmt.Errorf("operation: %w", err)`.
-   Errors are returned, not logged and returned.
-
-6. **sync.Pool for buffers**: Reuse `bytes.Buffer` in hot paths (socket server).
-
-7. **Preallocate slices**: Always `make([]T, 0, n)` when size is known.
+2. **No goroutine leaks**: Every goroutine has a `select { case <-ctx.Done(): return }` exit path.
+3. **Resource cleanup**: `defer` for file handles, temp files. `t.TempDir()` in tests.
+4. **No mutable globals**: All state in structs, injected via constructors.
+5. **Proper error wrapping**: `fmt.Errorf("operation: %w", err)`.
+6. **Preallocate slices**: `make([]T, 0, n)` when size is known.
+7. **Atomic writes**: All file writes use temp-file-then-rename pattern.
 
 ## Error Handling
 
@@ -269,31 +259,34 @@ func RunSteps(ctx context.Context, steps []Step, progress ProgressFunc) []StepRe
 - Sentinel errors for expected conditions:
   ```go
   var ErrUnsupportedDistro = errors.New("unsupported distribution")
-  var ErrDaemonRunning     = errors.New("daemon already running")
   ```
 - Handle errors once: either log+degrade or wrap+return, never both.
 - Use `errors.Join` for multi-operation failures.
 
-## Migration Path
+## AUR Installation (Hands-Off)
 
-1. **Phase 1**: Implement manager package alongside existing Ansible. Both coexist.
-2. **Phase 2**: Switch `snry-shell` wrapper to call `snry-daemon setup` instead of Ansible.
-3. **Phase 3**: Remove Ansible files (playbooks, roles, ansible.cfg, requirements.yml).
-4. **Phase 4**: Update PKGBUILD to remove `ansible-core` dependency.
+The `snry-shell-qs.install` script splits `post_install` into two phases:
 
-## PKGBUILD Changes
+1. **System setup (root)**: Runs `snry-daemon setups` as root — creates user groups,
+   enables systemd services, configures PAM, sets up udev rules.
+2. **Config sync (user)**: Detects the first normal user via `logname` or `/etc/passwd` scan,
+   then runs `snry-daemon files` as that user — deploys all config files through the
+   smart sync engine.
+
+`post_upgrade` runs `snry-daemon files` to sync any updated configs.
+
+The PKGBUILD `depends` array includes all ~70 required packages so pacman handles
+them before the install script runs.
+
+## PKGBUILD
 
 ```bash
-# Old depends
-depends=('ansible-core' 'git' 'rsync' 'python' 'uv' 'sudo' 'findutils' 'which')
-
-# New depends
-depends=('git' 'rsync' 'python' 'uv' 'sudo' 'findutils')
 makedepends=('go')
+depends=(git rsync python uv sudo findutils hyprland quickshell ...
+         # all ~70 packages from packages.conf
+        )
 
-# snry-shell wrapper becomes:
-install -Dm755 /dev/stdin "$pkgdir/usr/bin/snry-shell" <<'SCRIPT'
-#!/bin/bash
-exec /usr/bin/snry-daemon setup "$@"
-SCRIPT
+# Binary symlink for keybind compatibility:
+# /usr/bin/snry-daemon → installed by makepkg
+# ~/.local/bin/snry-daemon → symlinked to /usr/bin/ for Hyprland keybinds
 ```

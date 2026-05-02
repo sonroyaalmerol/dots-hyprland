@@ -1,6 +1,6 @@
 <div align="center">
     <h1>snry Shell</h1>
-    <h3>A Hyprland desktop shell built with Quickshell and Ansible</h3>
+    <h3>A Hyprland desktop shell built with Quickshell and Go</h3>
 </div>
 
 <div align="center">
@@ -19,7 +19,7 @@
     <h2>• overview •</h2>
 </div>
 
-**snry Shell** is a desktop shell for [Hyprland](https://hyprland.org/), built with [Quickshell](https://quickshell.outfoxxed.me/) and deployed via [Ansible](https://www.ansible.com/). It provides a polished, Material-themed desktop experience with live window previews, AI integration, screen translation, and more — all configurable through a GUI settings app.
+**snry Shell** is a desktop shell for [Hyprland](https://hyprland.org/), built with [Quickshell](https://quickshell.outfoxxed.me/) and managed by a native Go daemon. It provides a polished, Material-themed desktop experience with live window previews, AI integration, screen translation, smart config sync, and more — all configurable through a GUI settings app.
 
 <div align="center">
     <h2>• features •</h2>
@@ -31,7 +31,9 @@
 - **Anti-flashbang** — automatic brightness management
 - **Material theming** — wallpaper-driven color generation via matugen
 - **Settings app** — GUI for shell configuration
-- **Transparent install** — Ansible-driven, every command shown before execution
+- **Smart config sync** — three-way merge engine preserves user customizations across updates
+- **Hands-off install** — AUR package handles everything automatically
+- **Zero Ansible** — all setup, config deployment, and diagnostics handled by snry-daemon (Go)
 
 <div align="center">
     <h2>• installation •</h2>
@@ -41,25 +43,49 @@
 
 ```bash
 paru -S snry-shell-qs
-snry-shell
 ```
+
+That's it. The `post_install` hook runs system setup as root and deploys configs as your user automatically.
 
 ### Manual
 
 ```bash
 git clone https://github.com/sonroyaalmerol/dots-hyprland.git
 cd dots-hyprland
-ansible-playbook setup.yml
+go build -o ~/.local/bin/snry-daemon ./cmd/snry-daemon
+snry-daemon setup
 ```
 
 ### CLI commands
 
 | Command | Purpose |
 |---------|---------|
-| `snry-shell` | Install / update shell |
-| `snry-shell uninstall` | Remove shell configuration |
-| `snry-shell diagnose` | Run diagnostics |
-| `snry-shell checkdeps` | Check dependency status |
+| `snry-daemon setup` | Full install: deps + config sync + system setup |
+| `snry-daemon files` | Smart-sync config files (three-way merge) |
+| `snry-daemon deps` | Install packages only |
+| `snry-daemon setups` | System setup (groups, systemd, PAM) |
+| `snry-daemon diagnose` | Run diagnostics |
+| `snry-daemon checkdeps` | Check dependency status |
+| `snry-daemon autoscale` | Auto-set monitor scale |
+| `snry-daemon uninstall` | Remove shell configuration |
+| `snry-daemon daemon` | Start runtime daemon (socket server) |
+
+<div align="center">
+    <h2>• smart config sync •</h2>
+</div>
+
+snry-daemon includes a smart config sync engine that handles updates intelligently:
+
+| Strategy | For files | Behavior |
+|----------|-----------|----------|
+| `overwrite` | SVGs, PNGs, fonts, quickshell QML | Always replace with upstream |
+| `merge-hyprland` | `hypr/hyprland/*.conf` | Section-aware merge (key-values + binds) |
+| `merge-kv` | hyprlock.conf, fuzzel.ini, `*.conf`/`*.ini` | Key-value level three-way merge |
+| `merge-section` | bashrc, bash_profile | Merge only between `# >>> snry-shell >>>` markers |
+| `skip-if-exists` | monitors.conf, workspaces.conf | Only deploy on first install |
+| `template` | Files with `{{.User}}` etc. | Render variables, then merge |
+
+See [`docs/SMART_SYNC.md`](docs/SMART_SYNC.md) for the full design.
 
 <div align="center">
     <h2>• keybinds •</h2>
@@ -92,8 +118,7 @@ ansible-playbook setup.yml
 |----------|---------|
 | [Hyprland](https://github.com/hyprwm/hyprland) | Wayland compositor — window management and rendering |
 | [Quickshell](https://quickshell.outfoxxed.me/) | QtQuick-based widget system — bar, panels, overlays |
-| [Ansible](https://github.com/ansible/ansible) | Configuration management and deployment |
-| [Go](https://go.dev/) (snry-daemon) | System-level daemon for IPC and automation |
+| [Go](https://go.dev/) (snry-daemon) | Central manager: install, config sync, diagnostics, runtime daemon |
 | [Python](https://www.python.org/) | Scripts, translation tools |
 
 <div align="center">
