@@ -184,6 +184,15 @@ func decide(origSHA, currentSHA, upstreamSHA string) SyncDecision {
 		return DecisionNew
 	}
 
+	// First sync (no manifest baseline): if current already matches upstream,
+	// treat as noop. Otherwise overwrite to establish a clean baseline.
+	if origSHA == "" {
+		if currentSHA == upstreamSHA {
+			return DecisionNoop
+		}
+		return DecisionUpdate
+	}
+
 	currentUnchanged := currentSHA == origSHA
 	upstreamUnchanged := upstreamSHA == origSHA
 
