@@ -4,28 +4,14 @@ import QtQuick
 import Quickshell
 
 Singleton {
-    id: root
+	id: root
 
-    // Mode: "auto", "tablet", "desktop"
-    property string mode: "auto"
+	// All state comes from DaemonSocket (daemon is single source of truth).
+	readonly property bool tabletMode: DaemonSocket.hardwareTablet
+	readonly property bool textInputActive: DaemonSocket.textFocus
+	readonly property bool effectiveTabletMode: DaemonSocket.effectiveTabletMode
+	readonly property string mode: DaemonSocket.userMode
 
-    property bool tabletMode: false
-    property bool textInputActive: false
-    property bool effectiveTabletMode: {
-        if (mode === "tablet") return true
-        if (mode === "desktop") return false
-        return tabletMode
-    }
-
-    function cycleMode() {
-        if (root.mode === "auto") root.mode = "tablet"
-        else if (root.mode === "tablet") root.mode = "desktop"
-        else root.mode = "auto"
-    }
-
-    function setMode(newMode) {
-        if (newMode === "auto" || newMode === "tablet" || newMode === "desktop") {
-            root.mode = newMode
-        }
-    }
+	function cycleMode() { DaemonSocket.cycleMode() }
+	function setMode(newMode) { DaemonSocket.setMode(newMode) }
 }

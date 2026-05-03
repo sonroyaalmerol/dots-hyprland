@@ -5,22 +5,20 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-/**
- * Persistent Unix socket connection to snry-daemon using native Quickshell.Io.Socket.
- *
- * Input protocol (to daemon): plain text commands, one per line.
- *   auth <password>
- *   lock
- *   unlock
- *
- * Output protocol (from daemon): JSON objects, one per line.
- *   {"event":"lock_state","data":{"locked":true}}
- *   {"event":"auth_result","data":{"success":false,"remaining":2,"lockedOut":false,"message":"..."}}
- *   {"event":"lockout_tick","data":{"remainingSeconds":15}}
- */
 Singleton {
 	id: root
 
+	// Consolidated state from daemon (single source of truth).
+	property bool effectiveTabletMode: false
+	property bool textFocus: false
+	property bool hardwareTablet: false
+	property string userMode: "auto"
+	property bool oskVisible: false
+	property bool oskDismissed: false
+	property bool oskPinned: false
+	property bool screenLocked: false
+
+	// Backward compat signals.
 	signal lockStateChanged(bool locked)
 	signal authResult(var data)
 	signal lockoutTick(int remainingSeconds)
@@ -30,32 +28,29 @@ Singleton {
 	signal checkdepsError(string error)
 	signal diagnoseDone()
 	signal diagnoseError(string error)
-	signal tabletMode(bool active)
-	signal textInputFocus(bool active)
 
 	property bool connected: daemonSocket.connected
 
 	readonly property string socketPath: Quickshell.env("XDG_RUNTIME_DIR") + "/snry-daemon.sock"
 
-	function authenticate(password) {
-		sendCommand("auth " + password)
-	}
+	function authenticate(password) { sendCommand("auth " + password) }
+	function lock() { sendCommand("lock") }
+	function unlock() { sendCommand("unlock") }
+	function lockStartup() { sendCommand("lock-startup") }
 
-	function lock() {
-		sendCommand("lock")
-	}
-
-	function unlock() {
-		sendCommand("unlock")
-	}
-
-	function lockStartup() {
-		sendCommand("lock-startup")
-	}
+	// State commands.
+	function setMode(mode) { sendCommand("set-mode " + mode) }
+	function cycleMode() { sendCommand("cycle-mode") }
+	function oskDismiss() { sendCommand("osk-dismiss") }
+	function oskUndismiss() { sendCommand("osk-undismiss") }
+	function oskToggle() { sendCommand("osk-toggle") }
+	function oskShow() { sendCommand("osk-show") }
+	function oskHide() { sendCommand("osk-hide") }
+	function oskPin() { sendCommand("osk-pin") }
+	function oskUnpin() { sendCommand("osk-unpin") }
 
 	function sendCommand(cmd) {
 		if (!daemonSocket.connected) {
-			console.warn("[DaemonSocket] Cannot send command, not connected")
 			return
 		}
 		daemonSocket.write(cmd + "\n")
@@ -76,15 +71,11 @@ Singleton {
 				try {
 					const obj = JSON.parse(line)
 					root.dispatchEvent(obj)
-				} catch (e) {
-					console.warn("[DaemonSocket] parse error:", e, line)
-				}
+				} catch (e) {}
 			}
 		}
 
-		onError: error => {
-			console.warn("[DaemonSocket] socket error:", error)
-		}
+		onError: error => {}
 	}
 
 	Timer {
@@ -99,7 +90,25 @@ Singleton {
 	}
 
 	function dispatchEvent(obj) {
-		if (obj.event === "lock_state" && obj.data) {
+		if (obj.event === "state" && obj.data) {
+			// Consolidated state update.
+			if (obj.data.effective_tablet_mode !== undefined)
+				root.effectiveTabletMode = obj.data.effective_tablet_mode
+			if (obj.data.text_focus !== undefined)
+				root.textFocus = obj.data.text_focus
+			if (obj.data.hardware_tablet !== undefined)
+				root.hardwareTablet = obj.data.hardware_tablet
+			if (obj.data.user_mode !== undefined)
+				root.userMode = obj.data.user_mode
+			if (obj.data.osk_visible !== undefined)
+				root.oskVisible = obj.data.osk_visible
+			if (obj.data.osk_dismissed !== undefined)
+				root.oskDismissed = obj.data.osk_dismissed
+			if (obj.data.osk_pinned !== undefined)
+				root.oskPinned = obj.data.osk_pinned
+			if (obj.data.screen_locked !== undefined)
+				root.screenLocked = obj.data.screen_locked
+		} else if (obj.event === "lock_state" && obj.data) {
 			lockStateChanged(obj.data.locked === true)
 		} else if (obj.event === "auth_result" && obj.data) {
 			authResult(obj.data)
@@ -117,10 +126,6 @@ Singleton {
 			diagnoseDone()
 		} else if (obj.event === "diagnose_error" && obj.data) {
 			diagnoseError(obj.data.error || "unknown error")
-		} else if (obj.event === "tablet_mode" && obj.data) {
-			tabletMode(obj.data.active === true)
-		} else if (obj.event === "text_focus" && obj.data) {
-			textInputFocus(obj.data.active === true)
 		}
 	}
 }

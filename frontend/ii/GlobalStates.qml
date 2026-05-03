@@ -51,16 +51,6 @@ Singleton {
         }
     }
 
-    Connections {
-        target: DaemonSocket
-        function onTabletMode(active) {
-            TabletMode.tabletMode = active
-        }
-        function onTextInputFocus(active) {
-            TabletMode.textInputActive = active
-        }
-    }
-
     GlobalShortcut {
         name: "workspaceNumber"
         description: "Hold to show workspace numbers, release to show icons"

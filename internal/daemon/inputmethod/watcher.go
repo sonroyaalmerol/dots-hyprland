@@ -3,6 +3,7 @@ package inputmethod
 import (
 	"context"
 	"log"
+	"sync/atomic"
 
 	"github.com/rajveermalviya/go-wayland/wayland/client"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/inputmethod/protocol"
@@ -14,6 +15,7 @@ import (
 type Watcher struct {
 	display  *client.Display
 	callback func(active bool)
+	active   atomic.Bool
 }
 
 const (
@@ -111,16 +113,19 @@ func New(cb func(active bool)) (*Watcher, error) {
 
 	im.SetActivateHandler(func(protocol.InputMethodActivateEvent) {
 		log.Printf("[inputmethod] activate")
+		w.active.Store(true)
 		cb(true)
 	})
 
 	im.SetDeactivateHandler(func(protocol.InputMethodDeactivateEvent) {
 		log.Printf("[inputmethod] deactivate")
+		w.active.Store(false)
 		cb(false)
 	})
 
 	im.SetUnavailableHandler(func(protocol.InputMethodUnavailableEvent) {
 		log.Printf("[inputmethod] unavailable")
+		w.active.Store(false)
 		cb(false)
 	})
 
@@ -134,7 +139,6 @@ func New(cb func(active bool)) (*Watcher, error) {
 
 // Run dispatches Wayland events in a loop. Blocks until ctx is cancelled.
 func (w *Watcher) Run(ctx context.Context) {
-	log.Printf("[inputmethod] watching for input-method events")
 
 	d := w.display
 	go func() {
@@ -150,4 +154,13 @@ func (w *Watcher) Run(ctx context.Context) {
 			return
 		}
 	}
+}
+
+// EmitSnapshot implements socket.SnapshotProvider so new QML clients
+// receive the current text focus state on connect.
+func (w *Watcher) EmitSnapshot(emit func(map[string]any)) {
+	emit(map[string]any{
+		"event": "text_focus",
+		"data":  map[string]any{"active": w.active.Load()},
+	})
 }

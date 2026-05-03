@@ -124,6 +124,28 @@ func dispatchCommand(a *App, line string) {
 		go a.handleCheckdeps()
 	case "diagnose":
 		go a.handleDiagnose()
+
+	// State commands — forwarded to state loop.
+	case "set-mode":
+		if len(fields) >= 2 {
+			a.stateCh <- stateEvent{kind: "command", cmd: "set-mode", arg: fields[1]}
+		}
+	case "cycle-mode":
+		a.stateCh <- stateEvent{kind: "command", cmd: "cycle-mode"}
+	case "osk-dismiss":
+		a.stateCh <- stateEvent{kind: "command", cmd: "osk-dismiss"}
+	case "osk-undismiss":
+		a.stateCh <- stateEvent{kind: "command", cmd: "osk-undismiss"}
+	case "osk-toggle":
+		a.stateCh <- stateEvent{kind: "command", cmd: "osk-toggle"}
+	case "osk-show":
+		a.stateCh <- stateEvent{kind: "command", cmd: "osk-show"}
+	case "osk-hide":
+		a.stateCh <- stateEvent{kind: "command", cmd: "osk-hide"}
+	case "osk-pin":
+		a.stateCh <- stateEvent{kind: "command", cmd: "osk-pin"}
+	case "osk-unpin":
+		a.stateCh <- stateEvent{kind: "command", cmd: "osk-unpin"}
 	}
 }
 

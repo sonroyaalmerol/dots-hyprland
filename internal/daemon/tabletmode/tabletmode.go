@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -42,6 +43,7 @@ type Monitor struct {
 	mu       sync.Mutex
 	conn     *dbus.Conn
 	callback func(tablet bool)
+	tablet   atomic.Bool
 
 	logindMode string // "enabled", "disabled", "indeterminate"
 	kbActive   bool
@@ -99,6 +101,7 @@ func (m *Monitor) publish() {
 
 	log.Printf("[tabletmode] evdev=%v(logind=%s) kb=%v touch=%v -> tablet=%v",
 		evdevTab, logind, kb, touch, tablet)
+	m.tablet.Store(tablet)
 	m.callback(tablet)
 }
 
@@ -385,4 +388,13 @@ func isVirtualKeyboard(name string) bool {
 		}
 	}
 	return false
+}
+
+// EmitSnapshot implements socket.SnapshotProvider so new QML clients
+// receive the current tablet mode state on connect.
+func (m *Monitor) EmitSnapshot(emit func(map[string]any)) {
+	emit(map[string]any{
+		"event": "tablet_mode",
+		"data":  map[string]any{"active": m.tablet.Load()},
+	})
 }

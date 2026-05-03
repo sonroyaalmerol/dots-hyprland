@@ -23,6 +23,7 @@ type Server struct {
 	path     string
 	listener net.Listener
 	emitter  *Emitter
+	snapshot func() []SnapshotProvider
 }
 
 type Emitter struct {
@@ -63,7 +64,8 @@ func (e *Emitter) Emit(m map[string]any) {
 	})
 }
 
-func (s *Server) Run(ctx context.Context, dispatch Dispatcher, snapshots []SnapshotProvider) error {
+func (s *Server) Run(ctx context.Context, dispatch Dispatcher, snapshot func() []SnapshotProvider) error {
+	s.snapshot = snapshot
 	os.Remove(s.path)
 	listener, err := net.Listen("unix", s.path)
 	if err != nil {
@@ -89,19 +91,21 @@ func (s *Server) Run(ctx context.Context, dispatch Dispatcher, snapshots []Snaps
 			log.Printf("socket: accept error: %v", err)
 			continue
 		}
-		go s.handleClient(conn, dispatch, snapshots)
+		go s.handleClient(conn, dispatch)
 	}
 }
 
-func (s *Server) handleClient(conn net.Conn, dispatch Dispatcher, snapshots []SnapshotProvider) {
+func (s *Server) handleClient(conn net.Conn, dispatch Dispatcher) {
 	defer conn.Close()
 	s.emitter.AddClient(conn)
 	defer s.emitter.RemoveClient(conn)
 
 	log.Printf("socket: client connected: %s", conn.RemoteAddr())
 
-	for _, snap := range snapshots {
-		snap.EmitSnapshot(s.emitter.Emit)
+	if s.snapshot != nil {
+		for _, snap := range s.snapshot() {
+			snap.EmitSnapshot(s.emitter.Emit)
+		}
 	}
 
 	scanner := bufio.NewScanner(conn)

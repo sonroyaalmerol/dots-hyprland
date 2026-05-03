@@ -14,57 +14,12 @@ Scope { // Scope
     id: root
     property bool pinned: Config.options?.osk.pinnedOnStartup ?? false
 
-    // Auto-show/hide state tracking
-    property bool autoShown: false
-    property bool manualDismissed: false
-    property bool overviewForcedOsk: false
-
-    Timer {
-        id: autoShowTimer
-        interval: 300
-        onTriggered: {
-            if (TabletMode.effectiveTabletMode && TabletMode.textInputActive && !root.manualDismissed && !GlobalStates.oskOpen) {
-                GlobalStates.oskOpen = true
-                root.autoShown = true
-            }
-        }
-    }
-
+    // Watch daemon-computed OSK state. The daemon decides when to show/hide.
     Connections {
-        target: TabletMode
+        target: DaemonSocket
 
-        function onTextInputActiveChanged() {
-            if (TabletMode.textInputActive) {
-                // New text focus — reset manual dismiss
-                root.manualDismissed = false
-                // Auto-show if in tablet mode
-                if (TabletMode.effectiveTabletMode && !GlobalStates.oskOpen) {
-                    autoShowTimer.start()
-                }
-            } else {
-                // Text focus lost — auto-hide if we auto-showed
-                autoShowTimer.stop()
-                if (root.autoShown) {
-                    GlobalStates.oskOpen = false
-                    root.autoShown = false
-                    root.manualDismissed = false
-                }
-            }
-        }
-
-        function onEffectiveTabletModeChanged() {
-            if (!TabletMode.effectiveTabletMode) {
-                if (root.autoShown || root.overviewForcedOsk) {
-                    // Left tablet mode — auto-hide
-                    autoShowTimer.stop()
-                    GlobalStates.oskOpen = false
-                    root.autoShown = false
-                    root.overviewForcedOsk = false
-                }
-            } else if (TabletMode.textInputActive && !root.manualDismissed && !GlobalStates.oskOpen) {
-                // Entered tablet mode with active text focus — auto-show
-                autoShowTimer.start()
-            }
+        function onOskVisibleChanged() {
+            GlobalStates.oskOpen = DaemonSocket.oskVisible
         }
     }
 
@@ -72,15 +27,10 @@ Scope { // Scope
         target: GlobalStates
 
         function onOverviewOpenChanged() {
-            if (GlobalStates.overviewOpen && TabletMode.effectiveTabletMode) {
-                // Overview opened in tablet mode — force OSK open
-                GlobalStates.oskOpen = true
-                root.overviewForcedOsk = true
-                root.autoShown = false
-            } else if (!GlobalStates.overviewOpen && root.overviewForcedOsk) {
-                // Overview closed — hide OSK if it was only open for overview
-                GlobalStates.oskOpen = false
-                root.overviewForcedOsk = false
+            if (GlobalStates.overviewOpen && DaemonSocket.effectiveTabletMode) {
+                DaemonSocket.oskShow()
+            } else if (!GlobalStates.overviewOpen) {
+                DaemonSocket.oskHide()
             }
         }
     }
@@ -101,7 +51,7 @@ Scope { // Scope
                 Ydotool.releaseAllKeys();
             }
         }
-        
+
         sourceComponent: PanelWindow { // Window
             id: oskRoot
             visible: oskLoader.active && !GlobalStates.screenLocked
@@ -121,17 +71,13 @@ Scope { // Scope
             }
 
             function hide() {
-                GlobalStates.oskOpen = false
-                root.autoShown = false
-                root.manualDismissed = true
+                DaemonSocket.oskDismiss()
             }
             exclusiveZone: root.pinned ? implicitHeight - Appearance.sizes.hyprlandGapsOut : 0
             implicitWidth: oskBackground.width + Appearance.sizes.elevationMargin * 2
             implicitHeight: oskBackground.height + Appearance.sizes.elevationMargin * 2
             WlrLayershell.namespace: "quickshell:osk"
             WlrLayershell.layer: WlrLayer.Overlay
-            // Hyprland 0.49: Focus is always exclusive and setting this breaks mouse focus grab
-            // WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
             color: "transparent"
 
             mask: Region {
@@ -196,8 +142,6 @@ Scope { // Scope
                             onDoubleClicked: oskRoot.floatOffsetY = 0
                             onPositionChanged: (mouse) => {
                                 if (pressed) {
-                                    // finger moves up (mouse.y decreases) = window should move up
-                                    // margins.bottom increases = window moves up
                                     var delta = _startY - mouse.y
                                     oskRoot.floatOffsetY = Math.max(0, _startOffset + delta)
                                 }
@@ -216,7 +160,11 @@ Scope { // Scope
                         VerticalButtonGroup {
                             OskControlButton { // Pin button
                                 toggled: root.pinned
-                                downAction: () => root.pinned = !root.pinned
+                                downAction: () => {
+                                    root.pinned = !root.pinned
+                                    if (root.pinned) DaemonSocket.oskPin()
+                                    else DaemonSocket.oskUnpin()
+                                }
                                 contentItem: MaterialSymbol {
                                     text: "keep"
                                     horizontalAlignment: Text.AlignHCenter
@@ -257,25 +205,15 @@ Scope { // Scope
         target: "osk"
 
         function toggle(): void {
-            if (GlobalStates.oskOpen) {
-                GlobalStates.oskOpen = false
-                root.autoShown = false
-                root.manualDismissed = true
-            } else {
-                GlobalStates.oskOpen = true
-                root.autoShown = false
-            }
+            DaemonSocket.oskToggle()
         }
 
         function close(): void {
-            GlobalStates.oskOpen = false
-            root.autoShown = false
-            root.manualDismissed = true
+            DaemonSocket.oskDismiss()
         }
 
         function open(): void {
-            GlobalStates.oskOpen = true
-            root.autoShown = false
+            DaemonSocket.oskShow()
         }
     }
 
@@ -284,14 +222,7 @@ Scope { // Scope
         description: "Toggles on screen keyboard on press"
 
         onPressed: {
-            if (GlobalStates.oskOpen) {
-                GlobalStates.oskOpen = false
-                root.autoShown = false
-                root.manualDismissed = true
-            } else {
-                GlobalStates.oskOpen = true
-                root.autoShown = false
-            }
+            DaemonSocket.oskToggle()
         }
     }
 
@@ -300,8 +231,7 @@ Scope { // Scope
         description: "Opens on screen keyboard on press"
 
         onPressed: {
-            GlobalStates.oskOpen = true
-            root.autoShown = false
+            DaemonSocket.oskShow()
         }
     }
 
@@ -310,9 +240,7 @@ Scope { // Scope
         description: "Closes on screen keyboard on press"
 
         onPressed: {
-            GlobalStates.oskOpen = false
-            root.autoShown = false
-            root.manualDismissed = true
+            DaemonSocket.oskDismiss()
         }
     }
 
