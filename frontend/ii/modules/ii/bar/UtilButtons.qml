@@ -1,6 +1,7 @@
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -73,7 +74,7 @@ Item {
             visible: Config.options.bar.utilButtons.showKeyboardToggle
             sourceComponent: CircleUtilButton {
                 Layout.alignment: Qt.AlignVCenter
-                onClicked: GlobalStates.oskOpen = !GlobalStates.oskOpen
+                onClicked: DaemonSocket.oskToggle()
                 MaterialSymbol {
                     horizontalAlignment: Qt.AlignHCenter
                     fill: 0
