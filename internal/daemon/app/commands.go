@@ -214,6 +214,47 @@ func dispatchCommand(a *App, line string) {
 			}
 			a.hyprsunsetSvc.ToggleTemperature(active)
 		}
+	case "wifi-enable":
+		if a.networkSvc != nil {
+			a.networkSvc.EnableWifi(context.Background(), true)
+		}
+	case "wifi-disable":
+		if a.networkSvc != nil {
+			a.networkSvc.EnableWifi(context.Background(), false)
+		}
+	case "wifi-toggle":
+		if a.networkSvc != nil {
+			a.networkSvc.ToggleWifi(context.Background())
+		}
+	case "wifi-rescan":
+		if a.networkSvc != nil {
+			go a.networkSvc.RescanWifi(context.Background())
+		}
+	case "wifi-connect":
+		if a.networkSvc != nil && len(fields) >= 2 {
+			go func() {
+				err := a.networkSvc.ConnectWifi(context.Background(), strings.Join(fields[1:], " "))
+				if err != nil {
+					log.Printf("[app] wifi-connect: %v", err)
+					a.socketServer.Emitter().Emit(map[string]any{
+						"event": "network_connect_result",
+						"data": map[string]any{
+							"success":        false,
+							"askingPassword": true,
+							"ssid":           strings.Join(fields[1:], " "),
+						},
+					})
+				}
+			}()
+		}
+	case "wifi-disconnect":
+		if a.networkSvc != nil && len(fields) >= 2 {
+			go a.networkSvc.DisconnectWifi(context.Background(), strings.Join(fields[1:], " "))
+		}
+	case "wifi-change-password":
+		if a.networkSvc != nil && len(fields) >= 3 {
+			go a.networkSvc.ChangePassword(context.Background(), fields[1], fields[2])
+		}
 	}
 }
 

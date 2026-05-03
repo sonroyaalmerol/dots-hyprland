@@ -25,6 +25,7 @@ import (
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/inputmethod"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/lock"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/lockscreen"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/network"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/powersave"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/quickshell"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/resources"
@@ -57,6 +58,7 @@ type Config struct {
 	EasyEffectsCfg   easyeffects.Config
 	HyprsunsetCfg    hyprsunset.Config
 	HyprXkbCfg       hyprxkb.Config
+	NetworkCfg       network.Config
 }
 
 func DefaultConfig() Config {
@@ -77,6 +79,7 @@ func DefaultConfig() Config {
 		EasyEffectsCfg:   easyeffects.DefaultConfig(),
 		HyprsunsetCfg:    hyprsunset.DefaultConfig(),
 		HyprXkbCfg:       hyprxkb.DefaultConfig(),
+		NetworkCfg:       network.DefaultConfig(),
 	}
 }
 
@@ -116,6 +119,7 @@ type App struct {
 	hyprsunsetSvc   *hyprsunset.Service
 	tabletModeMon   *tabletmode.Monitor
 	inputMethodW    *inputmethod.Watcher
+	networkSvc      *network.Service
 
 	// State loop — all state mutations happen in a single goroutine.
 	stateCh chan stateEvent
@@ -234,6 +238,8 @@ func (a *App) Run(ctx context.Context) error {
 	a.sessionSvc = session.New(a.cfg.SessionCfg, a.socketServer.Emitter().Emit)
 	a.easyEffectsSvc = easyeffects.New(a.cfg.EasyEffectsCfg, a.socketServer.Emitter().Emit)
 
+	a.networkSvc = network.New(a.cfg.NetworkCfg, a.socketServer.Emitter().Emit)
+
 	var wg sync.WaitGroup
 
 	wg.Go(func() { a.runStateLoop(ctx) })
@@ -255,6 +261,7 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runHyprKeybinds(ctx) })
 	wg.Go(func() { a.runHyprXkb(ctx) })
 	wg.Go(func() { a.runHyprsunset(ctx) })
+	wg.Go(func() { a.runNetwork(ctx) })
 	wg.Go(func() {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
@@ -574,6 +581,9 @@ func (a *App) socketSnapshots() []socket.SnapshotProvider {
 	if a.hyprsunsetSvc != nil {
 		snapshots = append(snapshots, a.hyprsunsetSvc)
 	}
+	if a.networkSvc != nil {
+		snapshots = append(snapshots, a.networkSvc)
+	}
 	return snapshots
 }
 
@@ -749,6 +759,15 @@ func (a *App) runHyprsunset(ctx context.Context) {
 	}
 	if err := a.hyprsunsetSvc.Run(ctx); err != nil && err != context.Canceled {
 		log.Printf("hyprsunset: %v", err)
+	}
+}
+
+func (a *App) runNetwork(ctx context.Context) {
+	if a.networkSvc == nil {
+		return
+	}
+	if err := a.networkSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("network: %v", err)
 	}
 }
 
