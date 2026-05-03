@@ -2,8 +2,10 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 import qs.modules.common
+import qs.services
 import QtQuick
 import Quickshell
+import Quickshell.Io
 
 /**
  * Automatically reloads generated material colors.
