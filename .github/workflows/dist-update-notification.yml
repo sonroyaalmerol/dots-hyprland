@@ -12,7 +12,7 @@ on:
 jobs:
   comment_on_discussion:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.repository == 'sonroyaalmerol/dots-hyprland'
+    if: github.ref == 'refs/heads/main' && github.repository == 'sonroyaalmerol/snry-shell'
     steps:
       - name: Create comment on discussion #2140
         continue-on-error: true

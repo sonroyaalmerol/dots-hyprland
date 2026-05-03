@@ -4,7 +4,7 @@ pkgver=2.0.0
 pkgrel=1
 pkgdesc='Snry Shell - Hyprland dotfiles managed by snry-daemon'
 arch=('any')
-url='https://github.com/sonroyaalmerol/dots-hyprland'
+url='https://github.com/sonroyaalmerol/snry-shell'
 license=('MIT')
 depends=(
 	# Audio
@@ -110,13 +110,13 @@ makedepends=('git' 'go' 'base-devel')
 optdepends=(
 	'plasma-browser-integration: KDE browser integration support'
 )
-source=("git+https://github.com/sonroyaalmerol/dots-hyprland.git")
+source=("git+https://github.com/sonroyaalmerol/snry-shell.git")
 sha256sums=('SKIP')
 backup=()
 install=snry-shell-qs.install
 
 package() {
-	cd "$srcdir/dots-hyprland"
+	cd "$srcdir/snry-shell"
 
 	# Build snry-daemon binary
 	go build -o snry-daemon ./cmd/snry-daemon

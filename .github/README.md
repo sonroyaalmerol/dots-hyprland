@@ -5,9 +5,9 @@
 
 <div align="center">
 
-![](https://img.shields.io/github/last-commit/sonroyaalmerol/dots-hyprland?&style=for-the-badge&color=8ad7eb&logo=git&logoColor=D9E0EE&labelColor=1E202B)
-![](https://img.shields.io/github/stars/sonroyaalmerol/dots-hyprland?style=for-the-badge&logo=andela&color=86dbd7&logoColor=D9E0EE&labelColor=1E202B)
-![](https://img.shields.io/github/repo-size/sonroyaalmerol/dots-hyprland?color=86dbce&label=SIZE&logo=protondrive&style=for-the-badge&logoColor=D9E0EE&labelColor=1E202B)
+![](https://img.shields.io/github/last-commit/sonroyaalmerol/snry-shell?&style=for-the-badge&color=8ad7eb&logo=git&logoColor=D9E0EE&labelColor=1E202B)
+![](https://img.shields.io/github/stars/sonroyaalmerol/snry-shell?style=for-the-badge&logo=andela&color=86dbd7&logoColor=D9E0EE&labelColor=1E202B)
+![](https://img.shields.io/github/repo-size/sonroyaalmerol/snry-shell?color=86dbce&label=SIZE&logo=protondrive&style=for-the-badge&logoColor=D9E0EE&labelColor=1E202B)
 
 </div>
 
@@ -50,8 +50,8 @@ That's it. The `post_install` hook runs system setup as root and deploys configs
 ### Manual
 
 ```bash
-git clone https://github.com/sonroyaalmerol/dots-hyprland.git
-cd dots-hyprland
+git clone https://github.com/sonroyaalmerol/snry-shell.git
+cd snry-shell
 go build -o ~/.local/bin/snry-daemon ./cmd/snry-daemon
 snry-daemon setup
 ```
@@ -143,4 +143,4 @@ Thanks to:
     <h2>• stargazers •</h2>
 </div>
 
-[![Stargazers over time](https://starchart.cc/sonroyaalmerol/dots-hyprland.svg?variant=adaptive)](https://starchart.cc/sonroyaalmerol/dots-hyprland)
+[![Stargazers over time](https://starchart.cc/sonroyaalmerol/snry-shell.svg?variant=adaptive)](https://starchart.cc/sonroyaalmerol/snry-shell)

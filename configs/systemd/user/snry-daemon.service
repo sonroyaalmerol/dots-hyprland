@@ -1,6 +1,6 @@
 [Unit]
 Description=Snry Shell Daemon
-Documentation=https://github.com/sonroyaalmerol/dots-hyprland
+Documentation=https://github.com/sonroyaalmerol/snry-shell
 After=graphical-session.target hyprland-session.target
 PartOf=graphical-session.target
 
