@@ -6,7 +6,7 @@ import Quickshell
 import Quickshell.Io
 
 /**
- * Persistent Unix socket connection to snry-daemon.
+ * Persistent Unix socket connection to snry-daemon using native Quickshell.Io.Socket.
  *
  * Input protocol (to daemon): plain text commands, one per line.
  *   auth <password>
@@ -30,9 +30,10 @@ Singleton {
 	signal checkdepsError(string error)
 	signal diagnoseDone()
 	signal diagnoseError(string error)
+	signal tabletMode(bool active)
+	signal textInputFocus(bool active)
 
-	property bool connected: false
-	property string accumulatedText: ""
+	property bool connected: daemonSocket.connected
 
 	readonly property string socketPath: Quickshell.env("XDG_RUNTIME_DIR") + "/snry-daemon.sock"
 
@@ -53,74 +54,52 @@ Singleton {
 	}
 
 	function sendCommand(cmd) {
-		if (!daemonProc.running) {
-			console.warn("[DaemonSocket] Cannot send command, process not running")
+		if (!daemonSocket.connected) {
+			console.warn("[DaemonSocket] Cannot send command, not connected")
 			return
 		}
-		daemonProc.write(cmd + "\n")
+		daemonSocket.write(cmd + "\n")
+		daemonSocket.flush()
+	}
+
+	Socket {
+		id: daemonSocket
+		path: root.socketPath
+		connected: true
+
+		parser: SplitParser {
+			splitMarker: "\n"
+			onRead: data => {
+				const line = data.trim()
+				if (line.length === 0)
+					return
+				try {
+					const obj = JSON.parse(line)
+					root.dispatchEvent(obj)
+				} catch (e) {
+					console.warn("[DaemonSocket] parse error:", e, line)
+				}
+			}
+		}
+
+		onError: error => {
+			console.warn("[DaemonSocket] socket error:", error)
+		}
 	}
 
 	Timer {
 		id: reconnectTimer
-		interval: 2000
+		interval: 3000
 		repeat: false
+		running: !daemonSocket.connected
 		onTriggered: {
-			daemonProc.running = false
-			daemonProc.running = true
+			daemonSocket.connected = false
+			daemonSocket.connected = true
 		}
-	}
-
-	Process {
-		id: daemonProc
-		running: true
-		command: ["socat", "-,ignoreeof", "UNIX-CONNECT:" + root.socketPath]
-
-		stdout: StdioCollector {
-			id: stdoutCollector
-			onStreamFinished: {
-				root.connected = false
-				reconnectTimer.start()
-			}
-		}
-
-		onExited: (exitCode, exitStatus) => {
-			root.connected = false
-			reconnectTimer.start()
-		}
-	}
-
-	// Poll accumulated stdout and parse JSON lines
-	Timer {
-		interval: 100
-		repeat: true
-		running: true
-		onTriggered: root.parseOutput()
-	}
-
-	function parseOutput() {
-		const raw = stdoutCollector.text
-		if (raw.length === 0)
-			return
-
-		const lines = raw.split("\n")
-		for (let i = 0; i < lines.length - 1; i++) {
-			const line = lines[i].trim()
-			if (line.length === 0)
-				continue
-			try {
-				const obj = JSON.parse(line)
-				dispatchEvent(obj)
-			} catch (e) {
-				console.warn("[DaemonSocket] parse error:", e, line)
-			}
-		}
-		// Keep incomplete last line
-		stdoutCollector.text = lines[lines.length - 1]
 	}
 
 	function dispatchEvent(obj) {
 		if (obj.event === "lock_state" && obj.data) {
-			root.connected = true
 			lockStateChanged(obj.data.locked === true)
 		} else if (obj.event === "auth_result" && obj.data) {
 			authResult(obj.data)
@@ -138,6 +117,10 @@ Singleton {
 			diagnoseDone()
 		} else if (obj.event === "diagnose_error" && obj.data) {
 			diagnoseError(obj.data.error || "unknown error")
+		} else if (obj.event === "tablet_mode" && obj.data) {
+			tabletMode(obj.data.active === true)
+		} else if (obj.event === "text_focus" && obj.data) {
+			textInputFocus(obj.data.active === true)
 		}
 	}
 }

@@ -1,5 +1,6 @@
 pragma Singleton
 
+import qs.services
 import qs.modules.common
 import Quickshell
 import Quickshell.Io
@@ -12,9 +13,7 @@ Singleton {
     property list<int> ctrlKeys: [29, 97]
 
     function send(cmd) {
-        if (TabletMode.daemonSocket && TabletMode.daemonSocket.connected) {
-            TabletMode.daemonSocket.write(cmd + "\n")
-        }
+        DaemonSocket.sendCommand(cmd)
     }
 
     function releaseAllKeys() {
