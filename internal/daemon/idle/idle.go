@@ -415,28 +415,22 @@ func (s *Service) doLock() {
 
 	log.Printf("[idle] idle lock triggered")
 
+	// Set daemon lock state first (for idle timer tracking)
 	if cb != nil {
 		cb()
-		return
 	}
 
-	// Legacy fallback: try quickshell lock, then hyprlock.
-	if exec.Command("pidof", "qs", "quickshell").Run() == nil {
-		if err := exec.Command("hyprctl", "dispatch", "global", "quickshell:lock").Run(); err == nil {
-			s.bus.publish(topicScreenLock, true)
-			return
-		}
-		log.Printf("[idle] quickshell lock dispatch failed, falling back to hyprlock")
-	}
-
-	lockCmd := exec.Command("hyprlock")
-	if err := lockCmd.Start(); err != nil {
-		log.Printf("[idle] hyprlock failed: %v", err)
-		return
-	}
+	// Dispatch to Quickshell via IPC for reliable lock screen display.
+	// This bypasses the potentially unreliable socket connection.
 	go func() {
-		if err := lockCmd.Wait(); err != nil {
-			log.Printf("[idle] hyprlock exited: %v", err)
+		if err := exec.Command("qs", "-c", "ii", "ipc", "call", "lock", "activate").Run(); err != nil {
+			log.Printf("[idle] qs ipc lock failed: %v", err)
+			// Fallback: try hyprctl dispatch
+			if err := exec.Command("hyprctl", "dispatch", "global", "quickshell:lock").Run(); err != nil {
+				log.Printf("[idle] hyprctl dispatch failed, falling back to hyprlock")
+				// Last resort: hyprlock
+				exec.Command("hyprlock").Run()
+			}
 		}
 	}()
 

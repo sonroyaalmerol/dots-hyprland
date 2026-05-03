@@ -73,7 +73,7 @@ Singleton {
 	Process {
 		id: daemonProc
 		running: true
-		command: ["socat", "-", "UNIX-CONNECT:" + root.socketPath]
+		command: ["socat", "-,ignoreeof", "UNIX-CONNECT:" + root.socketPath]
 
 		stdout: StdioCollector {
 			id: stdoutCollector

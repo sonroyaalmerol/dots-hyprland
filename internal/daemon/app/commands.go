@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"log"
+	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -59,7 +61,11 @@ func dispatchCommand(a *App, line string) {
 		go a.lockscreenSvc.Authenticate(password)
 	case "lock":
 		if a.lockscreenSvc != nil {
-			a.lockscreenSvc.Lock()
+			if !a.lockscreenSvc.IsLocked() {
+				a.lockscreenSvc.Lock()
+				// Dispatch to QS via IPC for reliable lock screen display
+				go a.dispatchQsLock()
+			}
 		} else if a.idleSvc != nil {
 			a.idleSvc.Lock()
 		}
@@ -118,5 +124,16 @@ func dispatchCommand(a *App, line string) {
 		go a.handleCheckdeps()
 	case "diagnose":
 		go a.handleDiagnose()
+	}
+}
+
+// dispatchQsLock sends a lock command to Quickshell via IPC.
+// This is more reliable than the socket-based DaemonSocket for triggering
+// the QML lock screen.
+func (a *App) dispatchQsLock() {
+	binary := a.cfg.QuickshellCfg.Binary
+	configDir := a.cfg.QuickshellCfg.ConfigDir
+	if err := exec.Command(binary, "-c", configDir, "ipc", "call", "lock", "activate").Run(); err != nil {
+		log.Printf("[app] qs ipc lock failed: %v", err)
 	}
 }
