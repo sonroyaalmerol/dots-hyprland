@@ -52,16 +52,22 @@ func (e *Emitter) Emit(m map[string]any) {
 		log.Printf("socket emitter: marshal error: %v", err)
 		return
 	}
-	data = append(data, '\n')
+	e.EmitRaw(append(data, '\n'))
+}
+
+func (e *Emitter) EmitRaw(data []byte) {
+	var dead []net.Conn
 	e.clients.Range(func(key, _ any) bool {
 		conn := key.(net.Conn)
 		if _, werr := conn.Write(data); werr != nil {
-			log.Printf("socket emitter: client write error: %v", werr)
-			conn.Close()
-			e.clients.Delete(conn)
+			dead = append(dead, conn)
 		}
 		return true
 	})
+	for _, conn := range dead {
+		conn.Close()
+		e.clients.Delete(conn)
+	}
 }
 
 func (s *Server) Run(ctx context.Context, dispatch Dispatcher, snapshot func() []SnapshotProvider) error {

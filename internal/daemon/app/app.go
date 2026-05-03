@@ -266,24 +266,24 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runIdle(ctx) })
 	wg.Go(func() { a.runPowersaveTicker(ctx) })
 	wg.Go(func() { a.runTabletMode(ctx) })
-	wg.Go(func() { a.runResources(ctx) })
-	wg.Go(func() { a.runHyprland(ctx) })
 	wg.Go(func() { a.runInputMethod(ctx) })
 	wg.Go(func() { a.runQuickshell(ctx) })
-	wg.Go(func() { a.runWeather(ctx) })
-	wg.Go(func() { a.runUpdates(ctx) })
-	wg.Go(func() { a.runCliphist(ctx) })
-	wg.Go(func() { a.runBrightness(ctx) })
-	wg.Go(func() { a.runSysinfo(ctx) })
-	wg.Go(func() { a.runSession(ctx) })
-	wg.Go(func() { a.runEasyEffects(ctx) })
-	wg.Go(func() { a.runHyprKeybinds(ctx) })
-	wg.Go(func() { a.runHyprXkb(ctx) })
-	wg.Go(func() { a.runHyprsunset(ctx) })
-	wg.Go(func() { a.runNetwork(ctx) })
-	wg.Go(func() { a.runWarp(ctx) })
-	wg.Go(func() { a.runGamemode(ctx) })
-	wg.Go(func() { a.runDarkmode(ctx) })
+	wg.Go(func() { a.runService(ctx, "resources", a.resourcesSvc) })
+	wg.Go(func() { a.runService(ctx, "hyprland", a.hyprlandSvc) })
+	wg.Go(func() { a.runService(ctx, "weather", a.weatherSvc) })
+	wg.Go(func() { a.runService(ctx, "updates", a.updatesSvc) })
+	wg.Go(func() { a.runService(ctx, "cliphist", a.cliphistSvc) })
+	wg.Go(func() { a.runService(ctx, "brightness", a.brightnessSvc) })
+	wg.Go(func() { a.runService(ctx, "sysinfo", a.sysinfoSvc) })
+	wg.Go(func() { a.runService(ctx, "session", a.sessionSvc) })
+	wg.Go(func() { a.runService(ctx, "easyeffects", a.easyEffectsSvc) })
+	wg.Go(func() { a.runService(ctx, "hyprkeybinds", a.hyprKeybindsSvc) })
+	wg.Go(func() { a.runService(ctx, "hyprxkb", a.hyprXkbSvc) })
+	wg.Go(func() { a.runService(ctx, "hyprsunset", a.hyprsunsetSvc) })
+	wg.Go(func() { a.runService(ctx, "network", a.networkSvc) })
+	wg.Go(func() { a.runService(ctx, "warp", a.warpSvc) })
+	wg.Go(func() { a.runService(ctx, "gamemode", a.gamemodeSvc) })
+	wg.Go(func() { a.runService(ctx, "darkmode", a.darkmodeSvc) })
 	wg.Go(func() {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
@@ -299,6 +299,44 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	wg.Wait()
 	return nil
+}
+
+// ── Service runner helper ─────────────────────────────────────────────────────
+
+// runService runs a named service if non-nil, logging errors.
+func (a *App) runService(ctx context.Context, name string, svc interface{ Run(context.Context) error }) {
+	if svc == nil {
+		return
+	}
+	if err := svc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("%s: %v", name, err)
+	}
+}
+
+// ── State helpers ─────────────────────────────────────────────────────────────
+
+func modeStr(mode int32) string {
+	switch mode {
+	case 1:
+		return "tablet"
+	case 2:
+		return "desktop"
+	default:
+		return "auto"
+	}
+}
+
+func (a *App) buildStateData() map[string]any {
+	return map[string]any{
+		"hardware_tablet":       a.hwTablet,
+		"text_focus":            a.textFocus,
+		"effective_tablet_mode": a.effectiveTablet(),
+		"user_mode":             modeStr(a.userMode),
+		"osk_visible":           a.oskVisible,
+		"osk_dismissed":         a.oskDismissed,
+		"osk_pinned":            a.oskPinned,
+		"screen_locked":         a.screenLocked,
+	}
 }
 
 // ── State loop ────────────────────────────────────────────────────────────────
@@ -457,28 +495,12 @@ func (a *App) reevalOsk() {
 // ── State emit ────────────────────────────────────────────────────────────────
 
 func (a *App) emitState() {
-	modeStr := "auto"
-	switch a.userMode {
-	case 1:
-		modeStr = "tablet"
-	case 2:
-		modeStr = "desktop"
-	}
-	data := map[string]any{
-		"hardware_tablet":       a.hwTablet,
-		"text_focus":            a.textFocus,
-		"effective_tablet_mode": a.effectiveTablet(),
-		"user_mode":             modeStr,
-		"osk_visible":           a.oskVisible,
-		"osk_dismissed":         a.oskDismissed,
-		"osk_pinned":            a.oskPinned,
-		"screen_locked":         a.screenLocked,
-	}
+	data := a.buildStateData()
 
 	// Dedup: skip emission if state hasn't changed.
 	h := fnv.New64a()
 	fmt.Fprintf(h, "%v%v%v%v%v%v%v%v",
-		a.hwTablet, a.textFocus, a.effectiveTablet(), modeStr,
+		a.hwTablet, a.textFocus, a.effectiveTablet(), data["user_mode"],
 		a.oskVisible, a.oskDismissed, a.oskPinned, a.screenLocked)
 	newHash := h.Sum64()
 	if newHash == a.lastStateHash {
@@ -495,25 +517,9 @@ func (a *App) emitState() {
 // EmitSnapshot implements socket.SnapshotProvider so new QML clients
 // receive the full current state on connect.
 func (a *App) EmitSnapshot(emit func(map[string]any)) {
-	modeStr := "auto"
-	switch a.userMode {
-	case 1:
-		modeStr = "tablet"
-	case 2:
-		modeStr = "desktop"
-	}
 	emit(map[string]any{
 		"event": "state",
-		"data": map[string]any{
-			"hardware_tablet":       a.hwTablet,
-			"text_focus":            a.textFocus,
-			"effective_tablet_mode": a.effectiveTablet(),
-			"user_mode":             modeStr,
-			"osk_visible":           a.oskVisible,
-			"osk_dismissed":         a.oskDismissed,
-			"osk_pinned":            a.oskPinned,
-			"screen_locked":         a.screenLocked,
-		},
+		"data":  a.buildStateData(),
 	})
 }
 
@@ -543,16 +549,9 @@ func (a *App) loadUserMode() {
 }
 
 func (a *App) saveUserMode() {
-	modeStr := "auto"
-	switch a.userMode {
-	case 1:
-		modeStr = "tablet"
-	case 2:
-		modeStr = "desktop"
-	}
 	dir := filepath.Dir(a.userModePath())
 	_ = os.MkdirAll(dir, 0755)
-	_ = os.WriteFile(a.userModePath(), []byte(modeStr), 0644)
+	_ = os.WriteFile(a.userModePath(), []byte(modeStr(a.userMode)), 0644)
 }
 
 // ── Service runners ───────────────────────────────────────────────────────────
@@ -564,58 +563,30 @@ func (a *App) runSocketServer(ctx context.Context) {
 }
 
 func (a *App) socketSnapshots() []socket.SnapshotProvider {
-	snapshots := make([]socket.SnapshotProvider, 0, 9)
-	// App itself provides the consolidated state snapshot.
-	snapshots = append(snapshots, a)
-	if a.lockscreenSvc != nil {
-		snapshots = append(snapshots, a.lockscreenSvc)
+	var snaps []socket.SnapshotProvider
+	snap := func(s socket.SnapshotProvider) {
+		if s != nil {
+			snaps = append(snaps, s)
+		}
 	}
-	if a.hyprlandSvc != nil {
-		snapshots = append(snapshots, a.hyprlandSvc)
-	}
-	if a.resourcesSvc != nil {
-		snapshots = append(snapshots, a.resourcesSvc)
-	}
-	if a.weatherSvc != nil {
-		snapshots = append(snapshots, a.weatherSvc)
-	}
-	if a.updatesSvc != nil {
-		snapshots = append(snapshots, a.updatesSvc)
-	}
-	if a.brightnessSvc != nil {
-		snapshots = append(snapshots, a.brightnessSvc)
-	}
-	if a.sysinfoSvc != nil {
-		snapshots = append(snapshots, a.sysinfoSvc)
-	}
-	if a.sessionSvc != nil {
-		snapshots = append(snapshots, a.sessionSvc)
-	}
-	if a.easyEffectsSvc != nil {
-		snapshots = append(snapshots, a.easyEffectsSvc)
-	}
-	if a.hyprKeybindsSvc != nil {
-		snapshots = append(snapshots, a.hyprKeybindsSvc)
-	}
-	if a.hyprXkbSvc != nil {
-		snapshots = append(snapshots, a.hyprXkbSvc)
-	}
-	if a.hyprsunsetSvc != nil {
-		snapshots = append(snapshots, a.hyprsunsetSvc)
-	}
-	if a.networkSvc != nil {
-		snapshots = append(snapshots, a.networkSvc)
-	}
-	if a.warpSvc != nil {
-		snapshots = append(snapshots, a.warpSvc)
-	}
-	if a.gamemodeSvc != nil {
-		snapshots = append(snapshots, a.gamemodeSvc)
-	}
-	if a.darkmodeSvc != nil {
-		snapshots = append(snapshots, a.darkmodeSvc)
-	}
-	return snapshots
+	snap(a) // App always provides state
+	snap(a.lockscreenSvc)
+	snap(a.hyprlandSvc)
+	snap(a.resourcesSvc)
+	snap(a.weatherSvc)
+	snap(a.updatesSvc)
+	snap(a.brightnessSvc)
+	snap(a.sysinfoSvc)
+	snap(a.sessionSvc)
+	snap(a.easyEffectsSvc)
+	snap(a.hyprKeybindsSvc)
+	snap(a.hyprXkbSvc)
+	snap(a.hyprsunsetSvc)
+	snap(a.networkSvc)
+	snap(a.warpSvc)
+	snap(a.gamemodeSvc)
+	snap(a.darkmodeSvc)
+	return snaps
 }
 
 func (a *App) runIdle(ctx context.Context) {
@@ -658,24 +629,6 @@ func (a *App) runTabletMode(ctx context.Context) {
 	tm.Run(ctx)
 }
 
-func (a *App) runResources(ctx context.Context) {
-	if a.resourcesSvc == nil {
-		return
-	}
-	if err := a.resourcesSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("resources: %v", err)
-	}
-}
-
-func (a *App) runHyprland(ctx context.Context) {
-	if a.hyprlandSvc == nil {
-		return
-	}
-	if err := a.hyprlandSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("hyprland: %v", err)
-	}
-}
-
 func (a *App) runInputMethod(ctx context.Context) {
 	im, err := inputmethod.New(func(active bool) {
 		a.stateCh <- stateEvent{kind: "text_focus", active: active}
@@ -700,132 +653,6 @@ func (a *App) runQuickshell(ctx context.Context) {
 	log.Printf("quickshell: service goroutine starting")
 	if err := a.qsSvc.Run(ctx); err != nil && err != context.Canceled {
 		log.Printf("quickshell: %v", err)
-	}
-}
-
-func (a *App) runWeather(ctx context.Context) {
-	if a.weatherSvc == nil {
-		return
-	}
-	if err := a.weatherSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("weather: %v", err)
-	}
-}
-
-func (a *App) runUpdates(ctx context.Context) {
-	if a.updatesSvc == nil {
-		return
-	}
-	if err := a.updatesSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("updates: %v", err)
-	}
-}
-
-func (a *App) runCliphist(ctx context.Context) {
-	if a.cliphistSvc == nil {
-		return
-	}
-	if err := a.cliphistSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("cliphist: %v", err)
-	}
-}
-
-func (a *App) runBrightness(ctx context.Context) {
-	if a.brightnessSvc == nil {
-		return
-	}
-	if err := a.brightnessSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("brightness: %v", err)
-	}
-}
-
-func (a *App) runSysinfo(ctx context.Context) {
-	if a.sysinfoSvc == nil {
-		return
-	}
-	if err := a.sysinfoSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("sysinfo: %v", err)
-	}
-}
-
-func (a *App) runSession(ctx context.Context) {
-	if a.sessionSvc == nil {
-		return
-	}
-	if err := a.sessionSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("session: %v", err)
-	}
-}
-
-func (a *App) runEasyEffects(ctx context.Context) {
-	if a.easyEffectsSvc == nil {
-		return
-	}
-	if err := a.easyEffectsSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("easyeffects: %v", err)
-	}
-}
-
-func (a *App) runHyprKeybinds(ctx context.Context) {
-	if a.hyprKeybindsSvc == nil {
-		return
-	}
-	if err := a.hyprKeybindsSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("hyprkeybinds: %v", err)
-	}
-}
-
-func (a *App) runHyprXkb(ctx context.Context) {
-	if a.hyprXkbSvc == nil {
-		return
-	}
-	if err := a.hyprXkbSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("hyprxkb: %v", err)
-	}
-}
-
-func (a *App) runHyprsunset(ctx context.Context) {
-	if a.hyprsunsetSvc == nil {
-		return
-	}
-	if err := a.hyprsunsetSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("hyprsunset: %v", err)
-	}
-}
-
-func (a *App) runNetwork(ctx context.Context) {
-	if a.networkSvc == nil {
-		return
-	}
-	if err := a.networkSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("network: %v", err)
-	}
-}
-
-func (a *App) runWarp(ctx context.Context) {
-	if a.warpSvc == nil {
-		return
-	}
-	if err := a.warpSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("warp: %v", err)
-	}
-}
-
-func (a *App) runGamemode(ctx context.Context) {
-	if a.gamemodeSvc == nil {
-		return
-	}
-	if err := a.gamemodeSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("gamemode: %v", err)
-	}
-}
-
-func (a *App) runDarkmode(ctx context.Context) {
-	if a.darkmodeSvc == nil {
-		return
-	}
-	if err := a.darkmodeSvc.Run(ctx); err != nil && err != context.Canceled {
-		log.Printf("darkmode: %v", err)
 	}
 }
 

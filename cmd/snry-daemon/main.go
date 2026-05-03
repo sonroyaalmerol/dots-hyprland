@@ -69,6 +69,8 @@ Usage:
   snry-daemon help         Show this help`)
 }
 
+// repoRoot resolves the shared data directory.
+// NOTE: app.go has a similar method for daemon runtime use.
 func repoRoot() string {
 	// Try executable location first (when installed via package)
 	exe, err := os.Executable()
@@ -106,89 +108,29 @@ func runDaemon() {
 	}
 }
 
-func runSetup() {
+func runManagerCommand(name string, fn func(context.Context, manager.Config) error) {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-
 	cfg := manager.DefaultConfig(repoRoot())
-	if err := manager.Setup(ctx, cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "setup error: %v\n", err)
+	if err := fn(ctx, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "%s error: %v\n", name, err)
 		os.Exit(1)
 	}
 }
 
-func runDeps() {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
-	cfg := manager.DefaultConfig(repoRoot())
-	if err := manager.Deps(ctx, cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "deps error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func runFiles() {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
-	cfg := manager.DefaultConfig(repoRoot())
-	if err := manager.Files(ctx, cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "files error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func runSetups() {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
-	cfg := manager.DefaultConfig(repoRoot())
-	if err := manager.Setups(ctx, cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "setups error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func runDiagnose() {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
-	cfg := manager.DefaultConfig(repoRoot())
-	if err := manager.Diagnose(ctx, cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "diagnose error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func runCheckDeps() {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
-	cfg := manager.DefaultConfig(repoRoot())
-	if err := manager.CheckDeps(ctx, cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "checkdeps error: %v\n", err)
-		os.Exit(1)
-	}
-}
+func runSetup()     { runManagerCommand("setup", manager.Setup) }
+func runDeps()      { runManagerCommand("deps", manager.Deps) }
+func runFiles()     { runManagerCommand("files", manager.Files) }
+func runSetups()    { runManagerCommand("setups", manager.Setups) }
+func runDiagnose()  { runManagerCommand("diagnose", manager.Diagnose) }
+func runCheckDeps() { runManagerCommand("checkdeps", manager.CheckDeps) }
+func runUninstall() { runManagerCommand("uninstall", manager.Uninstall) }
 
 func runAutoscale() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-
 	if err := manager.Autoscale(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "autoscale error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func runUninstall() {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
-	cfg := manager.DefaultConfig(repoRoot())
-	if err := manager.Uninstall(ctx, cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "uninstall error: %v\n", err)
 		os.Exit(1)
 	}
 }

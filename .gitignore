@@ -28,3 +28,4 @@ scripts/snry-daemon/osk-watcher
 pkg/
 src/
 dots-hyprland
+*.log
