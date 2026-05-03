@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -211,6 +212,15 @@ func runSend() {
 	}
 	defer conn.Close()
 
-	fmt.Fprintf(conn, "%s\n", os.Args[2])
-	time.Sleep(100 * time.Millisecond)
+	fmt.Fprintf(conn, "%s\n", strings.Join(os.Args[2:], " "))
+
+	// Drain server responses (snapshot data, events) to prevent the
+	// server's write buffer from filling up and blocking command processing.
+	conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	buf := make([]byte, 4096)
+	for {
+		if _, err := conn.Read(buf); err != nil {
+			break
+		}
+	}
 }

@@ -102,20 +102,35 @@ func (s *Server) handleClient(conn net.Conn, dispatch Dispatcher) {
 
 	log.Printf("socket: client connected: %s", conn.RemoteAddr())
 
+	// Read commands in background so snapshot writes can't block processing.
+	cmdCh := make(chan string, 16)
+	go func() {
+		scanner := bufio.NewScanner(conn)
+		for scanner.Scan() {
+			cmdCh <- scanner.Text()
+		}
+		close(cmdCh)
+	}()
+
+	// Process commands in background so we don't block on snapshot writes.
+	doneCh := make(chan struct{})
+	go func() {
+		defer close(doneCh)
+		for line := range cmdCh {
+			if dispatch != nil {
+				dispatch.DispatchCommand(line)
+			}
+		}
+	}()
+
+	// Emit snapshots (writes to conn; reader goroutine runs concurrently).
 	if s.snapshot != nil {
 		for _, snap := range s.snapshot() {
 			snap.EmitSnapshot(s.emitter.Emit)
 		}
 	}
 
-	scanner := bufio.NewScanner(conn)
-	for scanner.Scan() {
-		if dispatch != nil {
-			dispatch.DispatchCommand(scanner.Text())
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		log.Printf("socket: client read error: %v", err)
-	}
+	// Wait for command processing to finish (client disconnected).
+	<-doneCh
 	log.Printf("socket: client disconnected: %s", conn.RemoteAddr())
 }

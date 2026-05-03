@@ -2,7 +2,11 @@ package app
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
+	"math"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -124,6 +128,14 @@ func dispatchCommand(a *App, line string) {
 		go a.handleCheckdeps()
 	case "diagnose":
 		go a.handleDiagnose()
+	case "workspace-action":
+		a.handleWorkspaceAction(fields[1:])
+	case "zoom":
+		a.handleZoom(fields[1:])
+	case "ai-summary":
+		a.handleAiSummary()
+	case "start-geoclue":
+		a.handleStartGeoclue()
 
 	// State commands — forwarded to state loop.
 	case "set-mode":
@@ -158,4 +170,133 @@ func (a *App) dispatchQsLock() {
 	if err := exec.Command(binary, "-c", configDir, "ipc", "call", "lock", "activate").Run(); err != nil {
 		log.Printf("[app] qs ipc lock failed: %v", err)
 	}
+}
+
+func (a *App) handleWorkspaceAction(args []string) {
+	if len(args) < 2 || a.hyprlandSvc == nil {
+		return
+	}
+	dispatcher := args[0]
+	target := args[1]
+
+	if strings.ContainsAny(target, "+-") {
+		if err := a.hyprlandSvc.Dispatch(dispatcher, target); err != nil {
+			log.Printf("[app] workspace-action dispatch: %v", err)
+		}
+		return
+	}
+
+	if id, err := strconv.Atoi(target); err == nil {
+		currID, err := a.hyprlandSvc.ActiveWorkspaceID()
+		if err != nil {
+			log.Printf("[app] workspace-action get active: %v", err)
+			return
+		}
+		targetWS := ((currID-1)/10)*10 + id
+		if err := a.hyprlandSvc.Dispatch(dispatcher, strconv.Itoa(targetWS)); err != nil {
+			log.Printf("[app] workspace-action dispatch: %v", err)
+		}
+		return
+	}
+
+	if err := a.hyprlandSvc.Dispatch(dispatcher, target); err != nil {
+		log.Printf("[app] workspace-action dispatch: %v", err)
+	}
+}
+
+func (a *App) handleZoom(args []string) {
+	if len(args) < 1 || a.hyprlandSvc == nil {
+		return
+	}
+	action := args[0]
+	step := 0.3
+	if len(args) >= 2 {
+		if s, err := strconv.ParseFloat(args[1], 64); err == nil {
+			step = s
+		}
+	}
+
+	if action == "reset" {
+		if _, err := a.hyprlandSvc.QuerySocket("keyword cursor:zoom_factor 1.0"); err != nil {
+			log.Printf("[app] zoom reset: %v", err)
+		}
+		return
+	}
+
+	data, err := a.hyprlandSvc.QuerySocket("j/getoption cursor:zoom_factor")
+	if err != nil {
+		log.Printf("[app] zoom getoption: %v", err)
+		return
+	}
+	var opt struct {
+		Float float64 `json:"float"`
+	}
+	if err := json.Unmarshal(data, &opt); err != nil {
+		log.Printf("[app] zoom parse: %v", err)
+		return
+	}
+
+	var newZoom float64
+	switch action {
+	case "increase":
+		newZoom = math.Min(opt.Float+step, 3.0)
+	case "decrease":
+		newZoom = math.Max(opt.Float-step, 1.0)
+	default:
+		return
+	}
+
+	cmd := fmt.Sprintf("keyword cursor:zoom_factor %f", newZoom)
+	if _, err := a.hyprlandSvc.QuerySocket(cmd); err != nil {
+		log.Printf("[app] zoom set: %v", err)
+	}
+}
+
+func (a *App) handleAiSummary() {
+	go func() {
+		sel, err := exec.Command("wl-paste", "-p").Output()
+		if err != nil || len(sel) == 0 {
+			sel, err = exec.Command("xclip", "-selection", "primary", "-o").Output()
+		}
+		if err != nil || len(sel) == 0 {
+			exec.Command("notify-send", "AI Summary", "No text selected", "-a", "Hyprland").Run()
+			return
+		}
+
+		resp, err := exec.Command("ollama", "run", "llama3.2", "Summarize the following text concisely:\n"+string(sel)).Output()
+		if err != nil || len(resp) == 0 {
+			exec.Command("notify-send", "AI Summary", "Failed to get response from ollama", "-a", "Hyprland", "-u", "critical").Run()
+			return
+		}
+
+		wc := exec.Command("wl-copy")
+		wc.Stdin = strings.NewReader(string(resp))
+		if err := wc.Run(); err != nil {
+			log.Printf("[app] ai-summary wl-copy: %v", err)
+		}
+
+		exec.Command("notify-send", "AI Summary", string(resp), "-a", "Hyprland", "-t", "10000").Run()
+	}()
+}
+
+func (a *App) handleStartGeoclue() {
+	out, err := exec.Command("pgrep", "-f", "geoclue-2.0/demos/agent").Output()
+	if err == nil && len(strings.TrimSpace(string(out))) > 0 {
+		return
+	}
+
+	paths := []string{
+		"/usr/libexec/geoclue-2.0/demos/agent",
+		"/usr/lib/geoclue-2.0/demos/agent",
+	}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			cmd := exec.Command(p)
+			if err := cmd.Start(); err != nil {
+				log.Printf("[app] start-geoclue: %v", err)
+			}
+			return
+		}
+	}
+	log.Printf("[app] start-geoclue: agent not found")
 }

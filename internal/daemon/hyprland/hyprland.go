@@ -492,3 +492,29 @@ func (s *Service) GetSnapshot() map[string]any {
 		"activeWorkspace": s.activeWorkspace,
 	}
 }
+
+// QuerySocket sends a raw command to the Hyprland IPC socket and returns the response.
+func (s *Service) QuerySocket(cmd string) ([]byte, error) {
+	return querySocket(cmd)
+}
+
+// Dispatch sends a dispatch command to Hyprland.
+func (s *Service) Dispatch(dispatcher, target string) error {
+	_, err := querySocket("dispatch " + dispatcher + " " + target)
+	return err
+}
+
+// ActiveWorkspaceID returns the currently active workspace ID.
+func (s *Service) ActiveWorkspaceID() (int, error) {
+	data, err := querySocket("j/activeworkspace")
+	if err != nil {
+		return 0, err
+	}
+	var result struct {
+		ID int `json:"id"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return 0, err
+	}
+	return result.ID, nil
+}
