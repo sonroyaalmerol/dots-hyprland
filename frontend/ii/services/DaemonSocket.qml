@@ -30,6 +30,21 @@ Singleton {
 	property real swapUsed: 0
 	property real swapUsedPercentage: 0
 
+	// Hyprland data from daemon.
+	property var hyprWindows: []
+	property var hyprMonitors: []
+	property var hyprWorkspaces: []
+	property var hyprLayers: ({})
+	property var hyprActiveWorkspace: null
+
+	// Weather data from daemon.
+	property string weatherRaw: ""
+	property string weatherCity: ""
+
+	// Updates data from daemon.
+	property bool updatesAvailable: false
+	property int updatesCount: 0
+
 	// Backward compat signals.
 	signal lockStateChanged(bool locked)
 	signal authResult(var data)
@@ -40,6 +55,8 @@ Singleton {
 	signal checkdepsError(string error)
 	signal diagnoseDone()
 	signal diagnoseError(string error)
+	signal weatherUpdated()
+	signal updatesUpdated()
 
 	property bool connected: daemonSocket.connected
 
@@ -157,6 +174,20 @@ Singleton {
 				root.swapUsed = root.swapTotal - root.swapFree
 				root.swapUsedPercentage = root.swapTotal > 0 ? root.swapUsed / root.swapTotal : 0
 			}
+		} else if (obj.event === "hyprland_data" && obj.data) {
+			root.hyprWindows = obj.data.windows || []
+			root.hyprMonitors = obj.data.monitors || []
+			root.hyprWorkspaces = obj.data.workspaces || []
+			root.hyprLayers = obj.data.layers || {}
+			root.hyprActiveWorkspace = obj.data.activeWorkspace || null
+		} else if (obj.event === "weather" && obj.data) {
+			root.weatherRaw = obj.data.raw || ""
+			root.weatherCity = obj.data.city || ""
+			weatherUpdated()
+		} else if (obj.event === "updates" && obj.data) {
+			root.updatesAvailable = obj.data.available || false
+			root.updatesCount = obj.data.count || 0
+			updatesUpdated()
 		}
 	}
 }

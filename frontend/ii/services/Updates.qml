@@ -4,55 +4,35 @@ import qs.modules.common
 import qs.modules.common.functions
 import QtQuick
 import Quickshell
-import Quickshell.Io
 
 /*
  * System updates service. Currently only supports Arch.
  */
 Singleton {
-    id: root
+	id: root
 
-    property bool available: false
-    property alias checking: checkUpdatesProc.running
-    property int count: 0
-    
-    readonly property bool updateAdvised: available && count > Config.options.updates.adviseUpdateThreshold
-    readonly property bool updateStronglyAdvised: available && count > Config.options.updates.stronglyAdviseUpdateThreshold
+	property bool available: false
+	property bool checking: false
+	property int count: 0
 
-    function load() {}
-    function refresh() {
-        if (!available) return;
-        print("[Updates] Checking for system updates")
-        checkUpdatesProc.running = true;
-    }
+	readonly property bool updateAdvised: available && count > Config.options.updates.adviseUpdateThreshold
+	readonly property bool updateStronglyAdvised: available && count > Config.options.updates.stronglyAdviseUpdateThreshold
 
-    Timer {
-        interval: Config.options.updates.checkInterval * 60 * 1000
-        repeat: true
-        running: Config.ready && Config.options.updates.enableCheck
-        onTriggered: {
-            print("[Updates] Periodic update check due")
-            root.refresh();
-        }
-    }
+	Connections {
+		target: DaemonSocket
 
-    Process {
-        id: checkAvailabilityProc
-        running: Config.ready && Config.options.updates.enableCheck
-        command: ["which", "checkupdates"]
-        onExited: (exitCode, exitStatus) => {
-            root.available = (exitCode === 0);
-            root.refresh();
-        }
-    }
+		function onUpdatesUpdated() {
+			root.available = DaemonSocket.updatesAvailable
+			root.count = DaemonSocket.updatesCount
+		}
+	}
 
-    Process {
-        id: checkUpdatesProc
-        command: ["bash", "-c", "checkupdates | wc -l"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.count = parseInt(text.trim());
-            }
-        }
-    }
+	function load() {}
+	function refresh() {}
+
+	Component.onCompleted: {
+		if (DaemonSocket.updatesAvailable) {
+			onUpdatesUpdated()
+		}
+	}
 }
