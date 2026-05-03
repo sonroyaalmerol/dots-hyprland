@@ -253,8 +253,8 @@ func (a *App) runTabletMode(ctx context.Context) {
 	}
 	tm := tabletmode.New(conn, func(tablet bool) {
 		a.socketServer.Emitter().Emit(map[string]any{
-			"event":  "tablet_mode",
-			"active": tablet,
+			"event": "tablet_mode",
+			"data":  map[string]any{"active": tablet},
 		})
 	})
 	tm.Run(ctx)
@@ -281,8 +281,8 @@ func (a *App) runHyprland(ctx context.Context) {
 func (a *App) runInputMethod(ctx context.Context) {
 	im, err := inputmethod.New(func(active bool) {
 		a.socketServer.Emitter().Emit(map[string]any{
-			"event":  "text_focus",
-			"active": active,
+			"event": "text_focus",
+			"data":  map[string]any{"active": active},
 		})
 	})
 	if err != nil {
