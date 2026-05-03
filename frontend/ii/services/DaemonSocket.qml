@@ -80,6 +80,15 @@ Singleton {
 	property bool hyprsunsetTemperatureActive: false
 	property int hyprsunsetGamma: 100
 
+	// Network from daemon.
+	property bool networkWifiEnabled: false
+	property string networkWifiStatus: "disconnected"
+	property bool networkEthernet: false
+	property bool networkWifi: false
+	property string networkName: ""
+	property int networkStrength: 0
+	property var networkWifiNetworks: []
+
 	// Backward compat signals.
 	signal lockStateChanged(bool locked)
 	signal authResult(var data)
@@ -98,6 +107,8 @@ Singleton {
 	signal hyprKeybindsUpdated()
 	signal hyprXkbUpdated()
 	signal hyprsunsetUpdated()
+	signal networkUpdated()
+	signal networkConnectResult(var data)
 
 	property bool connected: daemonSocket.connected
 
@@ -134,6 +145,13 @@ Singleton {
 	function hyprsunsetEnableTemperature() { sendCommand("hyprsunset-enable") }
 	function hyprsunsetDisableTemperature() { sendCommand("hyprsunset-disable") }
 	function hyprsunsetToggleTemperature(active) { sendCommand("hyprsunset-toggle " + (active !== undefined ? active : "")) }
+	function wifiEnable() { sendCommand("wifi-enable") }
+	function wifiDisable() { sendCommand("wifi-disable") }
+	function wifiToggle() { sendCommand("wifi-toggle") }
+	function wifiRescan() { sendCommand("wifi-rescan") }
+	function wifiConnect(ssid) { sendCommand("wifi-connect " + ssid) }
+	function wifiDisconnect(ssid) { sendCommand("wifi-disconnect " + ssid) }
+	function wifiChangePassword(ssid, password) { sendCommand("wifi-change-password " + ssid + " " + password) }
 
 	Socket {
 		id: daemonSocket
@@ -272,6 +290,17 @@ Singleton {
 			if (obj.data.temperatureActive !== undefined) root.hyprsunsetTemperatureActive = obj.data.temperatureActive
 			if (obj.data.gamma !== undefined) root.hyprsunsetGamma = obj.data.gamma
 			hyprsunsetUpdated()
+		} else if (obj.event === "network" && obj.data) {
+			if (obj.data.wifiEnabled !== undefined) root.networkWifiEnabled = obj.data.wifiEnabled
+			if (obj.data.wifiStatus !== undefined) root.networkWifiStatus = obj.data.wifiStatus
+			if (obj.data.ethernet !== undefined) root.networkEthernet = obj.data.ethernet
+			if (obj.data.wifi !== undefined) root.networkWifi = obj.data.wifi
+			if (obj.data.networkName !== undefined) root.networkName = obj.data.networkName
+			if (obj.data.networkStrength !== undefined) root.networkStrength = obj.data.networkStrength
+			if (obj.data.wifiNetworks !== undefined) root.networkWifiNetworks = obj.data.wifiNetworks
+			networkUpdated()
+		} else if (obj.event === "network_connect_result" && obj.data) {
+			networkConnectResult(obj.data)
 		}
 	}
 }
