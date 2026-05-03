@@ -11,8 +11,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -448,6 +450,15 @@ func dispatchCommand(a *App, line string) {
 		go a.handleBatteryStatus()
 	case "restore-video-wallpaper":
 		go a.handleRestoreVideoWallpaper()
+	case "nvim-apply-colors":
+		go a.handleNvimApplyColors()
+	case "apply-vscode-color":
+		go a.handleApplyVscodeColor()
+	case "hyprconfig-edit":
+		if len(fields) < 3 {
+			return
+		}
+		go a.handleHyprconfigEdit(fields[1:])
 	}
 }
 
@@ -1171,4 +1182,223 @@ func (a *App) handleKeyringUnlock(password string) {
 			"data":  map[string]any{"success": false, "error": err.Error()},
 		})
 	}
+}
+
+func (a *App) handleNvimApplyColors() {
+	stateDir := os.Getenv("XDG_STATE_HOME")
+	if stateDir == "" {
+		stateDir = filepath.Join(os.Getenv("HOME"), ".local/state")
+	}
+	scssFile := filepath.Join(stateDir, "quickshell", "user", "generated", "material_colors.scss")
+	nvimFile := filepath.Join(stateDir, "quickshell", "user", "generated", "nvim_colors.json")
+
+	data, err := os.ReadFile(scssFile)
+	if err != nil {
+		return
+	}
+
+	colors := make(map[string]any)
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.TrimSuffix(line, ";")
+		if !strings.HasPrefix(line, "$") {
+			continue
+		}
+		line = line[1:]
+		idx := strings.Index(line, ":")
+		if idx < 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:idx])
+		val := strings.TrimSpace(line[idx+1:])
+		switch val {
+		case "True":
+			colors[key] = true
+		case "False":
+			colors[key] = false
+		default:
+			colors[key] = val
+		}
+	}
+
+	jsonOut, err := json.MarshalIndent(colors, "", "  ")
+	if err != nil {
+		return
+	}
+	os.MkdirAll(filepath.Dir(nvimFile), 0755)
+	os.WriteFile(nvimFile, jsonOut, 0644)
+
+	entries, _ := os.ReadDir("/proc")
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		commData, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "comm"))
+		if err != nil {
+			continue
+		}
+		if strings.TrimSpace(string(commData)) == "nvim" {
+			pid, err := strconv.Atoi(entry.Name())
+			if err == nil {
+				syscall.Kill(pid, syscall.SIGUSR1)
+			}
+		}
+	}
+}
+
+func (a *App) handleApplyVscodeColor() {
+	stateDir := os.Getenv("XDG_STATE_HOME")
+	if stateDir == "" {
+		stateDir = filepath.Join(os.Getenv("HOME"), ".local/state")
+	}
+	colorFile := filepath.Join(stateDir, "quickshell", "user", "generated", "color.txt")
+	newColor, err := os.ReadFile(colorFile)
+	if err != nil {
+		return
+	}
+	newColorStr := strings.TrimSpace(string(newColor))
+	if newColorStr == "" {
+		return
+	}
+
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+
+	settingsPaths := []string{
+		filepath.Join(configDir, "Code/User/settings.json"),
+		filepath.Join(configDir, "VSCodium/User/settings.json"),
+		filepath.Join(configDir, "Code - OSS/User/settings.json"),
+		filepath.Join(configDir, "Code - Insiders/User/settings.json"),
+		filepath.Join(configDir, "Cursor/User/settings.json"),
+		filepath.Join(configDir, "Antigravity/User/settings.json"),
+	}
+
+	key := "material-code.primaryColor"
+	for _, path := range settingsPaths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		content := string(data)
+		pattern := `"material-code.primaryColor"`
+		if strings.Contains(content, pattern) {
+			re := regexp.MustCompile(`("material-code\.primaryColor"\s*:\s*)"[^"]*"`)
+			content = re.ReplaceAllString(content, fmt.Sprintf(`${1}"%s"`, newColorStr))
+		} else {
+			lastBrace := strings.LastIndex(content, "}")
+			if lastBrace >= 0 {
+				content = content[:lastBrace] + fmt.Sprintf(",\n  \"%s\": \"%s\"\n}", key, newColorStr)
+			}
+		}
+		os.WriteFile(path, []byte(content), 0644)
+	}
+}
+
+func (a *App) handleHyprconfigEdit(args []string) {
+	filePath := ""
+	var setArgs [][2]string
+	var resetKeys []string
+
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	defaultFile := filepath.Join(configDir, "hypr", "hyprland.conf")
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--file":
+			if i+1 < len(args) {
+				filePath = args[i+1]
+				i++
+			}
+		case "--set":
+			if i+2 < len(args) {
+				key, val := args[i+1], args[i+2]
+				if val == "[[EMPTY]]" {
+					resetKeys = append(resetKeys, key)
+				} else {
+					setArgs = append(setArgs, [2]string{key, val})
+				}
+				i += 2
+			}
+		case "--reset":
+			if i+1 < len(args) {
+				resetKeys = append(resetKeys, args[i+1])
+				i++
+			}
+		}
+	}
+
+	if filePath == "" {
+		filePath = defaultFile
+	}
+	filePath = os.ExpandEnv(filePath)
+
+	if len(setArgs) == 0 && len(resetKeys) == 0 {
+		return
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if len(setArgs) > 0 {
+			var lines []string
+			for _, kv := range setArgs {
+				lines = append(lines, fmt.Sprintf("%s = %s", kv[0], kv[1]))
+			}
+			os.MkdirAll(filepath.Dir(filePath), 0755)
+			os.WriteFile(filePath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+		}
+		return
+	}
+
+	lines := strings.Split(string(data), "\n")
+	patterns := make(map[string]*regexp.Regexp)
+	for _, kv := range setArgs {
+		patterns[kv[0]] = regexp.MustCompile("(?m)^\\s*" + regexp.QuoteMeta(kv[0]) + "\\s*=")
+	}
+	for _, key := range resetKeys {
+		patterns[key] = regexp.MustCompile("(?m)^\\s*" + regexp.QuoteMeta(key) + "\\s*=")
+	}
+
+	var newLines []string
+	found := make(map[string]bool)
+
+	for _, line := range lines {
+		matched := false
+		for _, key := range resetKeys {
+			if patterns[key].MatchString(line) {
+				matched = true
+				break
+			}
+		}
+		if matched {
+			continue
+		}
+		for _, kv := range setArgs {
+			if patterns[kv[0]].MatchString(line) {
+				newLines = append(newLines, fmt.Sprintf("%s = %s", kv[0], kv[1]))
+				found[kv[0]] = true
+				matched = true
+				break
+			}
+		}
+		if matched {
+			continue
+		}
+		newLines = append(newLines, line)
+	}
+
+	for _, kv := range setArgs {
+		if !found[kv[0]] {
+			if len(newLines) > 0 && !strings.HasSuffix(newLines[len(newLines)-1], "\n") {
+				newLines[len(newLines)-1] += "\n"
+			}
+			newLines = append(newLines, fmt.Sprintf("%s = %s", kv[0], kv[1]))
+		}
+	}
+
+	os.WriteFile(filePath, []byte(strings.Join(newLines, "\n")), 0644)
 }
