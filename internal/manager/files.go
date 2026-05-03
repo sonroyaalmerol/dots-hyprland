@@ -3,11 +3,13 @@ package manager
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/sonroyaalmerol/snry-shell-qs/frontend"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/platform"
 	syncengine "github.com/sonroyaalmerol/snry-shell-qs/internal/syncengine"
 )
@@ -223,12 +225,73 @@ func runSmartSync(cfg Config, steps []syncengine.SyncStep) error {
 }
 
 func syncQuickshell(cfg Config) error {
-	src := cfg.RepoRoot + "/frontend/ii"
+	src, err := extractEmbeddedFrontend(cfg)
+	if err != nil {
+		return fmt.Errorf("extract embedded frontend: %w", err)
+	}
 	steps, err := smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/quickshell", "quickshell")
 	if err != nil {
 		return fmt.Errorf("scan %s: %w", src, err)
 	}
 	return runSmartSync(cfg, steps)
+}
+
+// extractEmbeddedFrontend writes the embedded quickshell frontend from
+// the compiled-in embed.FS to a cache directory and returns the path.
+// The embedded FS has all paths prefixed with "ii/"; this function
+// strips that prefix so the extracted tree matches the destination
+// layout expected under ~/.config/quickshell/.
+func extractEmbeddedFrontend(cfg Config) (string, error) {
+	cacheDir := cfg.XDG.CacheHome + "/snry-shell/embedded-frontend"
+	stampFile := cacheDir + "/.embed-stamp"
+
+	// Check if already extracted this build.
+	if _, err := os.Stat(stampFile); err == nil {
+		return cacheDir, nil
+	}
+
+	// Clean and recreate.
+	_ = os.RemoveAll(cacheDir)
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return "", err
+	}
+
+	err := fs.WalkDir(frontend.FS, "ii", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Strip the "ii/" prefix.
+		rel := strings.TrimPrefix(path, "ii/")
+		if rel == "" {
+			return nil // root "ii" dir itself
+		}
+
+		target := filepath.Join(cacheDir, rel)
+
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+
+		data, err := fs.ReadFile(frontend.FS, path)
+		if err != nil {
+			return fmt.Errorf("read embedded %s: %w", path, err)
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
+	if err != nil {
+		return "", fmt.Errorf("walk embedded fs: %w", err)
+	}
+
+	// Write stamp so we skip extraction next time.
+	if err := os.WriteFile(stampFile, []byte("ok"), 0o644); err != nil {
+		return "", fmt.Errorf("write stamp: %w", err)
+	}
+
+	return cacheDir, nil
 }
 
 func syncHyprland(cfg Config) error {
