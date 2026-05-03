@@ -314,6 +314,63 @@ func dispatchCommand(a *App, line string) {
 		if a.conflictSvc != nil {
 			go a.handleConflictCheck()
 		}
+	case "fps-set":
+		if len(fields) >= 2 {
+			fpsValue := fields[1]
+			if _, err := strconv.Atoi(fpsValue); err != nil {
+				return
+			}
+			cfgPaths := []string{
+				os.ExpandEnv("$HOME/.config/MangoHud/MangoHud.conf"),
+			}
+			for _, path := range cfgPaths {
+				data, err := os.ReadFile(path)
+				if err != nil {
+					os.WriteFile(path, []byte("fps_limit="+fpsValue+"\n"), 0644)
+					continue
+				}
+				lines := strings.Split(string(data), "\n")
+				found := false
+				for i, line := range lines {
+					if strings.HasPrefix(line, "fps_limit=") {
+						lines[i] = "fps_limit=" + fpsValue
+						found = true
+						break
+					}
+				}
+				if !found {
+					lines = append(lines, "fps_limit="+fpsValue)
+				}
+				os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644)
+			}
+			exec.Command("pkill", "-SIGUSR2", "mangohud").Run()
+		}
+	case "hyprconfig-get":
+		if len(fields) >= 2 {
+			key := strings.Join(fields[1:], " ")
+			out, err := exec.Command("hyprctl", "getoption", "-j", key).Output()
+			if err != nil {
+				return
+			}
+			a.socketServer.Emitter().Emit(map[string]any{
+				"event": "hyprconfig_value",
+				"data": map[string]any{
+					"key":   key,
+					"value": strings.TrimSpace(string(out)),
+				},
+			})
+		}
+	case "hyprconfig-set":
+		if len(fields) >= 3 {
+			key := fields[1]
+			value := strings.Join(fields[2:], " ")
+			exec.Command("hyprctl", "keyword", key, value).Run()
+		}
+	case "hyprconfig-reset":
+		if len(fields) >= 2 {
+			key := strings.Join(fields[1:], " ")
+			exec.Command("hyprctl", "keyword", key, "undef").Run()
+		}
 	}
 }
 
