@@ -151,7 +151,13 @@ func (s *Service) startLockout() {
 }
 
 // Lock sets the locked state and notifies listeners.
+// It also ensures Hyprland allows session lock restore (survives compositor crashes).
 func (s *Service) Lock() {
+	// Allow session lock restore so QS can re-lock after Hyprland crash recovery.
+	go func() {
+		exec.Command("hyprctl", "keyword", "misc:allow_session_lock_restore", "1").Run()
+	}()
+
 	s.locked.Store(true)
 	s.emit(EventLockState, true)
 }
