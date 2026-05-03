@@ -223,10 +223,7 @@ func runSmartSync(cfg Config, steps []syncengine.SyncStep) error {
 }
 
 func syncQuickshell(cfg Config) error {
-	src := cfg.ConfigsDir() + "/quickshell"
-	if _, err := os.Stat(src); err != nil {
-		src = cfg.RepoRoot + "/configs/quickshell"
-	}
+	src := cfg.RepoRoot + "/frontend/ii"
 	steps, err := smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/quickshell", "quickshell")
 	if err != nil {
 		return fmt.Errorf("scan %s: %w", src, err)

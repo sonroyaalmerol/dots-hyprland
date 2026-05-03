@@ -199,7 +199,7 @@ Each sync function (`syncQuickshell`, `syncHyprland`, `syncBash`, `syncFontconfi
 
 | Function | Source | Destination |
 |----------|--------|-------------|
-| `syncQuickshell` | `configs/quickshell/` | `~/.config/quickshell/` |
+| `syncQuickshell` | `frontend/ii/` | `~/.config/quickshell/` |
 | `syncHyprland` | `configs/hypr/` (hyprland/, .conf files, custom/) | `~/.config/hypr/` |
 | `syncBash` | `configs/bash/` + dotfiles | `~/.config/bash/` + `~/` |
 | `syncFontconfig` | `configs/fontconfig/` (or fontset) | `~/.config/fontconfig/` |
