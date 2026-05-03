@@ -265,7 +265,12 @@ func (s *Service) NotifyLockChanged() {
 	}
 	s.mu.Unlock()
 
-	if !locked {
+	if locked {
+		// Turn display ON when locking so the lock screen is visible.
+		// The locked-mode idle timer (LockDisplayOffTimeout) will turn it
+		// back off after the user stops interacting.
+		s.setDisplay(true)
+	} else {
 		s.setDisplay(true)
 	}
 	if changed {
