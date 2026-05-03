@@ -33,7 +33,8 @@ RippleButton {
         "shift": 1,
         "control": 1
     })
-    toggled: isShift ? Ydotool.shiftMode : false
+    property bool isModActive: Ydotool.activeModKeys.indexOf(root.keycode) !== -1
+    toggled: isShift ? Ydotool.shiftMode > 0 : root.isModActive
 
     enabled: shape != "empty"
     colBackground: shape == "empty" ? ColorUtils.transparentize(Appearance.colors.colLayer1) : Appearance.colors.colLayer1
@@ -68,7 +69,7 @@ RippleButton {
     }
 
     downAction: () => {
-        if (root.type !== "modkey" || !root.toggled) {
+        if (root.type !== "modkey" || !root.isModActive) {
             Ydotool.press(root.keycode);
         }
         if (isShift && Ydotool.shiftMode == 0) Ydotool.shiftMode = 1;
@@ -79,6 +80,7 @@ RippleButton {
             if (Ydotool.shiftMode == 1) {
                 Ydotool.releaseShiftKeys()
             }
+            Ydotool.releaseModKeys()
         } else if (isShift) {
             if (Ydotool.shiftMode == 1) {
                 if (!capsLockTimer.hasStarted) {
@@ -94,16 +96,13 @@ RippleButton {
                 Ydotool.releaseShiftKeys();
             }
         } else if (root.type == "modkey") {
-            root.toggled = !root.toggled;
-            if (!root.toggled) {
-                if (isShift) {
-                    Ydotool.releaseShiftKeys();
-                } else { 
-                    Ydotool.release(root.keycode);
-                }
+            if (root.isModActive) {
+                Ydotool.deactivateModKey(root.keycode);
+                Ydotool.release(root.keycode);
+            } else {
+                Ydotool.activateModKey(root.keycode);
             }
         }
-
     }
 
     contentItem: StyledText {
