@@ -77,7 +77,7 @@ Singleton {
         {
             action: "konachanwallpaper",
             execute: () => {
-                Quickshell.execDetached([Quickshell.shellPath("scripts/colors/random/random_konachan_wall.sh")]);
+                Quickshell.execDetached(["snry-daemon", "send", "random-wallpaper"]);
             }
         },
         {

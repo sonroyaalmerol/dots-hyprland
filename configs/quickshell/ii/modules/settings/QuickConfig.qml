@@ -14,8 +14,8 @@ ContentPage {
     Process {
         id: randomWallProc
         property string status: ""
-        property string scriptPath: `${Directories.scriptPath}/colors/random/random_konachan_wall.sh`
-        command: ["bash", "-c", FileUtils.trimFileProtocol(randomWallProc.scriptPath)]
+        property string source: "konachan"
+        command: ["snry-daemon", "send", "random-wallpaper", randomWallProc.source]
         stdout: SplitParser {
             onRead: data => {
                 randomWallProc.status = data.trim();
@@ -96,7 +96,7 @@ ContentPage {
                     materialIcon: "ifl"
                     mainText: randomWallProc.running ? Translation.tr("Be patient...") : Translation.tr("Random: Konachan")
                     onClicked: {
-                        randomWallProc.scriptPath = `${Directories.scriptPath}/colors/random/random_konachan_wall.sh`;
+                        randomWallProc.source = "konachan";
                         randomWallProc.running = true;
                     }
                     StyledToolTip {
@@ -111,7 +111,7 @@ ContentPage {
                     materialIcon: "ifl"
                     mainText: randomWallProc.running ? Translation.tr("Be patient...") : Translation.tr("Random: osu! seasonal")
                     onClicked: {
-                        randomWallProc.scriptPath = `${Directories.scriptPath}/colors/random/random_osu_wall.sh`;
+                        randomWallProc.source = "osu";
                         randomWallProc.running = true;
                     }
                     StyledToolTip {

@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 
+import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 
@@ -16,39 +17,30 @@ Singleton {
     
     signal reloaded()
 
-    readonly property string configuratorScriptPath: Quickshell.shellPath("scripts/hyprland/hyprconfigurator.py")
     readonly property string shellOverridesPath: FileUtils.trimFileProtocol(`${Directories.config}/hypr/hyprland/shellOverrides/main.conf`)
 
     function set(key: string, value: var) {
-        Quickshell.execDetached(["bash", "-c", //
-            `${root.configuratorScriptPath} --file ${root.shellOverridesPath} --set "${key}" "${value}"` //
-        ])
+        DaemonSocket.sendCommand(`hyprconfig-edit --file ${root.shellOverridesPath} --set ${key} ${value}`)
     }
-    
+
     function setMany(entries: var) {
-        let args = ""
+        let cmd = `hyprconfig-edit --file ${root.shellOverridesPath}`
         for (let key in entries) {
-            args += `--set "${key}" "${entries[key]}" `
+            cmd += ` --set ${key} ${entries[key]}`
         }
-        Quickshell.execDetached(["bash", "-c", //
-            `${root.configuratorScriptPath} --file ${root.shellOverridesPath} ${args}` //
-        ])
+        DaemonSocket.sendCommand(cmd)
     }
-    
+
     function reset(key: string) {
-        Quickshell.execDetached(["bash", "-c", //
-            `${root.configuratorScriptPath} --file ${root.shellOverridesPath} --reset "${key}"` //
-        ])
+        DaemonSocket.sendCommand(`hyprconfig-edit --file ${root.shellOverridesPath} --reset ${key}`)
     }
-    
+
     function resetMany(keys: list<string>) {
-        let args = ""
+        let cmd = `hyprconfig-edit --file ${root.shellOverridesPath}`
         for (let i = 0; i < keys.length; i++) {
-            args += `--reset "${keys[i]}" `
+            cmd += ` --reset ${keys[i]}`
         }
-        Quickshell.execDetached(["bash", "-c", //
-            `${root.configuratorScriptPath} --file ${root.shellOverridesPath} ${args}` //
-        ])
+        DaemonSocket.sendCommand(cmd)
     }
 
     Connections {

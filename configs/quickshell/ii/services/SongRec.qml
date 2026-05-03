@@ -61,7 +61,7 @@ Singleton {
     Process {
         id: recognizeMusicProc
         running: false
-        command: [`${Directories.scriptPath}/musicRecognition/recognize-music.sh`, "-i", root.timeoutInterval, "-t", root.timeoutDuration, "-s", root.monitorSourceString]
+        command: ["snry-daemon", "send", "recognize-music", "-i", root.timeoutInterval.toString(), "-t", root.timeoutDuration.toString(), "-s", root.monitorSourceString]
         stdout: StdioCollector {
             onStreamFinished: {
                 if (root.manuallyStopped) {
