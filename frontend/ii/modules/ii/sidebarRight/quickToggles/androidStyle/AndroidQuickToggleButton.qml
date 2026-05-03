@@ -69,8 +69,10 @@ GroupButton {
     property color colIcon: expandedSize ? ((root.toggled) ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3) : colText
 
     onClicked: {
-        if (root.expandedSize && root.altAction) root.altAction();
-        else root.mainAction();
+        root.mainAction();
+    }
+    onPressAndHold: {
+        if (root.altAction) root.altAction();
     }
 
     contentItem: RowLayout {
