@@ -136,6 +136,18 @@ func dispatchCommand(a *App, line string) {
 		a.handleAiSummary()
 	case "start-geoclue":
 		a.handleStartGeoclue()
+	case "launch":
+		rest := strings.TrimPrefix(line, "launch ")
+		args := parseQuotedArgs(rest)
+		go a.handleLaunch(args)
+	case "snip-search":
+		go a.handleSnipSearch()
+	case "emoji":
+		mode := "type"
+		if len(fields) >= 2 {
+			mode = fields[1]
+		}
+		go a.handleEmoji(mode)
 
 	// State commands — forwarded to state loop.
 	case "set-mode":
@@ -299,4 +311,122 @@ func (a *App) handleStartGeoclue() {
 		}
 	}
 	log.Printf("[app] start-geoclue: agent not found")
+}
+
+func parseQuotedArgs(s string) []string {
+	var args []string
+	var current strings.Builder
+	inQuote := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch {
+		case ch == '"':
+			inQuote = !inQuote
+		case ch == ' ' && !inQuote:
+			if current.Len() > 0 {
+				args = append(args, current.String())
+				current.Reset()
+			}
+		default:
+			current.WriteByte(ch)
+		}
+	}
+	if current.Len() > 0 {
+		args = append(args, current.String())
+	}
+	return args
+}
+
+func (a *App) handleLaunch(candidates []string) {
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		// Extract the binary name (first word) for LookPath check.
+		bin := strings.Fields(candidate)[0]
+		if _, err := exec.LookPath(bin); err != nil {
+			continue
+		}
+		cmd := exec.Command("sh", "-c", candidate)
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+		if err := cmd.Start(); err != nil {
+			log.Printf("[app] launch start %q: %v", candidate, err)
+			continue
+		}
+		return
+	}
+}
+
+func (a *App) handleSnipSearch() {
+	// Capture region via grim+slurp.
+	if err := exec.Command("sh", "-c", `grim -g "$(slurp)" /tmp/image.png`).Run(); err != nil {
+		log.Printf("[app] snip-search grim: %v", err)
+		return
+	}
+
+	// Upload to uguu.se.
+	out, err := exec.Command("curl", "-sF", "files[]=@/tmp/image.png", "https://uguu.se/upload").Output()
+	if err != nil {
+		log.Printf("[app] snip-search upload: %v", err)
+		os.Remove("/tmp/image.png")
+		return
+	}
+	var resp struct {
+		Files []struct {
+			URL string `json:"url"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal(out, &resp); err != nil || len(resp.Files) == 0 {
+		log.Printf("[app] snip-search parse response: %v", err)
+		os.Remove("/tmp/image.png")
+		return
+	}
+
+	// Open Google Lens.
+	url := fmt.Sprintf("https://lens.google.com/uploadbyurl?url=%s", resp.Files[0].URL)
+	if err := exec.Command("xdg-open", url).Start(); err != nil {
+		log.Printf("[app] snip-search open: %v", err)
+	}
+
+	os.Remove("/tmp/image.png")
+}
+
+func (a *App) handleEmoji(mode string) {
+	// Pipe emoji data to fuzzel for selection.
+	fuzzel := exec.Command("fuzzel", "--match-mode", "fzf", "--dmenu")
+	fuzzel.Stdin = strings.NewReader(emojiData)
+	out, err := fuzzel.Output()
+	if err != nil {
+		return // user cancelled
+	}
+	// Get first field (the emoji).
+	emoji := strings.TrimSpace(string(out))
+	if emoji == "" {
+		return
+	}
+	fields := strings.Fields(emoji)
+	if len(fields) == 0 {
+		return
+	}
+	emojiChar := fields[0]
+
+	switch mode {
+	case "copy":
+		wc := exec.Command("wl-copy")
+		wc.Stdin = strings.NewReader(emojiChar)
+		if err := wc.Run(); err != nil {
+			log.Printf("[app] emoji wl-copy: %v", err)
+		}
+	case "type":
+		if err := exec.Command("wtype", emojiChar).Run(); err != nil {
+			log.Printf("[app] emoji wtype: %v", err)
+			// Fallback to wl-copy.
+			wc := exec.Command("wl-copy")
+			wc.Stdin = strings.NewReader(emojiChar)
+			if err := wc.Run(); err != nil {
+				log.Printf("[app] emoji wl-copy fallback: %v", err)
+			}
+		}
+	}
 }
