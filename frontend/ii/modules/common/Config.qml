@@ -484,14 +484,6 @@ Singleton {
                     property bool enable: false
                     property int delay: 300 // Delay before sending request. Reduces (potential) rate limits and lag.
                 }
-                property JsonObject booru: JsonObject {
-                    property bool allowNsfw: false
-                    property string defaultProvider: "yandere"
-                    property int limit: 20
-                    property JsonObject zerochan: JsonObject {
-                        property string username: "[unset]"
-                    }
-                }
                 property JsonObject cornerOpen: JsonObject {
                     property bool enable: true
                     property bool bottom: false
