@@ -271,6 +271,9 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	a.guardSvc = guard.New(guardCfg)
 
+	// Generate terminal theme files on startup if colors are available.
+	go a.handleApplyTerminalColors()
+
 	var wg sync.WaitGroup
 
 	wg.Go(func() { a.runStateLoop(ctx) })

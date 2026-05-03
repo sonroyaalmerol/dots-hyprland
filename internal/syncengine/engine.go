@@ -160,8 +160,8 @@ func (e *SyncEngine) syncFile(_ context.Context, step SyncStep) SyncResult {
 		if err := atomicWrite(step.DeployPath, result, mode); err != nil {
 			return SyncResult{RelPath: step.RelPath, Decision: decision, Strategy: strategy, Err: fmt.Errorf("write: %w", err)}
 		}
-		// Write .orig backup on first deploy to preserve baseline for 3-way merge
-		if entry == nil || entry.OriginalSHA256 == "" {
+		// Write .orig backup for 3-way merge if it doesn't exist
+		if _, err := os.Stat(step.DeployPath + ".orig"); os.IsNotExist(err) {
 			_ = atomicWrite(step.DeployPath+".orig", result, mode)
 		}
 	}
@@ -262,6 +262,12 @@ func (e *SyncEngine) handleMergeKV(step SyncStep, decision SyncDecision, origSHA
 		origData = readOrigFromManifest(step, origSHA)
 	}
 
+	// If manifest says we have an orig baseline but the .orig file is missing
+	// (e.g. deleted during reinstall), fall back to clean overwrite.
+	if origSHA != "" && len(origData) == 0 {
+		return upstream, nil
+	}
+
 	merged, conflicts, err := kvparse.MergeKV(origData, current, upstream)
 	if err != nil {
 		conflict := &ConflictInfo{
@@ -305,6 +311,12 @@ func (e *SyncEngine) handleMergeHyprland(step SyncStep, decision SyncDecision, o
 	origData := []byte{}
 	if origSHA != "" {
 		origData = readOrigFromManifest(step, origSHA)
+	}
+
+	// If manifest says we have an orig baseline but the .orig file is missing
+	// (e.g. deleted during reinstall), fall back to clean overwrite.
+	if origSHA != "" && len(origData) == 0 {
+		return upstream, nil
 	}
 
 	merged, conflicts, err := hyprparse.ThreeWayMerge(origData, current, upstream)
@@ -354,6 +366,12 @@ func (e *SyncEngine) handleMergeSection(step SyncStep, decision SyncDecision, or
 	origData := []byte{}
 	if origSHA != "" {
 		origData = readOrigFromManifest(step, origSHA)
+	}
+
+	// If manifest says we have an orig baseline but the .orig file is missing
+	// (e.g. deleted during reinstall), fall back to clean overwrite.
+	if origSHA != "" && len(origData) == 0 {
+		return upstream, nil
 	}
 
 	merged, conflicts, err := sectionparse.MergeSection(origData, current, upstream)
