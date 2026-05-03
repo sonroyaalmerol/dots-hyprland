@@ -454,6 +454,10 @@ func dispatchCommand(a *App, line string) {
 		go a.handleNvimApplyColors()
 	case "apply-vscode-color":
 		go a.handleApplyVscodeColor()
+	case "apply-kvantum-theme":
+		go a.handleApplyKvantumTheme()
+	case "apply-terminal-colors":
+		go a.handleApplyTerminalColors()
 	case "hyprconfig-edit":
 		if len(fields) < 3 {
 			return
@@ -1198,19 +1202,19 @@ func (a *App) handleNvimApplyColors() {
 	}
 
 	colors := make(map[string]any)
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		line = strings.TrimSuffix(line, ";")
 		if !strings.HasPrefix(line, "$") {
 			continue
 		}
 		line = line[1:]
-		idx := strings.Index(line, ":")
-		if idx < 0 {
+		before, after, ok := strings.Cut(line, ":")
+		if !ok {
 			continue
 		}
-		key := strings.TrimSpace(line[:idx])
-		val := strings.TrimSpace(line[idx+1:])
+		key := strings.TrimSpace(before)
+		val := strings.TrimSpace(after)
 		switch val {
 		case "True":
 			colors[key] = true
@@ -1294,6 +1298,220 @@ func (a *App) handleApplyVscodeColor() {
 		}
 		os.WriteFile(path, []byte(content), 0644)
 	}
+}
+
+func (a *App) handleApplyKvantumTheme() {
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+
+	colloidDir := filepath.Join(configDir, "Kvantum", "Colloid")
+	materialAdwDir := filepath.Join(configDir, "Kvantum", "MaterialAdw")
+	if _, err := os.Stat(colloidDir); err != nil {
+		exec.Command("notify-send", "Colloid-kde theme required",
+			fmt.Sprintf("The folder '%s' does not exist.", colloidDir)).Run()
+		return
+	}
+	os.MkdirAll(materialAdwDir, 0755)
+
+	// Detect dark/light mode
+	isDark := false
+	out, err := exec.Command("gsettings", "get", "org.gnome.desktop.interface", "color-scheme").Output()
+	if err == nil && strings.Contains(string(out), "prefer-dark") {
+		isDark = true
+	}
+
+	var srcConfig string
+	if isDark {
+		srcConfig = filepath.Join(colloidDir, "ColloidDark.kvconfig")
+	} else {
+		srcConfig = filepath.Join(colloidDir, "Colloid.kvconfig")
+	}
+
+	dstConfig := filepath.Join(materialAdwDir, "MaterialAdw.kvconfig")
+
+	// Copy source config
+	data, err := os.ReadFile(srcConfig)
+	if err != nil {
+		return
+	}
+	os.WriteFile(dstConfig, data, 0644)
+
+	// Read SCSS colors
+	stateDir := os.Getenv("XDG_STATE_HOME")
+	if stateDir == "" {
+		stateDir = filepath.Join(os.Getenv("HOME"), ".local", "state")
+	}
+	scssFile := filepath.Join(stateDir, "quickshell", "user", "generated", "material_colors.scss")
+	scssData, err := os.ReadFile(scssFile)
+	if err != nil {
+		return
+	}
+	colors := parseSCSSColors(string(scssData))
+
+	// Apply color mappings to kvconfig
+	content := string(data)
+	mappings := map[string]string{
+		"window.color":                  "background",
+		"base.color":                    "background",
+		"alt.base.color":                "background",
+		"button.color":                  "surfaceContainer",
+		"light.color":                   "surfaceContainerLow",
+		"mid.light.color":               "surfaceContainer",
+		"dark.color":                    "surfaceContainerHighest",
+		"mid.color":                     "surfaceContainerHigh",
+		"highlight.color":               "primary",
+		"inactive.highlight.color":      "primary",
+		"text.color":                    "onBackground",
+		"window.text.color":             "onBackground",
+		"button.text.color":             "onBackground",
+		"disabled.text.color":           "onBackground",
+		"tooltip.text.color":            "onBackground",
+		"highlight.text.color":          "onSurface",
+		"link.color":                    "tertiary",
+		"link.visited.color":            "tertiaryFixed",
+		"progress.indicator.text.color": "onBackground",
+		"text.normal.color":             "onBackground",
+		"text.focus.color":              "onBackground",
+		"text.press.color":              "onsecondarycontainer",
+		"text.toggle.color":             "onsecondarycontainer",
+		"text.disabled.color":           "surfaceDim",
+	}
+	for kvKey, scssName := range mappings {
+		if hexVal, ok := colors[scssName]; ok {
+			re := regexp.MustCompile(regexp.QuoteMeta(kvKey) + `=\s*#[0-9a-fA-F]+`)
+			content = re.ReplaceAllString(content, kvKey+"="+hexVal)
+		}
+	}
+	os.WriteFile(dstConfig, []byte(content), 0644)
+}
+
+func parseSCSSColors(scss string) map[string]string {
+	colors := make(map[string]string)
+	for line := range strings.SplitSeq(scss, "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.TrimSuffix(line, ";")
+		if !strings.HasPrefix(line, "$") {
+			continue
+		}
+		line = line[1:]
+		before, after, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		key := strings.TrimSpace(before)
+		val := strings.TrimSpace(after)
+		colors[key] = val
+	}
+	return colors
+}
+
+func (a *App) findScriptsDir(configDir string) string {
+	// Try installed path first
+	exe, err := os.Executable()
+	if err == nil {
+		shareDir := filepath.Join(filepath.Dir(exe), "..", "share", "snry-shell", "configs", "quickshell", "ii", "scripts")
+		if _, err := os.Stat(shareDir); err == nil {
+			return shareDir
+		}
+	}
+	// Fallback to source config
+	return filepath.Join(configDir, "quickshell", "ii", "scripts")
+}
+
+func (a *App) handleApplyTerminalColors() {
+	stateDir := os.Getenv("XDG_STATE_HOME")
+	if stateDir == "" {
+		stateDir = filepath.Join(os.Getenv("HOME"), ".local", "state")
+	}
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+
+	genDir := filepath.Join(stateDir, "quickshell", "user", "generated")
+	scssFile := filepath.Join(genDir, "material_colors.scss")
+	scssData, err := os.ReadFile(scssFile)
+	if err != nil {
+		return
+	}
+	colors := parseSCSSColors(string(scssData))
+
+	// Check if terminal theming is enabled
+	configFile := filepath.Join(configDir, "snry-shell", "config.json")
+	enableTerminal := true // default
+	if cfgData, err := os.ReadFile(configFile); err == nil {
+		var cfg map[string]any
+		if json.Unmarshal(cfgData, &cfg) == nil {
+			if appear, ok := cfg["appearance"].(map[string]any); ok {
+				if wt, ok := appear["wallpaperTheming"].(map[string]any); ok {
+					if et, ok := wt["enableTerminal"].(bool); ok {
+						enableTerminal = et
+					}
+				}
+			}
+		}
+	}
+
+	if !enableTerminal {
+		return
+	}
+
+	os.MkdirAll(filepath.Join(genDir, "terminal"), 0755)
+	termAlpha := "100"
+
+	// Get the scripts directory
+	scriptDir := a.findScriptsDir(configDir)
+
+	// Apply Ghostty theme
+	ghosttyTemplate := filepath.Join(scriptDir, "colors", "terminal", "ghostty-theme.conf")
+	if data, err := os.ReadFile(ghosttyTemplate); err == nil {
+		content := string(data)
+		for name, hexVal := range colors {
+			content = strings.ReplaceAll(content, name+" #", strings.TrimPrefix(hexVal, "#"))
+		}
+		os.WriteFile(filepath.Join(genDir, "terminal", "ghostty-theme.conf"), []byte(content), 0644)
+		// Signal ghostty
+		if out, err := exec.Command("pidof", "ghostty").Output(); err == nil {
+			for pidStr := range strings.FieldsSeq(strings.TrimSpace(string(out))) {
+				if pid, err := strconv.Atoi(pidStr); err == nil {
+					syscall.Kill(pid, syscall.SIGUSR1)
+				}
+			}
+		}
+	}
+
+	// Apply generic terminal escape sequences
+	seqTemplate := filepath.Join(scriptDir, "colors", "terminal", "sequences.txt")
+	if data, err := os.ReadFile(seqTemplate); err == nil {
+		content := string(data)
+		for name, hexVal := range colors {
+			content = strings.ReplaceAll(content, name+" #", strings.TrimPrefix(hexVal, "#"))
+		}
+		content = strings.ReplaceAll(content, "$alpha", termAlpha)
+		os.WriteFile(filepath.Join(genDir, "terminal", "sequences.txt"), []byte(content), 0644)
+
+		// Send to /dev/pts
+		seqPath := filepath.Join(genDir, "terminal", "sequences.txt")
+		seqData, _ := os.ReadFile(seqPath)
+		entries, _ := os.ReadDir("/dev/pts")
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				matched, _ := regexp.MatchString(`^\d+$`, entry.Name())
+				if matched {
+					if f, err := os.OpenFile(filepath.Join("/dev/pts", entry.Name()), os.O_WRONLY, 0); err == nil {
+						f.Write(seqData)
+						f.Close()
+					}
+				}
+			}
+		}
+	}
+
+	// Also apply nvim and vscode colors
+	a.handleNvimApplyColors()
+	a.handleApplyVscodeColor()
 }
 
 func (a *App) handleHyprconfigEdit(args []string) {
