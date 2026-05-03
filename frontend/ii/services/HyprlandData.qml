@@ -1,6 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 
+import qs.services
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
@@ -20,43 +21,49 @@ Singleton {
 	property var monitors: []
 	property var layers: ({})
 
+	function updateWindows() {
+		root.windowList = DaemonSocket.hyprWindows
+		let tempWinByAddress = {}
+		for (let i = 0; i < root.windowList.length; ++i) {
+			let win = root.windowList[i]
+			tempWinByAddress[win.address] = win
+		}
+		root.windowByAddress = tempWinByAddress
+		root.addresses = root.windowList.map(win => win.address)
+	}
+
+	function updateMonitors() {
+		root.monitors = DaemonSocket.hyprMonitors
+	}
+
+	function updateWorkspaces() {
+		let rawWorkspaces = DaemonSocket.hyprWorkspaces
+		root.workspaces = rawWorkspaces.filter(ws => ws.id >= 1 && ws.id <= 100)
+		let tempWorkspaceById = {}
+		for (let i = 0; i < root.workspaces.length; ++i) {
+			let ws = root.workspaces[i]
+			tempWorkspaceById[ws.id] = ws
+		}
+		root.workspaceById = tempWorkspaceById
+		root.workspaceIds = root.workspaces.map(ws => ws.id)
+	}
+
+	function updateLayers() {
+		root.layers = DaemonSocket.hyprLayers
+	}
+
+	function updateActiveWorkspace() {
+		root.activeWorkspace = DaemonSocket.hyprActiveWorkspace
+	}
+
 	Connections {
 		target: DaemonSocket
 
-		function onHyprWindowsChanged() {
-			root.windowList = DaemonSocket.hyprWindows
-			let tempWinByAddress = {}
-			for (let i = 0; i < root.windowList.length; ++i) {
-				let win = root.windowList[i]
-				tempWinByAddress[win.address] = win
-			}
-			root.windowByAddress = tempWinByAddress
-			root.addresses = root.windowList.map(win => win.address)
-		}
-
-		function onHyprMonitorsChanged() {
-			root.monitors = DaemonSocket.hyprMonitors
-		}
-
-		function onHyprWorkspacesChanged() {
-			let rawWorkspaces = DaemonSocket.hyprWorkspaces
-			root.workspaces = rawWorkspaces.filter(ws => ws.id >= 1 && ws.id <= 100)
-			let tempWorkspaceById = {}
-			for (let i = 0; i < root.workspaces.length; ++i) {
-				let ws = root.workspaces[i]
-				tempWorkspaceById[ws.id] = ws
-			}
-			root.workspaceById = tempWorkspaceById
-			root.workspaceIds = root.workspaces.map(ws => ws.id)
-		}
-
-		function onHyprLayersChanged() {
-			root.layers = DaemonSocket.hyprLayers
-		}
-
-		function onHyprActiveWorkspaceChanged() {
-			root.activeWorkspace = DaemonSocket.hyprActiveWorkspace
-		}
+		onHyprWindowsChanged: root.updateWindows()
+		onHyprMonitorsChanged: root.updateMonitors()
+		onHyprWorkspacesChanged: root.updateWorkspaces()
+		onHyprLayersChanged: root.updateLayers()
+		onHyprActiveWorkspaceChanged: root.updateActiveWorkspace()
 	}
 
 	// Convenient stuff
@@ -91,20 +98,10 @@ Singleton {
 	}
 
 	Component.onCompleted: {
-		if (DaemonSocket.hyprWindows.length > 0) {
-			onHyprWindowsChanged()
-		}
-		if (DaemonSocket.hyprMonitors.length > 0) {
-			onHyprMonitorsChanged()
-		}
-		if (DaemonSocket.hyprWorkspaces.length > 0) {
-			onHyprWorkspacesChanged()
-		}
-		if (Object.keys(DaemonSocket.hyprLayers).length > 0) {
-			onHyprLayersChanged()
-		}
-		if (DaemonSocket.hyprActiveWorkspace !== null) {
-			onHyprActiveWorkspaceChanged()
-		}
+		if (DaemonSocket.hyprWindows.length > 0) root.updateWindows()
+		if (DaemonSocket.hyprMonitors.length > 0) root.updateMonitors()
+		if (DaemonSocket.hyprWorkspaces.length > 0) root.updateWorkspaces()
+		if (Object.keys(DaemonSocket.hyprLayers).length > 0) root.updateLayers()
+		if (DaemonSocket.hyprActiveWorkspace !== null) root.updateActiveWorkspace()
 	}
 }
