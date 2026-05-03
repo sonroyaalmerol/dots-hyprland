@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
-import Quickshell.Io
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.overlay
@@ -34,31 +33,10 @@ OverlayBackground {
             fpsField.text = "";
             return;
         }
-
-        var cfgPaths = [
-            "~/.config/MangoHud/MangoHud.conf",
-        ]; // MangoHud config files
-
-        var updateCommands = cfgPaths.map(path => {
-            return "if grep -q '^fps_limit=' " + path + "; " +
-            "then sed -i 's/^fps_limit=.*/fps_limit=" + fpsValue + "/' " + path + "; " +
-            "else echo 'fps_limit=" + fpsValue + "' >> " + path + "; fi";
-        }).join("; ");
-
-        var cmd = updateCommands + "; pkill -SIGUSR2 mangohud";
-
-        fpsSetter.command = ["bash", "-c", cmd];
-        fpsSetter.startDetached();
-
+        DaemonSocket.fpsSet(fpsValue.toString())
         root.currentState = FpsLimiterContent.State.Success;
         iconResetTimer.restart();
-
-        // Clear the field after applying
         fpsField.text = "";
-    }
-
-    Process {
-        id: fpsSetter
     }
 
     RowLayout {

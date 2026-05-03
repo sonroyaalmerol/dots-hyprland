@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQml
 import QtQuick
-import Quickshell.Io
 import qs.services
 import "../"
 
@@ -9,7 +8,7 @@ NestableObject {
     id: root
 
     required property string key
-    property alias fetching: fetchProc.running
+    property bool fetching: false
     property bool set
     property var value
 
@@ -23,8 +22,8 @@ NestableObject {
     }
 
     function fetch() {
-        fetchProc.command = fetchProc.baseCommand.concat([root.key]);
-        fetchProc.running = true;
+        root.fetching = true
+        DaemonSocket.hyprconfigGet(root.key)
     }
 
     function setValue(newValue) {
@@ -35,28 +34,25 @@ NestableObject {
         HyprlandConfig.reset(root.key)
     }
 
-    Process {
-        id: fetchProc
-        property list<string> baseCommand: ["hyprctl", "getoption", "-j"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                if (text == "no such option")
-                    return;
-                try {
-                    const obj = JSON.parse(text);
-                    // Note that the value is returned as "<data type>": <value>
-                    // It's the only field that isn't always in the same key so we put it in an else
-                    for (const key in obj) {
-                        if (key == "option")
-                            continue;
-                        else if (key == "set")
-                            root.set = obj[key];
-                        else
-                            root.value = obj[key];
-                    }
-                } catch (e) {
-                    console.log(`[HyprlandConfigOption] Failed to fetch option "${root.key}":\n  - Output: ${text.trim()}\n  - Error: ${e}`);
+    Connections {
+        target: DaemonSocket
+        function onHyprconfigValue(key, value) {
+            if (key !== root.key) return
+            root.fetching = false
+            if (value == "no such option")
+                return;
+            try {
+                const obj = JSON.parse(value);
+                for (const k in obj) {
+                    if (k == "option")
+                        continue;
+                    else if (k == "set")
+                        root.set = obj[k];
+                    else
+                        root.value = obj[k];
                 }
+            } catch (e) {
+                console.log(`[HyprlandConfigOption] Failed to fetch option "${root.key}":\n  - Output: ${value.trim()}\n  - Error: ${e}`);
             }
         }
     }

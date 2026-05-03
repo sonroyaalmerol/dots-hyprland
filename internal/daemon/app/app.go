@@ -15,7 +15,9 @@ import (
 	"github.com/godbus/dbus/v5"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/brightness"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/cliphist"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/conflict"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/easyeffects"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/gamemode"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprkeybinds"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprsunset"
@@ -35,6 +37,7 @@ import (
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/tabletmode"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/uinput"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/updates"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/warp"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/weather"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/manager"
 )
@@ -59,6 +62,8 @@ type Config struct {
 	HyprsunsetCfg    hyprsunset.Config
 	HyprXkbCfg       hyprxkb.Config
 	NetworkCfg       network.Config
+	WarpCfg          warp.Config
+	GamemodeCfg      gamemode.Config
 }
 
 func DefaultConfig() Config {
@@ -80,6 +85,8 @@ func DefaultConfig() Config {
 		HyprsunsetCfg:    hyprsunset.DefaultConfig(),
 		HyprXkbCfg:       hyprxkb.DefaultConfig(),
 		NetworkCfg:       network.DefaultConfig(),
+		WarpCfg:          warp.DefaultConfig(),
+		GamemodeCfg:      gamemode.DefaultConfig(),
 	}
 }
 
@@ -120,6 +127,9 @@ type App struct {
 	tabletModeMon   *tabletmode.Monitor
 	inputMethodW    *inputmethod.Watcher
 	networkSvc      *network.Service
+	warpSvc         *warp.Service
+	gamemodeSvc     *gamemode.Service
+	conflictSvc     *conflict.Service
 
 	// State loop — all state mutations happen in a single goroutine.
 	stateCh chan stateEvent
@@ -240,6 +250,10 @@ func (a *App) Run(ctx context.Context) error {
 
 	a.networkSvc = network.New(a.cfg.NetworkCfg, a.socketServer.Emitter().Emit)
 
+	a.warpSvc = warp.New(a.cfg.WarpCfg, a.socketServer.Emitter().Emit)
+	a.gamemodeSvc = gamemode.New(a.cfg.GamemodeCfg, a.socketServer.Emitter().Emit)
+	a.conflictSvc = conflict.New()
+
 	var wg sync.WaitGroup
 
 	wg.Go(func() { a.runStateLoop(ctx) })
@@ -262,6 +276,8 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runHyprXkb(ctx) })
 	wg.Go(func() { a.runHyprsunset(ctx) })
 	wg.Go(func() { a.runNetwork(ctx) })
+	wg.Go(func() { a.runWarp(ctx) })
+	wg.Go(func() { a.runGamemode(ctx) })
 	wg.Go(func() {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
@@ -584,6 +600,12 @@ func (a *App) socketSnapshots() []socket.SnapshotProvider {
 	if a.networkSvc != nil {
 		snapshots = append(snapshots, a.networkSvc)
 	}
+	if a.warpSvc != nil {
+		snapshots = append(snapshots, a.warpSvc)
+	}
+	if a.gamemodeSvc != nil {
+		snapshots = append(snapshots, a.gamemodeSvc)
+	}
 	return snapshots
 }
 
@@ -771,6 +793,24 @@ func (a *App) runNetwork(ctx context.Context) {
 	}
 }
 
+func (a *App) runWarp(ctx context.Context) {
+	if a.warpSvc == nil {
+		return
+	}
+	if err := a.warpSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("warp: %v", err)
+	}
+}
+
+func (a *App) runGamemode(ctx context.Context) {
+	if a.gamemodeSvc == nil {
+		return
+	}
+	if err := a.gamemodeSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("gamemode: %v", err)
+	}
+}
+
 func (a *App) setupHyprlandSystemBinds() func() {
 	binds := []struct{ key, cmd string }{
 		{"XF86PowerOff", "~/.local/bin/snry-daemon send power-button"},
@@ -877,6 +917,17 @@ func (a *App) handleDiagnose() {
 		return
 	}
 	a.socketServer.Emitter().Emit(map[string]any{"event": "diagnose_done"})
+}
+
+func (a *App) handleConflictCheck() {
+	result := a.conflictSvc.Check()
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "conflict_result",
+		"data": map[string]any{
+			"trays":         result["trays"],
+			"notifications": result["notifications"],
+		},
+	})
 }
 
 func (a *App) repoRoot() string {

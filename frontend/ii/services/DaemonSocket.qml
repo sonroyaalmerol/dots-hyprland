@@ -86,6 +86,12 @@ Singleton {
 	// Brightness from daemon.
 	property var brightnessMonitors: ({})
 
+	// Warp and GameMode from daemon.
+	property bool warpInstalled: false
+	property bool warpConnected: false
+	property string warpStatus: ""
+	property bool gameModeEnabled: false
+
 	// Network from daemon.
 	property bool networkWifiEnabled: false
 	property string networkWifiStatus: "disconnected"
@@ -117,6 +123,12 @@ Singleton {
 	signal brightnessUpdated()
 	signal networkUpdated()
 	signal networkConnectResult(var data)
+
+	// Warp and GameMode signals.
+	signal warpStatusUpdated()
+	signal gameModeUpdated()
+	signal conflictResult(var trays, var notifications)
+	signal hyprconfigValue(string key, string value)
 
 	property bool connected: daemonSocket.connected
 
@@ -166,6 +178,19 @@ Singleton {
 	function cliphistRefresh() { sendCommand("cliphist-list") }
 	function cliphistDelete(entry) { sendCommand("cliphist-delete " + entry) }
 	function cliphistWipe() { sendCommand("cliphist-wipe") }
+
+	function warpConnect() { sendCommand("warp-connect") }
+	function warpDisconnect() { sendCommand("warp-disconnect") }
+	function warpToggle() { sendCommand("warp-toggle") }
+	function warpRegister() { sendCommand("warp-register") }
+	function gameModeEnable() { sendCommand("gamemode-enable") }
+	function gameModeDisable() { sendCommand("gamemode-disable") }
+	function gameModeToggle() { sendCommand("gamemode-toggle") }
+	function conflictCheck() { sendCommand("conflict-check") }
+	function fpsSet(value) { sendCommand("fps-set " + value) }
+	function hyprconfigGet(key) { sendCommand("hyprconfig-get " + key) }
+	function hyprconfigSet(key, value) { sendCommand("hyprconfig-set " + key + " " + value) }
+	function hyprconfigReset(key) { sendCommand("hyprconfig-reset " + key) }
 
 	Socket {
 		id: daemonSocket
@@ -323,6 +348,18 @@ Singleton {
 			cliphistUpdated()
 		} else if (obj.event === "network_connect_result" && obj.data) {
 			networkConnectResult(obj.data)
+		} else if (obj.event === "warp_status" && obj.data) {
+			root.warpInstalled = obj.data.installed ?? false
+			root.warpConnected = obj.data.connected ?? false
+			root.warpStatus = obj.data.status ?? ""
+			warpStatusUpdated()
+		} else if (obj.event === "game_mode" && obj.data) {
+			root.gameModeEnabled = obj.data.enabled ?? false
+			gameModeUpdated()
+		} else if (obj.event === "conflict_result" && obj.data) {
+			conflictResult(obj.data.trays ?? [], obj.data.notifications ?? [])
+		} else if (obj.event === "hyprconfig_value" && obj.data) {
+			hyprconfigValue(obj.data.key ?? "", obj.data.value ?? "")
 		}
 	}
 }
