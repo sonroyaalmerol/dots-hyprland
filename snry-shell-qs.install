@@ -20,10 +20,6 @@ post_install() {
 	sudo -u "$user" XDG_RUNTIME_DIR="/run/user/$uid" \
 		snry-daemon files 2>/dev/null || true
 
-	# Enable the systemd user unit
-	sudo -u "$user" XDG_RUNTIME_DIR="/run/user/$uid" \
-		systemctl --user enable snry-daemon.service 2>/dev/null || true
-
 	echo ""
 	echo ">>> Snry Shell installed and configured!"
 	echo ">>> Log out and log back in (or reboot) to start."

@@ -238,19 +238,13 @@ func syncQuickshell(cfg Config) error {
 
 // extractEmbeddedFrontend writes the embedded quickshell frontend from
 // the compiled-in embed.FS to a cache directory and returns the path.
-// The embedded FS has all paths prefixed with "ii/"; this function
-// strips that prefix so the extracted tree matches the destination
-// layout expected under ~/.config/quickshell/.
+// The embedded FS has paths like "ii/shell.qml"; this function preserves
+// that prefix so the extracted tree matches the destination layout
+// expected under ~/.config/quickshell/ii/.
 func extractEmbeddedFrontend(cfg Config) (string, error) {
 	cacheDir := cfg.XDG.CacheHome + "/snry-shell/embedded-frontend"
-	stampFile := cacheDir + "/.embed-stamp"
 
-	// Check if already extracted this build.
-	if _, err := os.Stat(stampFile); err == nil {
-		return cacheDir, nil
-	}
-
-	// Clean and recreate.
+	// Always clean and re-extract to avoid stale cache issues.
 	_ = os.RemoveAll(cacheDir)
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return "", err
@@ -261,13 +255,7 @@ func extractEmbeddedFrontend(cfg Config) (string, error) {
 			return err
 		}
 
-		// Strip the "ii/" prefix.
-		rel := strings.TrimPrefix(path, "ii/")
-		if rel == "" {
-			return nil // root "ii" dir itself
-		}
-
-		target := filepath.Join(cacheDir, rel)
+		target := filepath.Join(cacheDir, path)
 
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
@@ -284,11 +272,6 @@ func extractEmbeddedFrontend(cfg Config) (string, error) {
 	})
 	if err != nil {
 		return "", fmt.Errorf("walk embedded fs: %w", err)
-	}
-
-	// Write stamp so we skip extraction next time.
-	if err := os.WriteFile(stampFile, []byte("ok"), 0o644); err != nil {
-		return "", fmt.Errorf("write stamp: %w", err)
 	}
 
 	return cacheDir, nil
