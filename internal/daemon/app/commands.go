@@ -2,14 +2,18 @@ package app
 
 import (
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const maxKey = 248
@@ -148,6 +152,40 @@ func dispatchCommand(a *App, line string) {
 			mode = fields[1]
 		}
 		go a.handleEmoji(mode)
+	case "random-wallpaper":
+		source := "konachan"
+		if len(fields) >= 2 {
+			source = fields[1]
+		}
+		go a.handleRandomWallpaper(source)
+	case "generate-thumbnails":
+		size := "normal"
+		mode := ""
+		target := ""
+		for i := 1; i < len(fields); i++ {
+			switch fields[i] {
+			case "--size", "-s":
+				if i+1 < len(fields) {
+					size = fields[i+1]
+					i++
+				}
+			case "--file", "-f":
+				mode = "file"
+				if i+1 < len(fields) {
+					target = fields[i+1]
+					i++
+				}
+			case "--directory", "-d":
+				mode = "dir"
+				if i+1 < len(fields) {
+					target = fields[i+1]
+					i++
+				}
+			}
+		}
+		if mode != "" && target != "" {
+			go a.handleGenerateThumbnails(size, mode, target)
+		}
 
 	// State commands — forwarded to state loop.
 	case "set-mode":
@@ -390,6 +428,26 @@ func dispatchCommand(a *App, line string) {
 			key := strings.Join(fields[1:], " ")
 			exec.Command("hyprctl", "keyword", key, "undef").Run()
 		}
+	case "record":
+		go a.handleRecord(fields[1:])
+	case "recognize-music":
+		go a.handleRecognizeMusic(fields[1:])
+	case "keyring-check":
+		go a.handleKeyringCheck()
+	case "keyring-lookup":
+		go a.handleKeyringLookup()
+	case "keyring-unlock":
+		if len(fields) >= 2 {
+			go a.handleKeyringUnlock(fields[1])
+		}
+	case "capslock-check":
+		if a.hyprlandSvc != nil {
+			go a.handleCapslockCheck()
+		}
+	case "battery-status":
+		go a.handleBatteryStatus()
+	case "restore-video-wallpaper":
+		go a.handleRestoreVideoWallpaper()
 	}
 }
 
@@ -648,5 +706,469 @@ func (a *App) handleEmoji(mode string) {
 				log.Printf("[app] emoji wl-copy fallback: %v", err)
 			}
 		}
+	}
+}
+
+func getPicturesDir() string {
+	out, err := exec.Command("xdg-user-dir", "PICTURES").Output()
+	if err == nil {
+		if dir := strings.TrimSpace(string(out)); dir != "" {
+			return dir
+		}
+	}
+	return filepath.Join(os.Getenv("HOME"), "Pictures")
+}
+
+func (a *App) handleRandomWallpaper(source string) {
+	picturesDir := getPicturesDir()
+	wallpapersDir := filepath.Join(picturesDir, "Wallpapers")
+	os.MkdirAll(wallpapersDir, 0755)
+
+	var downloadURL, filename string
+
+	switch source {
+	case "osu":
+		out, err := exec.Command("curl", "-s", "https://osu.ppy.sh/api/v2/seasonal-backgrounds").Output()
+		if err != nil {
+			return
+		}
+		var resp struct {
+			Backgrounds []struct {
+				URL string `json:"url"`
+			} `json:"backgrounds"`
+		}
+		if json.Unmarshal(out, &resp) != nil || len(resp.Backgrounds) == 0 {
+			return
+		}
+		idx := rand.Intn(len(resp.Backgrounds))
+		link := resp.Backgrounds[idx].URL
+		ext := filepath.Ext(link)
+		if ext == "" {
+			ext = ".jpg"
+		}
+		filename = fmt.Sprintf("random_wallpaper%s", ext)
+		downloadURL = link
+	default: // konachan
+		page := rand.Intn(1000) + 1
+		url := fmt.Sprintf("https://konachan.net/post.json?tags=rating%%3Asafe&limit=1&page=%d", page)
+		out, err := exec.Command("curl", "-s", url).Output()
+		if err != nil {
+			return
+		}
+		var posts []struct {
+			FileURL string `json:"file_url"`
+		}
+		if json.Unmarshal(out, &posts) != nil || len(posts) == 0 {
+			return
+		}
+		link := posts[0].FileURL
+		ext := filepath.Ext(link)
+		if ext == "" {
+			ext = ".jpg"
+		}
+		filename = fmt.Sprintf("random_wallpaper%s", ext)
+		downloadURL = link
+	}
+
+	downloadPath := filepath.Join(wallpapersDir, filename)
+
+	// Check if same as current wallpaper
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	configFile := filepath.Join(configDir, "snry-shell", "config.json")
+	if data, err := os.ReadFile(configFile); err == nil {
+		var cfg map[string]any
+		if json.Unmarshal(data, &cfg) == nil {
+			if bg, ok := cfg["background"].(map[string]any); ok {
+				if wp, ok := bg["wallpaperPath"].(string); ok && wp == downloadPath {
+					downloadPath = filepath.Join(wallpapersDir, strings.TrimSuffix(filename, filepath.Ext(filename))+"-1"+filepath.Ext(filename))
+				}
+			}
+		}
+	}
+
+	// Download
+	if err := exec.Command("curl", "-s", "-o", downloadPath, downloadURL).Run(); err != nil {
+		return
+	}
+
+	// Apply wallpaper via daemon command
+	a.stateCh <- stateEvent{kind: "command", cmd: "apply-wallpaper", arg: downloadPath}
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "random_wallpaper_ready",
+		"data":  map[string]any{"path": downloadPath},
+	})
+}
+
+func (a *App) handleGenerateThumbnails(sizeName, mode, target string) {
+	sizeMap := map[string]int{"normal": 128, "large": 256, "x-large": 512, "xx-large": 1024}
+	thumbnailSize := 128
+	if s, ok := sizeMap[sizeName]; ok {
+		thumbnailSize = s
+	}
+
+	home := os.Getenv("HOME")
+	cacheDir := filepath.Join(home, ".cache", "thumbnails", sizeName)
+	os.MkdirAll(cacheDir, 0755)
+
+	generate := func(src string) {
+		absPath, err := filepath.Abs(src)
+		if err != nil {
+			return
+		}
+
+		// Skip GIFs and videos
+		lower := strings.ToLower(absPath)
+		for _, ext := range []string{".gif", ".mp4", ".webm", ".mkv", ".avi", ".mov"} {
+			if strings.HasSuffix(lower, ext) {
+				return
+			}
+		}
+
+		// Generate URI and MD5 hash
+		uri := "file://" + absPath
+		hash := md5.Sum([]byte(uri))
+		outPath := filepath.Join(cacheDir, fmt.Sprintf("%x.png", hash))
+
+		if _, err := os.Stat(outPath); err == nil {
+			return
+		} // already exists
+
+		exec.Command("magick", absPath, "-resize",
+			fmt.Sprintf("%dx%d", thumbnailSize, thumbnailSize), outPath).Run()
+	}
+
+	switch mode {
+	case "file":
+		generate(target)
+	case "dir":
+		entries, err := os.ReadDir(target)
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				generate(filepath.Join(target, entry.Name()))
+			}
+		}
+	}
+}
+
+func (a *App) handleCapslockCheck() {
+	data, err := a.hyprlandSvc.QuerySocket("devices")
+	if err != nil {
+		return
+	}
+	lines := strings.Split(string(data), "\n")
+	capsActive := false
+	inMainKB := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, "main: yes") {
+			inMainKB = true
+		}
+		if inMainKB && strings.Contains(trimmed, "capsLock") {
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 2 && parts[len(parts)-1] == "yes" {
+				capsActive = true
+			}
+			break
+		}
+	}
+	var msg string
+	if capsActive {
+		msg = "Caps Lock active"
+	}
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "capslock_result",
+		"data":  map[string]any{"active": capsActive, "message": msg},
+	})
+}
+
+func (a *App) handleBatteryStatus() {
+	entries, err := os.ReadDir("/sys/class/power_supply")
+	if err != nil {
+		return
+	}
+	var result strings.Builder
+	for _, entry := range entries {
+		if !strings.Contains(entry.Name(), "BAT") {
+			continue
+		}
+		basePath := filepath.Join("/sys/class/power_supply", entry.Name())
+		statusData, _ := os.ReadFile(filepath.Join(basePath, "status"))
+		status := strings.TrimSpace(string(statusData))
+		charging := status == "Charging"
+
+		capData, _ := os.ReadFile(filepath.Join(basePath, "capacity"))
+		capacity := strings.TrimSpace(string(capData))
+
+		if capacity != "" {
+			if charging {
+				result.WriteString("(+) ")
+			}
+			result.WriteString(capacity + "%")
+			if !charging {
+				result.WriteString(" remaining")
+			}
+		}
+		break
+	}
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "battery_status_result",
+		"data":  map[string]any{"status": result.String()},
+	})
+}
+
+func (a *App) handleRestoreVideoWallpaper() {
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	scriptPath := filepath.Join(configDir, "hypr", "custom", "scripts", "__restore_video_wallpaper.sh")
+	if _, err := os.Stat(scriptPath); err != nil {
+		return
+	}
+	exec.Command("bash", scriptPath).Run()
+}
+
+func (a *App) handleRecord(args []string) {
+	if _, err := exec.LookPath("wf-recorder"); err != nil {
+		return
+	}
+
+	if err := exec.Command("pgrep", "-x", "wf-recorder").Run(); err == nil {
+		exec.Command("pkill", "wf-recorder").Run()
+		exec.Command("notify-send", "Recording Stopped", "Stopped", "-a", "Recorder").Run()
+		return
+	}
+
+	sound := false
+	fullscreen := false
+	region := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--sound":
+			sound = true
+		case "--fullscreen":
+			fullscreen = true
+		case "--region":
+			if i+1 < len(args) {
+				region = args[i+1]
+				i++
+			}
+		}
+	}
+
+	saveDir := getRecordSaveDir()
+	os.MkdirAll(saveDir, 0755)
+
+	filename := fmt.Sprintf("%s/recording_%s.mp4", saveDir, time.Now().Format("2006-01-02_15.04.05"))
+
+	cmdArgs := []string{"--pixel-format", "yuv420p", "-f", filename, "-t"}
+
+	if fullscreen {
+		if a.hyprlandSvc != nil {
+			if monitor, err := a.hyprlandSvc.QuerySocket("j/monitors"); err == nil {
+				var monitors []map[string]any
+				if json.Unmarshal(monitor, &monitors) == nil {
+					for _, m := range monitors {
+						if focused, ok := m["focused"].(bool); ok && focused {
+							if name, ok := m["name"].(string); ok {
+								cmdArgs = append([]string{"-o", name}, cmdArgs...)
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+	} else {
+		if region == "" {
+			out, err := exec.Command("slurp").Output()
+			if err != nil {
+				return
+			}
+			region = strings.TrimSpace(string(out))
+		}
+		cmdArgs = append(cmdArgs, "--geometry", region)
+	}
+
+	if sound {
+		out, err := exec.Command("pactl", "list", "sources", "short").Output()
+		if err == nil {
+			for line := range strings.SplitSeq(string(out), "\n") {
+				if strings.Contains(line, "monitor") {
+					fields := strings.Fields(line)
+					if len(fields) > 0 {
+						cmdArgs = append(cmdArgs, "--audio", fields[0])
+						break
+					}
+				}
+			}
+		}
+	}
+
+	exec.Command("notify-send", "Starting recording", filepath.Base(filename), "-a", "Recorder").Run()
+	exec.Command("wf-recorder", cmdArgs...).Run()
+}
+
+func getRecordSaveDir() string {
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	configFile := filepath.Join(configDir, "snry-shell", "config.json")
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		return filepath.Join(os.Getenv("HOME"), "Videos")
+	}
+	var cfg map[string]any
+	if json.Unmarshal(data, &cfg) != nil {
+		return filepath.Join(os.Getenv("HOME"), "Videos")
+	}
+	sr, ok := cfg["screenRecord"].(map[string]any)
+	if !ok {
+		return filepath.Join(os.Getenv("HOME"), "Videos")
+	}
+	if path, ok := sr["savePath"].(string); ok && path != "" {
+		return path
+	}
+	return filepath.Join(os.Getenv("HOME"), "Videos")
+}
+
+func (a *App) handleRecognizeMusic(args []string) {
+	if _, err := exec.LookPath("songrec"); err != nil {
+		a.socketServer.Emitter().Emit(map[string]any{
+			"event": "music_recognition_error",
+			"data":  map[string]any{"error": "songrec not installed"},
+		})
+		return
+	}
+
+	interval := "2"
+	source := "monitor"
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-i":
+			if i+1 < len(args) {
+				interval = args[i+1]
+				i++
+			}
+		case "-t":
+			if i+1 < len(args) {
+				i++
+			}
+		case "-s":
+			if i+1 < len(args) {
+				source = args[i+1]
+				i++
+			}
+		}
+	}
+
+	var audioDevice string
+	if source == "monitor" {
+		out, err := exec.Command("pactl", "get-default-sink").Output()
+		if err != nil {
+			return
+		}
+		audioDevice = strings.TrimSpace(string(out)) + ".monitor"
+	} else {
+		out, err := exec.Command("pactl", "info").Output()
+		if err != nil {
+			return
+		}
+		for line := range strings.SplitSeq(string(out), "\n") {
+			if after, ok := strings.CutPrefix(line, "Default Source:"); ok {
+				audioDevice = strings.TrimSpace(after)
+				break
+			}
+		}
+	}
+
+	if audioDevice == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "songrec", "listen",
+		"--audio-device", audioDevice,
+		"--request-interval", interval,
+		"--json", "--disable-mpris")
+	out, err := cmd.Output()
+	if err != nil {
+		return
+	}
+
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if strings.Contains(line, `"matches": [`) {
+			a.socketServer.Emitter().Emit(map[string]any{
+				"event": "music_recognition_result",
+				"data":  json.RawMessage(line),
+			})
+			return
+		}
+	}
+}
+
+func (a *App) handleKeyringCheck() {
+	cmd := exec.Command("secret-tool", "lookup", "service", "snry-shell")
+	if cmd.Run() == nil {
+		a.socketServer.Emitter().Emit(map[string]any{
+			"event": "keyring_status",
+			"data":  map[string]any{"unlocked": true},
+		})
+		return
+	}
+	cmd = exec.Command("busctl", "--user", "get-property", "org.freedesktop.secrets",
+		"/org/freedesktop/secrets/collection/login", "org.freedesktop.Secret.Collection", "Locked")
+	out, err := cmd.Output()
+	if err == nil && strings.Contains(string(out), "false") {
+		a.socketServer.Emitter().Emit(map[string]any{
+			"event": "keyring_status",
+			"data":  map[string]any{"unlocked": true},
+		})
+	} else {
+		a.socketServer.Emitter().Emit(map[string]any{
+			"event": "keyring_status",
+			"data":  map[string]any{"unlocked": false},
+		})
+	}
+}
+
+func (a *App) handleKeyringLookup() {
+	cmd := exec.Command("secret-tool", "lookup", "application", "snry-shell")
+	out, err := cmd.Output()
+	if err != nil {
+		a.socketServer.Emitter().Emit(map[string]any{
+			"event": "keyring_lookup_result",
+			"data":  map[string]any{"status": "not_found"},
+		})
+		return
+	}
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "keyring_lookup_result",
+		"data":  map[string]any{"status": "ok", "data": strings.TrimSpace(string(out))},
+	})
+}
+
+func (a *App) handleKeyringUnlock(password string) {
+	cmd := exec.Command("bash", "-c", fmt.Sprintf("echo '%s' | gnome-keyring-daemon --daemonize --login", password))
+	_, err := cmd.Output()
+	if err == nil {
+		a.socketServer.Emitter().Emit(map[string]any{
+			"event": "keyring_unlock_result",
+			"data":  map[string]any{"success": true},
+		})
+	} else {
+		a.socketServer.Emitter().Emit(map[string]any{
+			"event": "keyring_unlock_result",
+			"data":  map[string]any{"success": false, "error": err.Error()},
+		})
 	}
 }
