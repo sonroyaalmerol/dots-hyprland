@@ -17,18 +17,6 @@ Scope { // Scope
     // Bind directly to daemon state.
     property bool oskActive: DaemonSocket.oskVisible && !GlobalStates.screenLocked
 
-    Connections {
-        target: GlobalStates
-
-        function onOverviewOpenChanged() {
-            if (GlobalStates.overviewOpen && DaemonSocket.effectiveTabletMode) {
-                DaemonSocket.oskShow()
-            } else if (!GlobalStates.overviewOpen) {
-                DaemonSocket.oskHide()
-            }
-        }
-    }
-
     component OskControlButton: GroupButton { // Pin button
         baseWidth: 40
         baseHeight: 40
@@ -72,6 +60,7 @@ Scope { // Scope
             implicitHeight: oskBackground.height + Appearance.sizes.elevationMargin * 2
             WlrLayershell.namespace: "quickshell:osk"
             WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
             color: "transparent"
 
             mask: Region {
@@ -80,10 +69,8 @@ Scope { // Scope
 
             // Make it usable with other panels
             Component.onCompleted: {
-                GlobalFocusGrab.addPersistent(oskRoot);
             }
             Component.onDestruction: {
-                GlobalFocusGrab.removePersistent(oskRoot);
             }
 
             // Background

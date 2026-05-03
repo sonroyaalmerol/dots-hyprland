@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"os"
 	"os/exec"
@@ -98,6 +99,13 @@ type App struct {
 
 	// State loop — all state mutations happen in a single goroutine.
 	stateCh chan stateEvent
+
+	// OSK hide delay — prevents flash when focus hops between text fields.
+	oskHideTimer *time.Timer
+
+	// Last emitted state for dedup.
+	lastStateHash   uint64
+	lastFocusActive time.Time
 
 	// Canonical state (accessed only from stateLoop goroutine).
 	hwTablet     bool
@@ -242,6 +250,9 @@ func (a *App) runStateLoop(ctx context.Context) {
 				a.onTextFocus(ev.active)
 			case "lock":
 				a.onScreenLock(ev.active)
+			case "osk_hide_timeout":
+				a.oskHideTimer = nil
+				a.recomputeOsk()
 			case "command":
 				a.handleStateCommand(ev.cmd, ev.arg)
 			}
@@ -254,44 +265,63 @@ func (a *App) effectiveTablet() bool {
 	return a.userMode == 1 || (a.userMode == 0 && a.hwTablet)
 }
 
-func (a *App) onHardwareTablet(active bool) {
-	a.hwTablet = active
-	if !a.effectiveTablet() && a.oskAutoShown {
-		a.oskVisible = false
-		a.oskAutoShown = false
+func (a *App) computeOskVisible() bool {
+	if a.oskPinned {
+		return true
 	}
-	if a.effectiveTablet() && a.textFocus && !a.oskDismissed && !a.oskVisible {
-		a.oskVisible = true
+	if a.screenLocked {
+		return false
+	}
+	return a.effectiveTablet() && a.textFocus && !a.oskDismissed
+}
+
+func (a *App) recomputeOsk() {
+	prev := a.oskVisible
+	a.oskVisible = a.computeOskVisible()
+	if a.oskVisible && !prev && !a.oskPinned {
 		a.oskAutoShown = true
+	}
+	if !a.oskVisible {
+		a.oskAutoShown = false
 	}
 }
 
+func (a *App) onHardwareTablet(active bool) {
+	a.hwTablet = active
+	a.recomputeOsk()
+}
+
 func (a *App) onTextFocus(active bool) {
-	a.textFocus = active
 	if active {
+		a.lastFocusActive = time.Now()
+		a.textFocus = true
 		a.oskDismissed = false
-		if a.effectiveTablet() && !a.oskVisible {
-			a.oskVisible = true
-			a.oskAutoShown = true
+		// Cancel pending hide — focus returned before delay expired.
+		if a.oskHideTimer != nil {
+			a.oskHideTimer.Stop()
+			a.oskHideTimer = nil
 		}
+		a.recomputeOsk()
 	} else {
-		if a.oskAutoShown {
-			a.oskVisible = false
-			a.oskAutoShown = false
+		// Suppress rapid deactivate→activate cycles caused by layers
+		// stealing focus briefly (OSK panel, overview search, etc.).
+		if time.Since(a.lastFocusActive) < 300*time.Millisecond {
+			a.textFocus = true // keep reporting focus as active
+			return
 		}
+		a.textFocus = false
+		if a.oskHideTimer != nil {
+			a.oskHideTimer.Stop()
+		}
+		a.oskHideTimer = time.AfterFunc(200*time.Millisecond, func() {
+			a.stateCh <- stateEvent{kind: "osk_hide_timeout"}
+		})
 	}
 }
 
 func (a *App) onScreenLock(locked bool) {
-	prev := a.screenLocked
 	a.screenLocked = locked
-	if locked {
-		a.oskVisible = false
-		a.oskAutoShown = false
-	} else if prev && a.textFocus && a.effectiveTablet() && !a.oskDismissed {
-		a.oskVisible = true
-		a.oskAutoShown = true
-	}
+	a.recomputeOsk()
 }
 
 func (a *App) handleStateCommand(cmd, arg string) {
@@ -316,49 +346,41 @@ func (a *App) handleStateCommand(cmd, arg string) {
 		a.reevalOsk()
 
 	case "osk-dismiss":
-		a.oskVisible = false
 		a.oskDismissed = true
-		a.oskAutoShown = false
+		a.recomputeOsk()
 
 	case "osk-undismiss":
 		a.oskDismissed = false
+		a.recomputeOsk()
 
 	case "osk-toggle":
 		if a.oskVisible {
-			a.oskVisible = false
 			a.oskDismissed = true
-			a.oskAutoShown = false
 		} else {
-			a.oskVisible = true
 			a.oskDismissed = false
-			a.oskAutoShown = false
 		}
+		a.recomputeOsk()
 
 	case "osk-show":
-		a.oskVisible = true
 		a.oskDismissed = false
-		a.oskAutoShown = false
+		a.recomputeOsk()
 
 	case "osk-hide":
-		a.oskVisible = false
-		a.oskAutoShown = false
+		a.oskDismissed = true
+		a.recomputeOsk()
 
 	case "osk-pin":
 		a.oskPinned = true
+		a.recomputeOsk()
 
 	case "osk-unpin":
 		a.oskPinned = false
+		a.recomputeOsk()
 	}
 }
 
 func (a *App) reevalOsk() {
-	if a.effectiveTablet() && a.textFocus && !a.oskDismissed && !a.oskVisible {
-		a.oskVisible = true
-		a.oskAutoShown = true
-	} else if !a.effectiveTablet() && a.oskAutoShown {
-		a.oskVisible = false
-		a.oskAutoShown = false
-	}
+	a.recomputeOsk()
 }
 
 // ── State emit ────────────────────────────────────────────────────────────────
@@ -371,18 +393,31 @@ func (a *App) emitState() {
 	case 2:
 		modeStr = "desktop"
 	}
+	data := map[string]any{
+		"hardware_tablet":       a.hwTablet,
+		"text_focus":            a.textFocus,
+		"effective_tablet_mode": a.effectiveTablet(),
+		"user_mode":             modeStr,
+		"osk_visible":           a.oskVisible,
+		"osk_dismissed":         a.oskDismissed,
+		"osk_pinned":            a.oskPinned,
+		"screen_locked":         a.screenLocked,
+	}
+
+	// Dedup: skip emission if state hasn't changed.
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%v%v%v%v%v%v%v%v",
+		a.hwTablet, a.textFocus, a.effectiveTablet(), modeStr,
+		a.oskVisible, a.oskDismissed, a.oskPinned, a.screenLocked)
+	newHash := h.Sum64()
+	if newHash == a.lastStateHash {
+		return
+	}
+	a.lastStateHash = newHash
+
 	a.socketServer.Emitter().Emit(map[string]any{
 		"event": "state",
-		"data": map[string]any{
-			"hardware_tablet":       a.hwTablet,
-			"text_focus":            a.textFocus,
-			"effective_tablet_mode": a.effectiveTablet(),
-			"user_mode":             modeStr,
-			"osk_visible":           a.oskVisible,
-			"osk_dismissed":         a.oskDismissed,
-			"osk_pinned":            a.oskPinned,
-			"screen_locked":         a.screenLocked,
-		},
+		"data":  data,
 	})
 }
 

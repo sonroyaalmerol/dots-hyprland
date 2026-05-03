@@ -99,10 +99,11 @@ func (m *Monitor) publish() {
 		}
 	}
 
-	log.Printf("[tabletmode] evdev=%v(logind=%s) kb=%v touch=%v -> tablet=%v",
-		evdevTab, logind, kb, touch, tablet)
-	m.tablet.Store(tablet)
-	m.callback(tablet)
+	if m.tablet.Swap(tablet) != tablet {
+		log.Printf("[tabletmode] evdev=%v(logind=%s) kb=%v touch=%v -> tablet=%v",
+			evdevTab, logind, kb, touch, tablet)
+		m.callback(tablet)
+	}
 }
 
 // ── evdev switch monitor ─────────────────────────────────────────────────────
