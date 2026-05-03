@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -815,4 +816,18 @@ func (a *App) repoRoot() string {
 
 func (a *App) DispatchCommand(line string) {
 	dispatchCommand(a, line)
+}
+
+func (a *App) restartSelf() {
+	bin, err := os.Executable()
+	if err != nil {
+		log.Printf("restart: cannot find executable: %v", err)
+		return
+	}
+	args := os.Args
+	// Remove stale lock so new process can start.
+	lockPath := filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "snry-daemon.lock")
+	_ = os.Remove(lockPath)
+	log.Printf("restart: re-executing %s", bin)
+	_ = syscall.Exec(bin, args, os.Environ())
 }

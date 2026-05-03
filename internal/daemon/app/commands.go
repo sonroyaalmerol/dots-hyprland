@@ -463,6 +463,8 @@ func dispatchCommand(a *App, line string) {
 			return
 		}
 		go a.handleHyprconfigEdit(fields[1:])
+	case "restart":
+		a.restartSelf()
 	}
 }
 
