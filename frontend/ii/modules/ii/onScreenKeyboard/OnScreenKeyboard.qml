@@ -14,14 +14,8 @@ Scope { // Scope
     id: root
     property bool pinned: Config.options?.osk.pinnedOnStartup ?? false
 
-    // Watch daemon-computed OSK state. The daemon decides when to show/hide.
-    Connections {
-        target: DaemonSocket
-
-        function onOskVisibleChanged() {
-            GlobalStates.oskOpen = DaemonSocket.oskVisible
-        }
-    }
+    // Bind directly to daemon state.
+    property bool oskActive: DaemonSocket.oskVisible && !GlobalStates.screenLocked
 
     Connections {
         target: GlobalStates
@@ -45,7 +39,7 @@ Scope { // Scope
 
     Loader {
         id: oskLoader
-        active: GlobalStates.oskOpen
+        active: root.oskActive
         onActiveChanged: {
             if (!oskLoader.active) {
                 Ydotool.releaseAllKeys();
@@ -54,7 +48,7 @@ Scope { // Scope
 
         sourceComponent: PanelWindow { // Window
             id: oskRoot
-            visible: oskLoader.active && !GlobalStates.screenLocked
+            visible: true
             property real floatOffsetY: 0
 
             anchors {
