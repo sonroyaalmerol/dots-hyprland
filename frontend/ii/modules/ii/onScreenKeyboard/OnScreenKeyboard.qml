@@ -14,8 +14,10 @@ Scope { // Scope
     id: root
     property bool pinned: Config.options?.osk.pinnedOnStartup ?? false
 
+    property bool panelBlockingOsk: GlobalStates.overviewOpen || GlobalStates.sidebarRightOpen || GlobalStates.mediaControlsOpen || GlobalStates.wallpaperSelectorOpen || GlobalStates.screenTranslatorOpen || GlobalStates.regionSelectorOpen
+
     // Bind directly to daemon state.
-    property bool oskActive: DaemonSocket.oskVisible && !GlobalStates.screenLocked
+    property bool oskActive: DaemonSocket.oskVisible && !GlobalStates.screenLocked && !root.panelBlockingOsk
 
     component OskControlButton: GroupButton { // Pin button
         baseWidth: 40
