@@ -15,7 +15,11 @@ import (
 	"github.com/godbus/dbus/v5"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/brightness"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/cliphist"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/easyeffects"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprkeybinds"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprsunset"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprxkb"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/idle"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/idle/dbusutil"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/inputmethod"
@@ -24,7 +28,9 @@ import (
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/powersave"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/quickshell"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/resources"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/session"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/socket"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/sysinfo"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/tabletmode"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/uinput"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/updates"
@@ -47,6 +53,10 @@ type Config struct {
 	UpdatesCfg       updates.Config
 	CliphistCfg      cliphist.Config
 	BrightnessCfg    brightness.Config
+	SessionCfg       session.Config
+	EasyEffectsCfg   easyeffects.Config
+	HyprsunsetCfg    hyprsunset.Config
+	HyprXkbCfg       hyprxkb.Config
 }
 
 func DefaultConfig() Config {
@@ -63,6 +73,10 @@ func DefaultConfig() Config {
 		UpdatesCfg:       updates.DefaultConfig(),
 		CliphistCfg:      cliphist.DefaultConfig(),
 		BrightnessCfg:    brightness.DefaultConfig(),
+		SessionCfg:       session.DefaultConfig(),
+		EasyEffectsCfg:   easyeffects.DefaultConfig(),
+		HyprsunsetCfg:    hyprsunset.DefaultConfig(),
+		HyprXkbCfg:       hyprxkb.DefaultConfig(),
 	}
 }
 
@@ -81,21 +95,27 @@ type stateEvent struct {
 type App struct {
 	cfg Config
 
-	lockFile      *os.File
-	uinput        *uinput.Keyboard
-	socketServer  *socket.Server
-	idleSvc       *idle.Service
-	lockscreenSvc *lockscreen.Service
-	powersaveSvc  *powersave.Service
-	resourcesSvc  *resources.Service
-	hyprlandSvc   *hyprland.Service
-	qsSvc         *quickshell.Service
-	weatherSvc    *weather.Service
-	updatesSvc    *updates.Service
-	cliphistSvc   *cliphist.Service
-	brightnessSvc *brightness.Service
-	tabletModeMon *tabletmode.Monitor
-	inputMethodW  *inputmethod.Watcher
+	lockFile        *os.File
+	uinput          *uinput.Keyboard
+	socketServer    *socket.Server
+	idleSvc         *idle.Service
+	lockscreenSvc   *lockscreen.Service
+	powersaveSvc    *powersave.Service
+	resourcesSvc    *resources.Service
+	hyprlandSvc     *hyprland.Service
+	qsSvc           *quickshell.Service
+	weatherSvc      *weather.Service
+	updatesSvc      *updates.Service
+	cliphistSvc     *cliphist.Service
+	brightnessSvc   *brightness.Service
+	sysinfoSvc      *sysinfo.Service
+	sessionSvc      *session.Service
+	easyEffectsSvc  *easyeffects.Service
+	hyprKeybindsSvc *hyprkeybinds.Service
+	hyprXkbSvc      *hyprxkb.Service
+	hyprsunsetSvc   *hyprsunset.Service
+	tabletModeMon   *tabletmode.Monitor
+	inputMethodW    *inputmethod.Watcher
 
 	// State loop — all state mutations happen in a single goroutine.
 	stateCh chan stateEvent
@@ -198,6 +218,22 @@ func (a *App) Run(ctx context.Context) error {
 	a.cliphistSvc = cliphist.New(a.cfg.CliphistCfg, a.socketServer.Emitter().Emit)
 	a.brightnessSvc = brightness.New(a.cfg.BrightnessCfg, a.socketServer.Emitter().Emit)
 
+	// New daemon services
+	a.sysinfoSvc = sysinfo.New(a.socketServer.Emitter().Emit)
+	a.hyprKeybindsSvc = hyprkeybinds.New(a.socketServer.Emitter().Emit)
+
+	if a.hyprlandSvc != nil {
+		a.hyprXkbSvc = hyprxkb.New(a.cfg.HyprXkbCfg, a.hyprlandSvc.QuerySocket, a.socketServer.Emitter().Emit)
+		a.hyprsunsetSvc = hyprsunset.New(a.cfg.HyprsunsetCfg,
+			func(cmd string) ([]byte, error) { return a.hyprlandSvc.QuerySocket(cmd) },
+			func(cmd string) error { _, err := a.hyprlandSvc.QuerySocket(cmd); return err },
+			a.socketServer.Emitter().Emit,
+		)
+	}
+
+	a.sessionSvc = session.New(a.cfg.SessionCfg, a.socketServer.Emitter().Emit)
+	a.easyEffectsSvc = easyeffects.New(a.cfg.EasyEffectsCfg, a.socketServer.Emitter().Emit)
+
 	var wg sync.WaitGroup
 
 	wg.Go(func() { a.runStateLoop(ctx) })
@@ -213,6 +249,12 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runUpdates(ctx) })
 	wg.Go(func() { a.runCliphist(ctx) })
 	wg.Go(func() { a.runBrightness(ctx) })
+	wg.Go(func() { a.runSysinfo(ctx) })
+	wg.Go(func() { a.runSession(ctx) })
+	wg.Go(func() { a.runEasyEffects(ctx) })
+	wg.Go(func() { a.runHyprKeybinds(ctx) })
+	wg.Go(func() { a.runHyprXkb(ctx) })
+	wg.Go(func() { a.runHyprsunset(ctx) })
 	wg.Go(func() {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
@@ -514,6 +556,24 @@ func (a *App) socketSnapshots() []socket.SnapshotProvider {
 	if a.brightnessSvc != nil {
 		snapshots = append(snapshots, a.brightnessSvc)
 	}
+	if a.sysinfoSvc != nil {
+		snapshots = append(snapshots, a.sysinfoSvc)
+	}
+	if a.sessionSvc != nil {
+		snapshots = append(snapshots, a.sessionSvc)
+	}
+	if a.easyEffectsSvc != nil {
+		snapshots = append(snapshots, a.easyEffectsSvc)
+	}
+	if a.hyprKeybindsSvc != nil {
+		snapshots = append(snapshots, a.hyprKeybindsSvc)
+	}
+	if a.hyprXkbSvc != nil {
+		snapshots = append(snapshots, a.hyprXkbSvc)
+	}
+	if a.hyprsunsetSvc != nil {
+		snapshots = append(snapshots, a.hyprsunsetSvc)
+	}
 	return snapshots
 }
 
@@ -635,6 +695,60 @@ func (a *App) runBrightness(ctx context.Context) {
 	}
 	if err := a.brightnessSvc.Run(ctx); err != nil && err != context.Canceled {
 		log.Printf("brightness: %v", err)
+	}
+}
+
+func (a *App) runSysinfo(ctx context.Context) {
+	if a.sysinfoSvc == nil {
+		return
+	}
+	if err := a.sysinfoSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("sysinfo: %v", err)
+	}
+}
+
+func (a *App) runSession(ctx context.Context) {
+	if a.sessionSvc == nil {
+		return
+	}
+	if err := a.sessionSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("session: %v", err)
+	}
+}
+
+func (a *App) runEasyEffects(ctx context.Context) {
+	if a.easyEffectsSvc == nil {
+		return
+	}
+	if err := a.easyEffectsSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("easyeffects: %v", err)
+	}
+}
+
+func (a *App) runHyprKeybinds(ctx context.Context) {
+	if a.hyprKeybindsSvc == nil {
+		return
+	}
+	if err := a.hyprKeybindsSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("hyprkeybinds: %v", err)
+	}
+}
+
+func (a *App) runHyprXkb(ctx context.Context) {
+	if a.hyprXkbSvc == nil {
+		return
+	}
+	if err := a.hyprXkbSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("hyprxkb: %v", err)
+	}
+}
+
+func (a *App) runHyprsunset(ctx context.Context) {
+	if a.hyprsunsetSvc == nil {
+		return
+	}
+	if err := a.hyprsunsetSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("hyprsunset: %v", err)
 	}
 }
 

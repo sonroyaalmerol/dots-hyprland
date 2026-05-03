@@ -170,6 +170,50 @@ func dispatchCommand(a *App, line string) {
 		a.stateCh <- stateEvent{kind: "command", cmd: "osk-pin"}
 	case "osk-unpin":
 		a.stateCh <- stateEvent{kind: "command", cmd: "osk-unpin"}
+
+	// New daemon service commands
+	case "reload-keybinds":
+		if a.hyprKeybindsSvc != nil {
+			a.hyprKeybindsSvc.Reload()
+		}
+	case "easyeffects-toggle":
+		if a.easyEffectsSvc != nil {
+			if a.easyEffectsSvc.IsActive() {
+				a.easyEffectsSvc.Disable()
+			} else {
+				a.easyEffectsSvc.Enable()
+			}
+		}
+	case "easyeffects-enable":
+		if a.easyEffectsSvc != nil {
+			a.easyEffectsSvc.Enable()
+		}
+	case "easyeffects-disable":
+		if a.easyEffectsSvc != nil {
+			a.easyEffectsSvc.Disable()
+		}
+	case "hyprsunset-gamma":
+		if a.hyprsunsetSvc != nil && len(fields) >= 2 {
+			if gamma, err := strconv.Atoi(fields[1]); err == nil {
+				a.hyprsunsetSvc.SetGamma(gamma)
+			}
+		}
+	case "hyprsunset-enable":
+		if a.hyprsunsetSvc != nil {
+			a.hyprsunsetSvc.EnableTemperature()
+		}
+	case "hyprsunset-disable":
+		if a.hyprsunsetSvc != nil {
+			a.hyprsunsetSvc.DisableTemperature()
+		}
+	case "hyprsunset-toggle":
+		if a.hyprsunsetSvc != nil {
+			active := true
+			if len(fields) >= 2 {
+				active = fields[1] != "false" && fields[1] != "0"
+			}
+			a.hyprsunsetSvc.ToggleTemperature(active)
+		}
 	}
 }
 

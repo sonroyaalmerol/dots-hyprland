@@ -45,6 +45,41 @@ Singleton {
 	property bool updatesAvailable: false
 	property int updatesCount: 0
 
+	// System info from daemon.
+	property string systemDistroName: "Unknown"
+	property string systemDistroId: "unknown"
+	property string systemDistroIcon: "linux-symbolic"
+	property string systemUsername: "user"
+	property string systemHomeUrl: ""
+	property string systemDocumentationUrl: ""
+	property string systemSupportUrl: ""
+	property string systemBugReportUrl: ""
+	property string systemPrivacyPolicyUrl: ""
+	property string systemLogo: ""
+	property string systemDesktopEnvironment: ""
+	property string systemWindowingSystem: ""
+
+	// Session warnings from daemon.
+	property bool sessionPackageManagerRunning: false
+	property bool sessionDownloadRunning: false
+
+	// EasyEffects from daemon.
+	property bool easyEffectsAvailable: false
+	property bool easyEffectsActive: false
+
+	// Hyprland keybinds from daemon.
+	property string hyprDefaultKeybinds: '{"children":[]}'
+	property string hyprUserKeybinds: '{"children":[]}'
+
+	// Hyprland XKB from daemon.
+	property string hyprCurrentLayoutName: ""
+	property string hyprCurrentLayoutCode: ""
+	property var hyprLayoutCodes: []
+
+	// Hyprsunset from daemon.
+	property bool hyprsunsetTemperatureActive: false
+	property int hyprsunsetGamma: 100
+
 	// Backward compat signals.
 	signal lockStateChanged(bool locked)
 	signal authResult(var data)
@@ -57,6 +92,12 @@ Singleton {
 	signal diagnoseError(string error)
 	signal weatherUpdated()
 	signal updatesUpdated()
+	signal systemInfoUpdated()
+	signal sessionWarningsUpdated()
+	signal easyEffectsUpdated()
+	signal hyprKeybindsUpdated()
+	signal hyprXkbUpdated()
+	signal hyprsunsetUpdated()
 
 	property bool connected: daemonSocket.connected
 
@@ -85,6 +126,14 @@ Singleton {
 		daemonSocket.write(cmd + "\n")
 		daemonSocket.flush()
 	}
+
+	function easyEffectsToggle() { sendCommand("easyeffects-toggle") }
+	function easyEffectsEnable() { sendCommand("easyeffects-enable") }
+	function easyEffectsDisable() { sendCommand("easyeffects-disable") }
+	function hyprsunsetSetGamma(gamma) { sendCommand("hyprsunset-gamma " + gamma) }
+	function hyprsunsetEnableTemperature() { sendCommand("hyprsunset-enable") }
+	function hyprsunsetDisableTemperature() { sendCommand("hyprsunset-disable") }
+	function hyprsunsetToggleTemperature(active) { sendCommand("hyprsunset-toggle " + (active !== undefined ? active : "")) }
 
 	Socket {
 		id: daemonSocket
@@ -188,6 +237,41 @@ Singleton {
 			root.updatesAvailable = obj.data.available || false
 			root.updatesCount = obj.data.count || 0
 			updatesUpdated()
+		} else if (obj.event === "system_info" && obj.data) {
+			if (obj.data.distroName !== undefined) root.systemDistroName = obj.data.distroName
+			if (obj.data.distroId !== undefined) root.systemDistroId = obj.data.distroId
+			if (obj.data.distroIcon !== undefined) root.systemDistroIcon = obj.data.distroIcon
+			if (obj.data.username !== undefined) root.systemUsername = obj.data.username
+			if (obj.data.homeUrl !== undefined) root.systemHomeUrl = obj.data.homeUrl
+			if (obj.data.documentationUrl !== undefined) root.systemDocumentationUrl = obj.data.documentationUrl
+			if (obj.data.supportUrl !== undefined) root.systemSupportUrl = obj.data.supportUrl
+			if (obj.data.bugReportUrl !== undefined) root.systemBugReportUrl = obj.data.bugReportUrl
+			if (obj.data.privacyPolicyUrl !== undefined) root.systemPrivacyPolicyUrl = obj.data.privacyPolicyUrl
+			if (obj.data.logo !== undefined) root.systemLogo = obj.data.logo
+			if (obj.data.desktopEnvironment !== undefined) root.systemDesktopEnvironment = obj.data.desktopEnvironment
+			if (obj.data.windowingSystem !== undefined) root.systemWindowingSystem = obj.data.windowingSystem
+			systemInfoUpdated()
+		} else if (obj.event === "session_warnings" && obj.data) {
+			if (obj.data.packageManagerRunning !== undefined) root.sessionPackageManagerRunning = obj.data.packageManagerRunning
+			if (obj.data.downloadRunning !== undefined) root.sessionDownloadRunning = obj.data.downloadRunning
+			sessionWarningsUpdated()
+		} else if (obj.event === "easyeffects" && obj.data) {
+			if (obj.data.available !== undefined) root.easyEffectsAvailable = obj.data.available
+			if (obj.data.active !== undefined) root.easyEffectsActive = obj.data.active
+			easyEffectsUpdated()
+		} else if (obj.event === "hypr_keybinds" && obj.data) {
+			if (obj.data.default !== undefined) root.hyprDefaultKeybinds = obj.data.default
+			if (obj.data.user !== undefined) root.hyprUserKeybinds = obj.data.user
+			hyprKeybindsUpdated()
+		} else if (obj.event === "hypr_xkb" && obj.data) {
+			if (obj.data.layoutCodes !== undefined) root.hyprLayoutCodes = obj.data.layoutCodes
+			if (obj.data.currentLayoutName !== undefined) root.hyprCurrentLayoutName = obj.data.currentLayoutName
+			if (obj.data.currentLayoutCode !== undefined) root.hyprCurrentLayoutCode = obj.data.currentLayoutCode
+			hyprXkbUpdated()
+		} else if (obj.event === "hyprsunset" && obj.data) {
+			if (obj.data.temperatureActive !== undefined) root.hyprsunsetTemperatureActive = obj.data.temperatureActive
+			if (obj.data.gamma !== undefined) root.hyprsunsetGamma = obj.data.gamma
+			hyprsunsetUpdated()
 		}
 	}
 }
