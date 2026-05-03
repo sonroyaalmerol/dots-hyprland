@@ -18,6 +18,18 @@ Singleton {
 	property bool oskPinned: false
 	property bool screenLocked: false
 
+	// Resource metrics from daemon.
+	property real cpuUsage: 0
+	property real memoryTotal: 1
+	property real memoryFree: 0
+	property real memoryAvailable: 0
+	property real memoryUsed: 0
+	property real memoryUsedPercentage: 0
+	property real swapTotal: 1
+	property real swapFree: 0
+	property real swapUsed: 0
+	property real swapUsedPercentage: 0
+
 	// Backward compat signals.
 	signal lockStateChanged(bool locked)
 	signal authResult(var data)
@@ -126,6 +138,25 @@ Singleton {
 			diagnoseDone()
 		} else if (obj.event === "diagnose_error" && obj.data) {
 			diagnoseError(obj.data.error || "unknown error")
+		} else if (obj.event === "resources" && obj.data) {
+			if (obj.data.cpuUsage !== undefined)
+				root.cpuUsage = obj.data.cpuUsage
+			if (obj.data.memoryTotal !== undefined)
+				root.memoryTotal = obj.data.memoryTotal
+			if (obj.data.memoryFree !== undefined)
+				root.memoryFree = obj.data.memoryFree
+			if (obj.data.memoryAvailable !== undefined) {
+				root.memoryAvailable = obj.data.memoryAvailable
+				root.memoryUsed = root.memoryTotal - root.memoryAvailable
+				root.memoryUsedPercentage = root.memoryUsed / root.memoryTotal
+			}
+			if (obj.data.swapTotal !== undefined)
+				root.swapTotal = obj.data.swapTotal
+			if (obj.data.swapFree !== undefined) {
+				root.swapFree = obj.data.swapFree
+				root.swapUsed = root.swapTotal - root.swapFree
+				root.swapUsedPercentage = root.swapTotal > 0 ? root.swapUsed / root.swapTotal : 0
+			}
 		}
 	}
 }
