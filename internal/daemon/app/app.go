@@ -126,7 +126,10 @@ func (a *App) Run(ctx context.Context) error {
 			}
 		})
 
-		// On startup, check if we should auto-unlock (keyring already available)
+		// On startup, always emit the initial lock state so the QML
+		// frontend is in sync. Daemon starts unlocked.
+		a.lockscreenSvc.EmitState()
+
 		if a.lockscreenSvc.TryAutoUnlock() {
 			log.Printf("[app] auto-unlocked on startup (keyring available)")
 		}
@@ -191,7 +194,10 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 func (a *App) runSocketServer(ctx context.Context) {
-	snapshots := make([]socket.SnapshotProvider, 0, 6)
+	snapshots := make([]socket.SnapshotProvider, 0, 7)
+	if a.lockscreenSvc != nil {
+		snapshots = append(snapshots, a.lockscreenSvc)
+	}
 	if a.hyprlandSvc != nil {
 		snapshots = append(snapshots, a.hyprlandSvc)
 	}

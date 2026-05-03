@@ -218,6 +218,23 @@ func (s *Service) SetLocked(locked bool) {
 	s.locked.Store(locked)
 }
 
+// EmitSnapshot implements socket.SnapshotProvider so new QML clients
+// receive the current lock state on connect.
+func (s *Service) EmitSnapshot(emit func(map[string]any)) {
+	emit(map[string]any{
+		"event": "lock_state",
+		"data": map[string]any{
+			"locked": s.locked.Load(),
+		},
+	})
+}
+
+// EmitState emits the current lock state to all listeners.
+// Used at startup to ensure the QML frontend is in sync.
+func (s *Service) EmitState() {
+	s.emit(EventLockState, s.locked.Load())
+}
+
 func (s *Service) emit(t EventType, data any) {
 	if s.onEvent != nil {
 		s.onEvent(t, data)
