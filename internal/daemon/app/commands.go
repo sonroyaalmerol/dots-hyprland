@@ -314,6 +314,25 @@ func dispatchCommand(a *App, line string) {
 		if a.conflictSvc != nil {
 			go a.handleConflictCheck()
 		}
+	case "fprintd-check":
+		user := os.Getenv("USER")
+		if user == "" {
+			user = "root"
+		}
+		out, err := exec.Command("fprintd-list", user).Output()
+		if err != nil {
+			a.socketServer.Emitter().Emit(map[string]any{
+				"event": "fprintd_result",
+				"data":  map[string]any{"available": false, "enrolled": false},
+			})
+			return
+		}
+		output := string(out)
+		enrolled := strings.Contains(output, "Finger") || strings.Contains(output, "finger")
+		a.socketServer.Emitter().Emit(map[string]any{
+			"event": "fprintd_result",
+			"data":  map[string]any{"available": true, "enrolled": enrolled},
+		})
 	case "fps-set":
 		if len(fields) >= 2 {
 			fpsValue := fields[1]

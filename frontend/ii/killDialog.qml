@@ -11,7 +11,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import Quickshell
-import Quickshell.Io
 import Quickshell.Hyprland
 import qs.services
 import qs.modules.common
@@ -38,6 +37,7 @@ ApplicationWindow {
         Config.readWriteDelay = 0;
         Config.blockWrites = true;
         MaterialThemeLoader.reapplyTheme();
+        DaemonSocket.conflictCheck()
     }
 
     minimumWidth: 400
@@ -50,24 +50,14 @@ ApplicationWindow {
 
     component ConflictingProgramGroup: ColumnLayout {
         id: conflictGroup
-        required property list<string> programs
+        required property bool hasConflict
         required property string description
-        visible: false
+        visible: hasConflict
         onVisibleChanged: {
             conflictCount += visible ? 1 : -1
         }
 
         signal alwaysSelected()
-
-        Process {
-            running: true
-            command: ["pidof", ...conflictGroup.programs]
-            onExited: (exitCode, exitStatus) => {
-                if (exitCode === 0) {
-                    conflictGroup.visible = true
-                }
-            }
-        }
 
         StyledText {
             text: conflictGroup.programs.join(", ")
@@ -112,6 +102,14 @@ ApplicationWindow {
                 }
                 onClicked: conflictGroup.visible = false
             }
+        }
+    }
+
+    Connections {
+        target: DaemonSocket
+        function onConflictResult(trays, notifications) {
+            kded6Group.hasConflict = trays.includes("kded6")
+            notificationDaemonsGroup.hasConflict = notifications.some(n => ["mako", "dunst"].includes(n))
         }
     }
 
@@ -184,7 +182,7 @@ ApplicationWindow {
                 }
 
                 ConflictingProgramGroup {
-                    id: notificationDaemons
+                    id: notificationDaemonsGroup
                     Layout.alignment: Qt.AlignHCenter
                     Layout.fillHeight: false
                     programs: ["mako", "dunst"]

@@ -6,7 +6,6 @@ import qs.modules.ii.sidebarRight.quickToggles
 import qs
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import Quickshell.Hyprland
 
 QuickToggleButton {

@@ -92,6 +92,11 @@ Singleton {
 	property string warpStatus: ""
 	property bool gameModeEnabled: false
 
+	// Dark mode and fprintd from daemon.
+	property bool darkMode: false
+	property bool fprintdAvailable: false
+	property bool fprintdEnrolled: false
+
 	// Network from daemon.
 	property bool networkWifiEnabled: false
 	property string networkWifiStatus: "disconnected"
@@ -127,6 +132,8 @@ Singleton {
 	// Warp and GameMode signals.
 	signal warpStatusUpdated()
 	signal gameModeUpdated()
+	signal darkModeUpdated()
+	signal fprintdResult(bool available, bool enrolled)
 	signal conflictResult(var trays, var notifications)
 	signal hyprconfigValue(string key, string value)
 
@@ -186,6 +193,7 @@ Singleton {
 	function gameModeEnable() { sendCommand("gamemode-enable") }
 	function gameModeDisable() { sendCommand("gamemode-disable") }
 	function gameModeToggle() { sendCommand("gamemode-toggle") }
+	function fprintdCheck() { sendCommand("fprintd-check") }
 	function conflictCheck() { sendCommand("conflict-check") }
 	function fpsSet(value) { sendCommand("fps-set " + value) }
 	function hyprconfigGet(key) { sendCommand("hyprconfig-get " + key) }
@@ -358,6 +366,13 @@ Singleton {
 			gameModeUpdated()
 		} else if (obj.event === "conflict_result" && obj.data) {
 			conflictResult(obj.data.trays ?? [], obj.data.notifications ?? [])
+		} else if (obj.event === "dark_mode" && obj.data) {
+			root.darkMode = obj.data.dark ?? false
+			darkModeUpdated()
+		} else if (obj.event === "fprintd_result" && obj.data) {
+			root.fprintdAvailable = obj.data.available ?? false
+			root.fprintdEnrolled = obj.data.enrolled ?? false
+			fprintdResult(root.fprintdAvailable, root.fprintdEnrolled)
 		} else if (obj.event === "hyprconfig_value" && obj.data) {
 			hyprconfigValue(obj.data.key ?? "", obj.data.value ?? "")
 		}

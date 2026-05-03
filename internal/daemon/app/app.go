@@ -16,6 +16,7 @@ import (
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/brightness"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/cliphist"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/conflict"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/darkmode"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/easyeffects"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/gamemode"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprkeybinds"
@@ -64,6 +65,7 @@ type Config struct {
 	NetworkCfg       network.Config
 	WarpCfg          warp.Config
 	GamemodeCfg      gamemode.Config
+	DarkmodeCfg      darkmode.Config
 }
 
 func DefaultConfig() Config {
@@ -87,6 +89,7 @@ func DefaultConfig() Config {
 		NetworkCfg:       network.DefaultConfig(),
 		WarpCfg:          warp.DefaultConfig(),
 		GamemodeCfg:      gamemode.DefaultConfig(),
+		DarkmodeCfg:      darkmode.DefaultConfig(),
 	}
 }
 
@@ -129,6 +132,7 @@ type App struct {
 	networkSvc      *network.Service
 	warpSvc         *warp.Service
 	gamemodeSvc     *gamemode.Service
+	darkmodeSvc     *darkmode.Service
 	conflictSvc     *conflict.Service
 
 	// State loop — all state mutations happen in a single goroutine.
@@ -252,6 +256,7 @@ func (a *App) Run(ctx context.Context) error {
 
 	a.warpSvc = warp.New(a.cfg.WarpCfg, a.socketServer.Emitter().Emit)
 	a.gamemodeSvc = gamemode.New(a.cfg.GamemodeCfg, a.socketServer.Emitter().Emit)
+	a.darkmodeSvc = darkmode.New(a.cfg.DarkmodeCfg, a.socketServer.Emitter().Emit)
 	a.conflictSvc = conflict.New()
 
 	var wg sync.WaitGroup
@@ -278,6 +283,7 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runNetwork(ctx) })
 	wg.Go(func() { a.runWarp(ctx) })
 	wg.Go(func() { a.runGamemode(ctx) })
+	wg.Go(func() { a.runDarkmode(ctx) })
 	wg.Go(func() {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
@@ -606,6 +612,9 @@ func (a *App) socketSnapshots() []socket.SnapshotProvider {
 	if a.gamemodeSvc != nil {
 		snapshots = append(snapshots, a.gamemodeSvc)
 	}
+	if a.darkmodeSvc != nil {
+		snapshots = append(snapshots, a.darkmodeSvc)
+	}
 	return snapshots
 }
 
@@ -808,6 +817,15 @@ func (a *App) runGamemode(ctx context.Context) {
 	}
 	if err := a.gamemodeSvc.Run(ctx); err != nil && err != context.Canceled {
 		log.Printf("gamemode: %v", err)
+	}
+}
+
+func (a *App) runDarkmode(ctx context.Context) {
+	if a.darkmodeSvc == nil {
+		return
+	}
+	if err := a.darkmodeSvc.Run(ctx); err != nil && err != context.Canceled {
+		log.Printf("darkmode: %v", err)
 	}
 }
 

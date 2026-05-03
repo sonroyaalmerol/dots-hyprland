@@ -1,10 +1,8 @@
-
 import qs
 import qs.services
 import qs.modules.common
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import Quickshell.Services.Pam
 
 Scope {
@@ -21,7 +19,7 @@ Scope {
     property string currentText: ""
     property bool unlockInProgress: false
     property bool showFailure: false
-    property bool fingerprintsConfigured: false
+    property bool hasFingerprint: false
     property var targetAction: LockContext.ActionEnum.Unlock
     property bool alsoInhibitIdle: false
 
@@ -76,7 +74,7 @@ Scope {
     }
 
     function tryFingerUnlock() {
-        if (root.fingerprintsConfigured) {
+        if (root.hasFingerprint) {
             fingerPam.start();
         }
     }
@@ -114,22 +112,15 @@ Scope {
         }
     }
 
-    Process {
-        id: fingerprintCheckProc
-        running: true
-        command: ["bash", "-c", "fprintd-list $(whoami)"]
-        stdout: StdioCollector {
-            id: fingerprintOutputCollector
-            onStreamFinished: {
-                root.fingerprintsConfigured = fingerprintOutputCollector.text.includes("Fingerprints for user");
-            }
+    Connections {
+        target: DaemonSocket
+        function onFprintdResult(available, enrolled) {
+            root.hasFingerprint = available && enrolled
         }
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode !== 0) {
-                // console.warn("[LockContext] fprintd-list command exited with error:", exitCode, exitStatus);
-                root.fingerprintsConfigured = false;
-            }
-        }
+    }
+
+    Component.onCompleted: {
+        DaemonSocket.fprintdCheck()
     }
 
     PamContext {

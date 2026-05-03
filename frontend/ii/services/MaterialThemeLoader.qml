@@ -4,7 +4,6 @@ pragma ComponentBehavior: Bound
 import qs.modules.common
 import QtQuick
 import Quickshell
-import Quickshell.Io
 
 /**
  * Automatically reloads generated material colors.
@@ -71,38 +70,17 @@ Singleton {
 	}
 
 	Component.onCompleted: {
-		gsettingsInitProc.running = true
-		gsettingsMonitorProc.running = true
+		root.setDarkmodeFromGsettings(DaemonSocket.darkMode ? "prefer-dark" : "prefer-light")
+	}
+
+	Connections {
+		target: DaemonSocket
+		function onDarkModeUpdated() {
+			root.setDarkmodeFromGsettings(DaemonSocket.darkMode ? "prefer-dark" : "prefer-light")
+		}
 	}
 
 	function setDarkmodeFromGsettings(value: string) {
 		Appearance.m3colors.darkmode = (value === "prefer-dark")
-	}
-
-	Process {
-		id: gsettingsInitProc
-		command: ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]
-		stdout: SplitParser {
-			onRead: data => {
-				const value = data.trim().replace(/^'|'$/g, "")
-				root.setDarkmodeFromGsettings(value)
-			}
-		}
-	}
-
-	Process {
-		id: gsettingsMonitorProc
-		command: ["gsettings", "monitor", "org.gnome.desktop.interface", "color-scheme"]
-		stdout: SplitParser {
-			onRead: data => {
-				const value = data.trim()
-				root.setDarkmodeFromGsettings(value)
-			}
-		}
-		onExited: {
-			if (gsettingsMonitorProc.running) {
-				gsettingsMonitorProc.running = true
-			}
-		}
 	}
 }
