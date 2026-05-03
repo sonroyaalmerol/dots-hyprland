@@ -11,6 +11,56 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Update PKGBUILD version from tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "Updating pkgver to $VERSION"
+          sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+
+      - name: Validate PKGBUILD
+        run: |
+          # Install dependencies needed for makepkg --printsrcinfo
+          sudo apt-get update
+          sudo apt-get install -y pacman-package-manager || true
+          # Basic validation
+          bash -n PKGBUILD
+          bash -n snry-shell-qs.install
+          source PKGBUILD
+          echo "Package: $pkgname $pkgver-$pkgrel"
+
+      - name: Generate .SRCINFO
+        run: |
+          # Generate .SRCINFO manually since pacman isn't available on Ubuntu
+          source PKGBUILD
+          cat > .SRCINFO <<EOF
+          pkgbase = snry-shell-qs
+          	pkgdesc = $pkgdesc
+          	pkgver = $pkgver
+          	pkgrel = $pkgrel
+          	url = $url
+          	arch = any
+          	license = $license
+          EOF
+          for dep in "${depends[@]}"; do
+            echo "	depends = $dep" >> .SRCINFO
+          done
+          for dep in "${makedepends[@]}"; do
+            echo "	makedepends = $dep" >> .SRCINFO
+          done
+          for dep in "${optdepends[@]}"; do
+            echo "	optdepends = $dep" >> .SRCINFO
+          done
+          for src in "${source[@]}"; do
+            echo "	source = $src" >> .SRCINFO
+          done
+          echo "	sha256sums = SKIP" >> .SRCINFO
+          echo "" >> .SRCINFO
+          echo "pkgname = snry-shell-qs" >> .SRCINFO
+          echo "	install = snry-shell-qs.install" >> .SRCINFO
+          cat .SRCINFO
+
       - name: Publish snry-shell-qs to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
         with:
@@ -18,6 +68,7 @@ jobs:
           pkgbuild: ./PKGBUILD
           assets: |
             ./snry-shell-qs.install
+            ./.SRCINFO
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}

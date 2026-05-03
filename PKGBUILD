@@ -1,4 +1,6 @@
 # Maintainer: Snry Shell <snry@shell.dev>
+# Release: tag as v<version> and push tag, then create GitHub release.
+# The AUR publish workflow will update pkgver and publish automatically.
 pkgname=snry-shell-qs
 pkgver=2.0.0
 pkgrel=1
@@ -110,7 +112,7 @@ makedepends=('git' 'go' 'base-devel')
 optdepends=(
 	'plasma-browser-integration: KDE browser integration support'
 )
-source=("git+https://github.com/sonroyaalmerol/snry-shell.git")
+source=("git+https://github.com/sonroyaalmerol/snry-shell.git#tag=v$pkgver")
 sha256sums=('SKIP')
 backup=()
 install=snry-shell-qs.install
