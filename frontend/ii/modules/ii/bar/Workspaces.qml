@@ -18,7 +18,12 @@ Item {
     property bool borderless: Config.options.bar.borderless
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
     readonly property Toplevel activeWindow: ToplevelManager.activeToplevel
-    readonly property int effectiveActiveWorkspaceId: monitor?.activeWorkspace?.id ?? 1
+    // Avoid lock-screen temp workspace (2147483646+) leaking into UI.
+    // Fall back to 1 for any workspace outside normal range (1-100).
+    readonly property int effectiveActiveWorkspaceId: {
+        const raw = monitor?.activeWorkspace?.id ?? 1
+        return (raw >= 1 && raw <= 100) ? raw : 1
+    }
     
     readonly property int workspacesShown: Config.options.bar.workspaces.shown
     readonly property int workspaceGroup: Math.floor((effectiveActiveWorkspaceId - 1) / root.workspacesShown)
@@ -58,8 +63,11 @@ Item {
 
     // Function to update workspaceOccupied
     function updateWorkspaceOccupied() {
+        const maxWsId = 100 // ignore lock-screen temp workspaces (2147483646+)
         workspaceOccupied = Array.from({ length: root.workspacesShown }, (_, i) => {
-            return Hyprland.workspaces.values.some(ws => ws.id === workspaceGroup * root.workspacesShown + i + 1);
+            const targetId = workspaceGroup * root.workspacesShown + i + 1
+            if (targetId > maxWsId) return false
+            return Hyprland.workspaces.values.some(ws => ws.id === targetId)
         })
     }
 

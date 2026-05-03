@@ -14,7 +14,7 @@ Item {
 
     property string activeWindowAddress: `0x${activeWindow?.HyprlandToplevel?.address}`
     property bool focusingThisMonitor: HyprlandData.activeWorkspace?.monitor == monitor?.name
-    property var biggestWindow: HyprlandData.biggestWindowForWorkspace(HyprlandData.monitors[root.monitor?.id]?.activeWorkspace.id)
+    property var biggestWindow: HyprlandData.biggestWindowForWorkspace(Math.min(100, HyprlandData.monitors[root.monitor?.id]?.activeWorkspace.id ?? 1))
 
     implicitWidth: colLayout.implicitWidth
 
