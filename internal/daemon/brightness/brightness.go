@@ -40,7 +40,7 @@ func DefaultConfig() Config {
 		WorkspaceAnimationDelay: 500 * time.Millisecond,
 		ContentSwitchDelay:      500 * time.Millisecond,
 		Enabled:                 true,
-		PollInterval:            2 * time.Second,
+		PollInterval:            10 * time.Second,
 	}
 }
 
@@ -93,7 +93,7 @@ func (s *Service) Run(ctx context.Context) error {
 	// Initial brightness calculation
 	s.calculateAllMonitors()
 
-	s.refreshAll()
+	s.detectMonitors()
 
 	go func() {
 		ticker := time.NewTicker(s.cfg.PollInterval)
@@ -103,7 +103,7 @@ func (s *Service) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				s.refreshAll()
+				s.pollBrightness()
 			}
 		}
 	}()
@@ -376,7 +376,9 @@ func (s *Service) setBrightness(name string, value float64, isDDC bool, busNum s
 	return exec.Command("brightnessctl", "--class", "backlight", "s", strconv.Itoa(percent)+"%", "--quiet").Run()
 }
 
-func (s *Service) refreshAll() {
+// detectMonitors runs ddcutil detect and hyprctl monitors once at startup.
+// This is expensive (probes I2C buses) so it should NOT be called on every poll.
+func (s *Service) detectMonitors() {
 	ddcMonitors := s.detectDDCMonitors()
 
 	out, err := exec.Command("hyprctl", "-j", "monitors").Output()
@@ -433,6 +435,34 @@ func (s *Service) refreshAll() {
 	s.mu.Unlock()
 
 	s.emitBrightness()
+}
+
+// pollBrightness re-reads current brightness values for already-detected monitors.
+// This is cheap — only calls brightnessctl get or ddcutil getvcp (no detect).
+func (s *Service) pollBrightness() {
+	s.mu.RLock()
+	monitors := make([]Monitor, len(s.monitors2))
+	copy(monitors, s.monitors2)
+	s.mu.RUnlock()
+
+	changed := false
+	for i, m := range monitors {
+		cur, _, err := s.initMonitorBrightness(m.Name, m.IsDDC, m.BusNum)
+		if err != nil {
+			continue
+		}
+		if cur != m.Current {
+			monitors[i].Current = cur
+			changed = true
+		}
+	}
+
+	if changed {
+		s.mu.Lock()
+		s.monitors2 = monitors
+		s.mu.Unlock()
+		s.emitBrightness()
+	}
 }
 
 func (s *Service) emitBrightness() {
