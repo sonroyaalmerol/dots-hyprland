@@ -19,6 +19,7 @@ import (
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/darkmode"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/easyeffects"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/gamemode"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/guard"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprkeybinds"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprsunset"
@@ -132,6 +133,7 @@ type App struct {
 	networkSvc      *network.Service
 	warpSvc         *warp.Service
 	gamemodeSvc     *gamemode.Service
+	guardSvc        *guard.Service
 	darkmodeSvc     *darkmode.Service
 	conflictSvc     *conflict.Service
 
@@ -259,6 +261,16 @@ func (a *App) Run(ctx context.Context) error {
 	a.darkmodeSvc = darkmode.New(a.cfg.DarkmodeCfg, a.socketServer.Emitter().Emit)
 	a.conflictSvc = conflict.New()
 
+	// Guard: protect deployed quickshell config from tampering.
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	guardCfg := guard.Config{
+		WatchDir: filepath.Join(configDir, "quickshell", "ii"),
+	}
+	a.guardSvc = guard.New(guardCfg)
+
 	var wg sync.WaitGroup
 
 	wg.Go(func() { a.runStateLoop(ctx) })
@@ -284,6 +296,7 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runService(ctx, "warp", a.warpSvc) })
 	wg.Go(func() { a.runService(ctx, "gamemode", a.gamemodeSvc) })
 	wg.Go(func() { a.runService(ctx, "darkmode", a.darkmodeSvc) })
+	wg.Go(func() { a.runService(ctx, "guard", a.guardSvc) })
 	wg.Go(func() {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
