@@ -87,6 +87,7 @@ func (s *Service) Authenticate(password string) AuthResult {
 		s.locked.Store(false)
 
 		go unlockKeyring(password)
+		go cleanupSpecialWorkspaces()
 
 		s.emit(EventLockState, false)
 		result := AuthResult{Success: true, Remaining: s.maxAttempts}
@@ -163,17 +164,9 @@ func (s *Service) LockWithAutoUnlock() bool {
 		log.Printf("[LOCKSCREEN] keyring already unlocked, auto-unlocking on startup")
 		s.attempts.Store(0)
 		s.lockedOut.Store(false)
+		s.locked.Store(false)
 
-		// Move any windows off special workspaces and switch to workspace 1.
-		// The lock screen's WlSessionLock may have left windows on special
-		// workspace IDs (e.g. 2147483641+).
-		go func() {
-			exec.Command("bash", "-c",
-				`addrs=$(hyprctl clients -j | jq -r '.[] | select(.workspace.id > 1000) | .address'); `+
-					`for a in $addrs; do hyprctl dispatch movetoworkspacesilent "1,address:$a"; done; `+
-					`hyprctl dispatch workspace 1`,
-			).Run()
-		}()
+		go cleanupSpecialWorkspaces()
 
 		s.emit(EventLockState, false)
 		s.emit(EventAuthResult, AuthResult{Success: true, Remaining: s.maxAttempts})
@@ -188,7 +181,25 @@ func (s *Service) Unlock() {
 	s.locked.Store(false)
 	s.attempts.Store(0)
 	s.lockedOut.Store(false)
+	go cleanupSpecialWorkspaces()
 	s.emit(EventLockState, false)
+}
+
+// cleanupSpecialWorkspaces moves any windows left on Hyprland's internal
+// lock-screen workspace (ID >= 1000) back to workspace 1 and switches
+// to it. This prevents stale high-ID workspaces from leaking into the
+// bar/overview workspace calculations.
+func cleanupSpecialWorkspaces() {
+	// Small delay to let WlSessionLock teardown complete.
+	time.Sleep(500 * time.Millisecond)
+	cmd := exec.Command("bash", "-c",
+		`addrs=$(hyprctl clients -j | jq -r '.[] | select(.workspace.id > 1000) | .address'); `+
+			`for a in $addrs; do hyprctl dispatch movetoworkspacesilent "1,address:$a"; done; `+
+			`hyprctl dispatch workspace 1`,
+	)
+	if err := cmd.Run(); err != nil {
+		log.Printf("[lockscreen] workspace cleanup: %v", err)
+	}
 }
 
 // IsLocked reports whether the screen is locked.
@@ -208,6 +219,7 @@ func (s *Service) TryAutoUnlock() bool {
 	s.locked.Store(false)
 	s.attempts.Store(0)
 	s.lockedOut.Store(false)
+	go cleanupSpecialWorkspaces()
 	s.emit(EventLockState, false)
 	s.emit(EventAuthResult, AuthResult{Success: true, Remaining: s.maxAttempts})
 	return true
