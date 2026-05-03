@@ -83,6 +83,9 @@ Singleton {
 	property bool hyprsunsetTemperatureActive: false
 	property int hyprsunsetGamma: 100
 
+	// Brightness from daemon.
+	property var brightnessMonitors: ({})
+
 	// Network from daemon.
 	property bool networkWifiEnabled: false
 	property string networkWifiStatus: "disconnected"
@@ -111,6 +114,7 @@ Singleton {
 	signal hyprXkbUpdated()
 	signal cliphistUpdated()
 	signal hyprsunsetUpdated()
+	signal brightnessUpdated()
 	signal networkUpdated()
 	signal networkConnectResult(var data)
 
@@ -149,6 +153,9 @@ Singleton {
 	function hyprsunsetEnableTemperature() { sendCommand("hyprsunset-enable") }
 	function hyprsunsetDisableTemperature() { sendCommand("hyprsunset-disable") }
 	function hyprsunsetToggleTemperature(active) { sendCommand("hyprsunset-toggle " + (active !== undefined ? active : "")) }
+	function brightnessSet(screen, value) { sendCommand("brightness-set " + screen + " " + value) }
+	function brightnessIncrement(screen, delta) { sendCommand("brightness-increment " + screen + " " + delta) }
+	function brightnessGet(screen) { sendCommand("brightness-get " + screen) }
 	function wifiEnable() { sendCommand("wifi-enable") }
 	function wifiDisable() { sendCommand("wifi-disable") }
 	function wifiToggle() { sendCommand("wifi-toggle") }
@@ -297,6 +304,11 @@ Singleton {
 			if (obj.data.temperatureActive !== undefined) root.hyprsunsetTemperatureActive = obj.data.temperatureActive
 			if (obj.data.gamma !== undefined) root.hyprsunsetGamma = obj.data.gamma
 			hyprsunsetUpdated()
+		} else if (obj.event === "brightness" && obj.data) {
+			root.brightnessMonitors = obj.data
+			brightnessUpdated()
+		} else if (obj.event === "brightness_value" && obj.data) {
+			brightnessUpdated()
 		} else if (obj.event === "network" && obj.data) {
 			if (obj.data.wifiEnabled !== undefined) root.networkWifiEnabled = obj.data.wifiEnabled
 			if (obj.data.wifiStatus !== undefined) root.networkWifiStatus = obj.data.wifiStatus

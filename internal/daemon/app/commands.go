@@ -255,6 +255,33 @@ func dispatchCommand(a *App, line string) {
 		if a.networkSvc != nil && len(fields) >= 3 {
 			go a.networkSvc.ChangePassword(context.Background(), fields[1], fields[2])
 		}
+	case "brightness-set":
+		if a.brightnessSvc != nil && len(fields) >= 3 {
+			screen := fields[1]
+			value, err := strconv.ParseFloat(fields[2], 64)
+			if err == nil {
+				a.brightnessSvc.SetBrightness(screen, value)
+			}
+		}
+	case "brightness-increment":
+		if a.brightnessSvc != nil && len(fields) >= 3 {
+			screen := fields[1]
+			delta, err := strconv.ParseFloat(fields[2], 64)
+			if err == nil {
+				a.brightnessSvc.IncrementBrightness(screen, delta)
+			}
+		}
+	case "brightness-get":
+		if a.brightnessSvc != nil && len(fields) >= 2 {
+			value := a.brightnessSvc.GetBrightness(fields[1])
+			a.socketServer.Emitter().Emit(map[string]any{
+				"event": "brightness_value",
+				"data": map[string]any{
+					"screen":     fields[1],
+					"brightness": value,
+				},
+			})
+		}
 	}
 }
 

@@ -5,7 +5,6 @@ import qs.services
 import qs.modules.common
 
 import Quickshell
-import Quickshell.Io
 import QtQuick
 
 /**

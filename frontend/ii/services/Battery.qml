@@ -5,7 +5,6 @@ import qs.modules.common
 import Quickshell
 import Quickshell.Services.UPower
 import QtQuick
-import Quickshell.Io
 
 Singleton {
     id: root
