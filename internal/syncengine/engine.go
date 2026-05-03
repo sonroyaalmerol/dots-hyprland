@@ -153,12 +153,16 @@ func (e *SyncEngine) syncFile(_ context.Context, step SyncStep) SyncResult {
 		if err := os.MkdirAll(filepathDir(step.DeployPath), 0o755); err != nil {
 			return SyncResult{RelPath: step.RelPath, Decision: decision, Strategy: strategy, Err: fmt.Errorf("mkdir: %w", err)}
 		}
-		if err := atomicWrite(step.DeployPath, result, 0o644); err != nil {
+		mode := os.FileMode(0o644)
+		if info, err := os.Stat(step.UpstreamPath); err == nil && info.Mode()&0o111 != 0 {
+			mode = 0o755
+		}
+		if err := atomicWrite(step.DeployPath, result, mode); err != nil {
 			return SyncResult{RelPath: step.RelPath, Decision: decision, Strategy: strategy, Err: fmt.Errorf("write: %w", err)}
 		}
 		// Write .orig backup on first deploy to preserve baseline for 3-way merge
 		if entry == nil || entry.OriginalSHA256 == "" {
-			_ = atomicWrite(step.DeployPath+".orig", result, 0o644)
+			_ = atomicWrite(step.DeployPath+".orig", result, mode)
 		}
 	}
 
