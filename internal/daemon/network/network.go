@@ -133,7 +133,7 @@ func (s *Service) pollConnectionType(ctx context.Context) {
 	connectivity := lines[len(lines)-1]
 
 	var ethernet, wifi bool
-	var wifiStatus string = "disconnected"
+	var wifiStatus = "disconnected"
 
 	for _, line := range lines[:len(lines)-1] {
 		if strings.Contains(line, "ethernet") && strings.Contains(line, "connected") {

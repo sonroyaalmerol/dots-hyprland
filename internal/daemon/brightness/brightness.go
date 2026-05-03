@@ -414,7 +414,7 @@ func (s *Service) detectMonitors() {
 		}
 
 		s.mu.RLock()
-		var multiplier float64 = 1.0
+		var multiplier = 1.0
 		if mult, ok := s.multipliers[name]; ok {
 			multiplier = mult
 		}

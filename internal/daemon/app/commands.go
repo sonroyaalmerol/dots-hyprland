@@ -1496,10 +1496,10 @@ func (a *App) handleApplyTerminalColors() {
 		seqPath := filepath.Join(genDir, "terminal", "sequences.txt")
 		seqData, _ := os.ReadFile(seqPath)
 		entries, _ := os.ReadDir("/dev/pts")
+		digitPattern := regexp.MustCompile(`^\d+$`)
 		for _, entry := range entries {
 			if !entry.IsDir() {
-				matched, _ := regexp.MatchString(`^\d+$`, entry.Name())
-				if matched {
+				if digitPattern.MatchString(entry.Name()) {
 					if f, err := os.OpenFile(filepath.Join("/dev/pts", entry.Name()), os.O_WRONLY, 0); err == nil {
 						f.Write(seqData)
 						f.Close()
