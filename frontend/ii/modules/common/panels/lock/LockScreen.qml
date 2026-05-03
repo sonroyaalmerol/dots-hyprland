@@ -125,7 +125,12 @@ Scope {
     function initIfReady() {
         if (!Config.ready || !Persistent.ready) return;
         if (Config.options.lock.launchOnStartup && Persistent.isNewHyprlandInstance) {
-            root.lock();
+            // Use lock-startup for auto-unlock if keyring is already available
+            if (Config.options.lock.useHyprlock) {
+                Quickshell.execDetached(["bash", "-c", "pidof hyprlock || hyprlock"]);
+            } else {
+                DaemonSocket.lockStartup();
+            }
         } else {
             KeyringStorage.fetchKeyringData();
         }

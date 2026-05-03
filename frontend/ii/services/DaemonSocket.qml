@@ -48,6 +48,10 @@ Singleton {
 		sendCommand("unlock")
 	}
 
+	function lockStartup() {
+		sendCommand("lock-startup")
+	}
+
 	function sendCommand(cmd) {
 		if (!daemonProc.running) {
 			console.warn("[DaemonSocket] Cannot send command, process not running")

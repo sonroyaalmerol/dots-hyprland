@@ -125,6 +125,14 @@ func (a *App) Run(ctx context.Context) error {
 				a.lockscreenSvc.Unlock()
 			}
 		})
+
+		// On startup, check if we should auto-unlock (keyring already available)
+		if a.lockscreenSvc.TryAutoUnlock() {
+			log.Printf("[app] auto-unlocked on startup (keyring available)")
+		}
+		if a.idleSvc != nil {
+			a.idleSvc.NotifyLockChanged()
+		}
 	}
 
 	if a.powersaveSvc != nil {
