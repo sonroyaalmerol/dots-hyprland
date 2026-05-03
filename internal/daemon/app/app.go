@@ -377,6 +377,7 @@ func (a *App) runStateLoop(ctx context.Context) {
 				a.onScreenLock(ev.active)
 			case "osk_hide_timeout":
 				a.oskHideTimer = nil
+				a.textFocus = false
 				a.recomputeOsk()
 			case "command":
 				a.handleStateCommand(ev.cmd, ev.arg)
@@ -432,6 +433,15 @@ func (a *App) onTextFocus(active bool) {
 		// stealing focus briefly (OSK panel, overview search, etc.).
 		if time.Since(a.lastFocusActive) < 300*time.Millisecond {
 			a.textFocus = true // keep reporting focus as active
+			// Schedule a fallback: if no re-activate arrives within
+			// the debounce window, treat this as a real deactivate.
+			if a.oskHideTimer != nil {
+				a.oskHideTimer.Stop()
+			}
+			remaining := 300*time.Millisecond - time.Since(a.lastFocusActive)
+			a.oskHideTimer = time.AfterFunc(remaining, func() {
+				a.stateCh <- stateEvent{kind: "osk_hide_timeout"}
+			})
 			return
 		}
 		a.textFocus = false
