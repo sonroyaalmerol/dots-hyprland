@@ -114,8 +114,8 @@ func dispatchCommand(a *App, line string) {
 			go a.cliphistSvc.EmitList(context.Background())
 		}
 	case "cliphist-delete":
-		if a.cliphistSvc != nil && len(fields) >= 2 {
-			entry := strings.Join(fields[1:], " ")
+		if a.cliphistSvc != nil {
+			entry := strings.TrimPrefix(line, "cliphist-delete ")
 			go a.cliphistSvc.DeleteEntry(context.Background(), entry)
 		}
 	case "cliphist-wipe":

@@ -76,6 +76,9 @@ Singleton {
 	property string hyprCurrentLayoutCode: ""
 	property var hyprLayoutCodes: []
 
+	// Cliphist from daemon.
+	property var cliphistEntries: []
+
 	// Hyprsunset from daemon.
 	property bool hyprsunsetTemperatureActive: false
 	property int hyprsunsetGamma: 100
@@ -106,6 +109,7 @@ Singleton {
 	signal easyEffectsUpdated()
 	signal hyprKeybindsUpdated()
 	signal hyprXkbUpdated()
+	signal cliphistUpdated()
 	signal hyprsunsetUpdated()
 	signal networkUpdated()
 	signal networkConnectResult(var data)
@@ -152,6 +156,9 @@ Singleton {
 	function wifiConnect(ssid) { sendCommand("wifi-connect " + ssid) }
 	function wifiDisconnect(ssid) { sendCommand("wifi-disconnect " + ssid) }
 	function wifiChangePassword(ssid, password) { sendCommand("wifi-change-password " + ssid + " " + password) }
+	function cliphistRefresh() { sendCommand("cliphist-list") }
+	function cliphistDelete(entry) { sendCommand("cliphist-delete " + entry) }
+	function cliphistWipe() { sendCommand("cliphist-wipe") }
 
 	Socket {
 		id: daemonSocket
@@ -299,6 +306,9 @@ Singleton {
 			if (obj.data.networkStrength !== undefined) root.networkStrength = obj.data.networkStrength
 			if (obj.data.wifiNetworks !== undefined) root.networkWifiNetworks = obj.data.wifiNetworks
 			networkUpdated()
+		} else if (obj.event === "cliphist_list" && obj.data) {
+			if (obj.data.entries !== undefined) root.cliphistEntries = obj.data.entries
+			cliphistUpdated()
 		} else if (obj.event === "network_connect_result" && obj.data) {
 			networkConnectResult(obj.data)
 		}

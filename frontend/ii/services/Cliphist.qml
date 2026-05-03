@@ -3,9 +3,9 @@ pragma ComponentBehavior: Bound
 
 import qs.modules.common
 import qs.modules.common.functions
+import qs.services
 import QtQuick
 import Quickshell
-import Quickshell.Io
 
 Singleton {
     id: root
@@ -15,7 +15,7 @@ Singleton {
     property string pressPasteCommand: "$HOME/.local/bin/snry-daemon send combo 29 47"
     property bool sloppySearch: Config.options?.search.sloppy ?? false
     property real scoreThreshold: 0.2
-    property list<string> entries: []
+    property list<string> entries: DaemonSocket.cliphistEntries
     readonly property var preparedEntries: entries.map(a => ({
         name: Fuzzy.prepare(`${a.replace(/^\s*\S+\s+/, "")}`),
         entry: a
@@ -47,8 +47,7 @@ Singleton {
     }
 
     function refresh() {
-        readProc.buffer = []
-        readProc.running = true
+        DaemonSocket.cliphistRefresh()
     }
 
     function copy(entry) {
@@ -80,34 +79,19 @@ Singleton {
         Quickshell.execDetached(["bash", "-c", pasteCommands.join(` && sleep ${root.pasteDelay} && `)]);
     }
 
-    Process {
-        id: deleteProc
-        property string entry: ""
-        command: ["bash", "-c", `echo '${StringUtils.shellSingleQuoteEscape(deleteProc.entry)}' | ${root.cliphistBinary} delete`]
-        function deleteEntry(entry) {
-            deleteProc.entry = entry;
-            deleteProc.running = true;
-            deleteProc.entry = "";
-        }
-        onExited: (exitCode, exitStatus) => {
-            root.refresh();
-        }
-    }
-
     function deleteEntry(entry) {
-        deleteProc.deleteEntry(entry);
-    }
-
-    Process {
-        id: wipeProc
-        command: [root.cliphistBinary, "wipe"]
-        onExited: (exitCode, exitStatus) => {
-            root.refresh();
-        }
+        DaemonSocket.cliphistDelete(entry)
     }
 
     function wipe() {
-        wipeProc.running = true;
+        DaemonSocket.cliphistWipe()
+    }
+
+    Connections {
+        target: DaemonSocket
+        function onCliphistUpdated() {
+            // entries automatically updates via property binding
+        }
     }
 
     Connections {
@@ -123,27 +107,6 @@ Singleton {
         repeat: false
         onTriggered: {
             root.refresh()
-        }
-    }
-
-    Process {
-        id: readProc
-        property list<string> buffer: []
-
-        command: [root.cliphistBinary, "list"]
-
-        stdout: SplitParser {
-            onRead: (line) => {
-                readProc.buffer.push(line)
-            }
-        }
-
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0) {
-                root.entries = readProc.buffer
-            } else {
-                console.error("[Cliphist] Failed to refresh with code", exitCode, "and status", exitStatus)
-            }
         }
     }
 
