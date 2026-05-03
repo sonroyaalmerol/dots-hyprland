@@ -81,7 +81,8 @@ Singleton {
             if (cpuLine) {
                 const stats = cpuLine.slice(1).map(Number)
                 const total = stats.reduce((a, b) => a + b, 0)
-                const idle = stats[3]
+                // idle + iowait = time CPU is truly not doing work
+                const idle = stats[3] + stats[4]
 
                 if (previousCpuStats) {
                     const totalDiff = total - previousCpuStats.total
