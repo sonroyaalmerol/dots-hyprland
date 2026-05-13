@@ -10,8 +10,8 @@ hl.on("hyprland.start", function()
 	hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
 	hl.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon")
 
-	-- Touch gesture plugin (hyprgrass)
-	hl.exec_cmd("hyprctl plugin load ~/.local/lib/hyprland/plugins/libhyprgrass.so")
+	-- Touch gesture plugin (hyprgrass) - disabled: incompatible with Hyprland 0.55+
+	-- hl.exec_cmd("hyprctl plugin load ~/.local/lib/hyprland/plugins/libhyprgrass.so")
 	hl.exec_cmd("dbus-update-activation-environment --all")
 	hl.exec_cmd("sleep 1 && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
 

@@ -1,25 +1,25 @@
 -- See https://wiki.hyprland.org/Configuring/Binds/
 
 local mainMod = "SUPER"
-local subMod = "SUPER_SHIFT"
-local tetMod = "SUPER_CTRL"
+local subMod = "SUPER + SHIFT"
+local tetMod = "SUPER + CTRL"
 
 hl.unbind(mainMod .. " + Super_L")
 hl.unbind(mainMod .. " + Super_R")
 hl.unbind(mainMod .. " + T")
-hl.unbind("Ctrl + Alt + T")
+hl.unbind("CTRL + ALT + T")
 hl.unbind(mainMod .. " + E")
 hl.unbind(mainMod .. " + W")
-hl.unbind("Ctrl + SUPER + Shift + Alt + W")
+hl.unbind("CTRL + SUPER + SHIFT + ALT + W")
 hl.unbind(mainMod .. " + X")
-hl.unbind("Ctrl + SUPER + V")
+hl.unbind("CTRL + SUPER + V")
 hl.unbind(mainMod .. " + L")
 hl.unbind(mainMod .. " + D")
 
 hl.bind(mainMod .. " + D", hl.dsp.global("quickshell:searchToggleRelease"))
 
 hl.bind(tetMod .. " + Slash", hl.dsp.exec_cmd("xdg-open ~/.config/snry-shell/config.json"), { description = "Edit shell config" })
-hl.bind("Ctrl + SUPER + Alt + Slash", hl.dsp.exec_cmd("xdg-open ~/.config/hypr/custom/keybinds.lua"), { description = "Edit extra keybinds" })
+hl.bind("CTRL + SUPER + ALT + Slash", hl.dsp.exec_cmd("xdg-open ~/.config/hypr/custom/keybinds.lua"), { description = "Edit extra keybinds" })
 
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send lock"), { description = "Lock" })
 
