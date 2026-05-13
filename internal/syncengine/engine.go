@@ -197,9 +197,17 @@ func (e *SyncEngine) syncFile(_ context.Context, step SyncStep) SyncResult {
 	}
 }
 
+// SHA256 of empty byte slice - used to detect corrupted 0-byte files
+var emptySHA = sha256Of([]byte{})
+
 func decide(origSHA, currentSHA, upstreamSHA string) SyncDecision {
 	if currentSHA == "" {
 		return DecisionNew
+	}
+
+	// Treat 0-byte files as corrupted and always update them
+	if currentSHA == emptySHA {
+		return DecisionUpdate
 	}
 
 	// First sync (no manifest baseline): if current already matches upstream,
