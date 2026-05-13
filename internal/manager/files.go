@@ -345,7 +345,51 @@ func syncHyprland(cfg Config) error {
 	}
 	allSteps = append(allSteps, customSteps...)
 
-	return runSmartSync(cfg, allSteps)
+	if err := runSmartSync(cfg, allSteps); err != nil {
+		return err
+	}
+	return migrateHyprlandLua(cfg)
+}
+
+// migrateHyprlandLua removes old .conf files when their .lua replacements
+// have been deployed. This ensures a clean migration from hyprlang to Lua.
+func migrateHyprlandLua(cfg Config) error {
+	deployDir := cfg.XDG.ConfigHome + "/hypr"
+
+	// Map of old .conf → new .lua paths (relative to deployDir)
+	migrations := map[string]string{
+		"hyprland.conf":                     "hyprland.lua",
+		"hyprland/variables.conf":           "hyprland/variables.lua",
+		"hyprland/env.conf":                 "hyprland/env.lua",
+		"hyprland/execs.conf":               "hyprland/execs.lua",
+		"hyprland/general.conf":             "hyprland/general.lua",
+		"hyprland/keybinds.conf":            "hyprland/keybinds.lua",
+		"hyprland/rules.conf":               "hyprland/rules.lua",
+		"hyprland/colors.conf":              "hyprland/colors.lua",
+		"hyprland/shellOverrides/main.conf": "hyprland/shellOverrides/main.lua",
+		"custom/env.conf":                   "custom/env.lua",
+		"custom/execs.conf":                 "custom/execs.lua",
+		"custom/general.conf":               "custom/general.lua",
+		"custom/keybinds.conf":              "custom/keybinds.lua",
+		"custom/rules.conf":                 "custom/rules.lua",
+		"custom/variables.conf":             "custom/variables.lua",
+	}
+
+	for oldRel, newRel := range migrations {
+		luaPath := filepath.Join(deployDir, newRel)
+		confPath := filepath.Join(deployDir, oldRel)
+
+		// Only remove .conf if the .lua replacement exists
+		if _, err := os.Stat(luaPath); err == nil {
+			if _, err := os.Stat(confPath); err == nil {
+				if err := os.Remove(confPath); err != nil {
+					fmt.Fprintf(os.Stderr, "  [migrate] warning: failed to remove %s: %v\n", confPath, err)
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func syncBash(cfg Config) error {
