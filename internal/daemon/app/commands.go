@@ -1471,7 +1471,7 @@ func (a *App) handleApplyTerminalColors() {
 	if data, err := os.ReadFile(ghosttyTemplate); err == nil {
 		content := string(data)
 		for name, hexVal := range colors {
-			content = strings.ReplaceAll(content, name+" #", strings.TrimPrefix(hexVal, "#"))
+			content = strings.ReplaceAll(content, "$"+name+" #", strings.TrimPrefix(hexVal, "#"))
 		}
 		os.WriteFile(filepath.Join(genDir, "terminal", "ghostty-theme.conf"), []byte(content), 0644)
 		// Signal ghostty
@@ -1489,7 +1489,7 @@ func (a *App) handleApplyTerminalColors() {
 	if data, err := os.ReadFile(seqTemplate); err == nil {
 		content := string(data)
 		for name, hexVal := range colors {
-			content = strings.ReplaceAll(content, name+" #", strings.TrimPrefix(hexVal, "#"))
+			content = strings.ReplaceAll(content, "$"+name+" #", strings.TrimPrefix(hexVal, "#"))
 		}
 		content = strings.ReplaceAll(content, "$alpha", termAlpha)
 		os.WriteFile(filepath.Join(genDir, "terminal", "sequences.txt"), []byte(content), 0644)
