@@ -348,7 +348,10 @@ func syncHyprland(cfg Config) error {
 	if err := runSmartSync(cfg, allSteps); err != nil {
 		return err
 	}
-	return migrateHyprlandLua(cfg)
+	if err := migrateHyprlandLua(cfg); err != nil {
+		return err
+	}
+	return GenerateMonitorsLua(cfg)
 }
 
 // migrateHyprlandLua removes old .conf files when their .lua replacements

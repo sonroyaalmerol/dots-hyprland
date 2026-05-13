@@ -8,16 +8,22 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
 type monitor struct {
-	Name   string  `json:"name"`
-	Width  int     `json:"width"`
-	Height int     `json:"height"`
-	Scale  float64 `json:"scale"`
-	X      int     `json:"x"`
-	Y      int     `json:"y"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	Width          int      `json:"width"`
+	Height         int      `json:"height"`
+	RefreshRate    float64  `json:"refreshRate"`
+	Scale          float64  `json:"scale"`
+	X              int      `json:"x"`
+	Y              int      `json:"y"`
+	Transform      int      `json:"transform"`
+	VRR            bool     `json:"vrr"`
+	AvailableModes []string `json:"availableModes"`
 }
 
 // Autoscale detects connected monitors and sets ideal Hyprland scale factors.
@@ -131,4 +137,124 @@ func PersistMonitorConfig(monitors []monitor) error {
 	}
 	fmt.Printf("  Writing monitor config to %s\n", path)
 	return os.WriteFile(path, []byte(existing), 0o644)
+}
+
+// modeInfo holds parsed resolution and refresh rate from an available mode string.
+type modeInfo struct {
+	width       int
+	height      int
+	refreshRate float64
+}
+
+// parseMode parses a mode string like "2560x1440@180.00Hz" into components.
+func parseMode(s string) (modeInfo, bool) {
+	s = strings.TrimSuffix(s, "Hz")
+	parts := strings.SplitN(s, "@", 2)
+	if len(parts) != 2 {
+		return modeInfo{}, false
+	}
+	resParts := strings.SplitN(parts[0], "x", 2)
+	if len(resParts) != 2 {
+		return modeInfo{}, false
+	}
+	w, errW := strconv.Atoi(resParts[0])
+	h, errH := strconv.Atoi(resParts[1])
+	rr, errR := strconv.ParseFloat(parts[1], 64)
+	if errW != nil || errH != nil || errR != nil {
+		return modeInfo{}, false
+	}
+	return modeInfo{width: w, height: h, refreshRate: rr}, true
+}
+
+// bestMode picks the highest resolution, then highest refresh rate among
+// modes with that resolution.
+func bestMode(modes []string) modeInfo {
+	var best modeInfo
+	for _, m := range modes {
+		info, ok := parseMode(m)
+		if !ok {
+			continue
+		}
+		pixelCount := info.width * info.height
+		bestPixels := best.width * best.height
+		if pixelCount > bestPixels || (pixelCount == bestPixels && info.refreshRate > best.refreshRate) {
+			best = info
+		}
+	}
+	return best
+}
+
+// GenerateMonitorsLua detects connected monitors via hyprctl and writes a
+// monitors.lua file with optimal resolution and refresh rate for each display.
+// If the file already exists, it is regenerated only if the monitor topology
+// has changed.
+func GenerateMonitorsLua(cfg Config) error {
+	// Check Hyprland is running
+	if err := exec.Command("hyprctl", "version").Run(); err != nil {
+		return nil // not running, skip silently
+	}
+
+	out, err := exec.Command("hyprctl", "monitors", "-j").Output()
+	if err != nil {
+		return fmt.Errorf("hyprctl monitors: %w", err)
+	}
+
+	var monitors []monitor
+	if err := json.Unmarshal(out, &monitors); err != nil {
+		return fmt.Errorf("parse monitor data: %w", err)
+	}
+
+	if len(monitors) == 0 {
+		return nil
+	}
+
+	deployPath := cfg.XDG.ConfigHome + "/hypr/monitors.lua"
+
+	// Build the lua content
+	var b strings.Builder
+	b.WriteString("-- Auto-generated monitor configuration\n")
+	b.WriteString("-- DO NOT EDIT: regenerated on each sync. Override in custom/general.lua\n\n")
+
+	for _, m := range monitors {
+		idealScale := math.Round(math.Max(1.0, float64(m.Height)/1080.0)*4) / 4.0
+		idealScale = math.Round(idealScale*100) / 100
+
+		mode := fmt.Sprintf("%dx%d@%.2f", m.Width, m.Height, m.RefreshRate)
+
+		// Use available modes to find the best resolution + refresh rate
+		if len(m.AvailableModes) > 0 {
+			best := bestMode(m.AvailableModes)
+			if best.width > 0 {
+				mode = fmt.Sprintf("%dx%d@%.0f", best.width, best.height, best.refreshRate)
+				idealScale = math.Round(math.Max(1.0, float64(best.height)/1080.0)*4) / 4.0
+				idealScale = math.Round(idealScale*100) / 100
+			}
+		}
+
+		pos := fmt.Sprintf("%dx%d", m.X, m.Y)
+
+		b.WriteString(fmt.Sprintf("hl.monitor({ output = %q, mode = %q, position = %q, scale = %.2f",
+			m.Name, mode, pos, idealScale))
+
+		if m.Transform != 0 {
+			transforms := []string{"normal", "90", "180", "270", "flipped", "flipped-90", "flipped-180", "flipped-270"}
+			if int(m.Transform) < len(transforms) {
+				b.WriteString(fmt.Sprintf(", transform = %q", transforms[m.Transform]))
+			}
+		}
+
+		b.WriteString(" })\n")
+	}
+
+	if err := os.MkdirAll(filepath.Dir(deployPath), 0o755); err != nil {
+		return err
+	}
+
+	existing, err := os.ReadFile(deployPath)
+	if err == nil && string(existing) == b.String() {
+		return nil // no change
+	}
+
+	fmt.Printf("  Writing monitor config to %s\n", deployPath)
+	return os.WriteFile(deployPath, []byte(b.String()), 0o644)
 }

@@ -1,5 +1,5 @@
--- Monitor config
-hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1 })
+-- Monitor config is auto-generated in monitors.lua
+-- To override, add hl.monitor() calls in custom/general.lua
 
 -- Gestures
 hl.config({
