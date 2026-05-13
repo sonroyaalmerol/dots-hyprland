@@ -66,6 +66,11 @@ func SaveManifest(m *Manifest, path string) error {
 		return fmt.Errorf("marshal manifest: %w", err)
 	}
 
+	// Safeguard: never write an empty manifest
+	if len(data) == 0 {
+		return nil
+	}
+
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".sync-manifest-tmp-*")
 	if err != nil {
@@ -91,7 +96,13 @@ func SaveManifest(m *Manifest, path string) error {
 }
 
 func EnsureManifest(path string) error {
-	if _, err := os.Stat(path); err == nil {
+	if info, err := os.Stat(path); err == nil {
+		// Treat 0-byte files as missing/corrupted
+		if info.Size() == 0 {
+			_ = os.Remove(path)
+			m := &Manifest{Version: "1", Entries: make(map[string]*FileEntry)}
+			return SaveManifest(m, path)
+		}
 		return nil
 	}
 	m := &Manifest{Version: "1", Entries: make(map[string]*FileEntry)}
