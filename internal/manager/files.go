@@ -274,6 +274,16 @@ func extractEmbeddedFrontend(cfg Config) (string, error) {
 		return "", fmt.Errorf("walk embedded fs: %w", err)
 	}
 
+	// Validate that critical file exists and has content
+	criticalFile := cacheDir + "/ii/shell.qml"
+	info, err := os.Stat(criticalFile)
+	if err != nil {
+		return "", fmt.Errorf("missing critical file %s: %w", criticalFile, err)
+	}
+	if info.Size() == 0 {
+		return "", fmt.Errorf("critical file %s is empty (corrupted embedded frontend)", criticalFile)
+	}
+
 	return cacheDir, nil
 }
 
