@@ -29,6 +29,9 @@ func DefaultCategorizer() *Categorizer {
 	rules := []CategorizeRule{
 		{Pattern: "hypr/hyprland/*.conf", Strategy: StrategyMergeHyprland},
 		{Pattern: "hypr/hyprland.conf", Strategy: StrategyMergeHyprland},
+		{Pattern: "hypr/hyprland/*.lua", Strategy: StrategyMergeHyprland},
+		{Pattern: "hypr/hyprland.lua", Strategy: StrategyMergeHyprland},
+		{Pattern: "hypr/custom/*.lua", Strategy: StrategySkipIfExists},
 		{Pattern: "hypr/hyprlock.conf", Strategy: StrategyMergeKV},
 		{Pattern: "hypr/hypridle.conf", Strategy: StrategyMergeKV},
 		{Pattern: "fuzzel/*.ini", Strategy: StrategyMergeKV},
@@ -45,7 +48,7 @@ func DefaultCategorizer() *Categorizer {
 		{Pattern: "fontconfig/**", Strategy: StrategyOverwrite},
 		{Pattern: "Kvantum/**", Strategy: StrategyOverwrite},
 		{Pattern: "quickshell/**", Strategy: StrategyOverwrite},
-		{Pattern: "hypr/custom/*", Strategy: StrategySkipIfExists},
+		{Pattern: "hypr/custom/*.conf", Strategy: StrategySkipIfExists},
 		{Pattern: "matugen/templates/*", Strategy: StrategyTemplate},
 		{Pattern: "**/*.conf", Strategy: StrategyMergeKV},
 		{Pattern: "**/*.ini", Strategy: StrategyMergeKV},

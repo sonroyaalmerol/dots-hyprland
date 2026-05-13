@@ -138,8 +138,18 @@ func (s *Service) Reload() {
 		return
 	}
 
-	defaultPath := home + "/.config/hypr/hyprland/keybinds.conf"
-	userPath := home + "/.config/hypr/custom/keybinds.conf"
+	defaultPath := home + "/.config/hypr/hyprland/keybinds.lua"
+	defaultPathConf := home + "/.config/hypr/hyprland/keybinds.conf"
+	userPath := home + "/.config/hypr/custom/keybinds.lua"
+	userPathConf := home + "/.config/hypr/custom/keybinds.conf"
+
+	// Prefer .lua, fall back to .conf
+	if _, err := os.Stat(defaultPath); err != nil {
+		defaultPath = defaultPathConf
+	}
+	if _, err := os.Stat(userPath); err != nil {
+		userPath = userPathConf
+	}
 
 	s.mu.Lock()
 	s.defaultKB = parseKeybindsFile(defaultPath)

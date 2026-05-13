@@ -1,0 +1,1 @@
+-- For all available variables, see hyprland/variables.lua

@@ -1525,7 +1525,13 @@ func (a *App) handleHyprconfigEdit(args []string) {
 	if configDir == "" {
 		configDir = filepath.Join(os.Getenv("HOME"), ".config")
 	}
-	defaultFile := filepath.Join(configDir, "hypr", "hyprland.conf")
+	// Prefer hyprland.lua (new format), fall back to hyprland.conf (legacy)
+	defaultLua := filepath.Join(configDir, "hypr", "hyprland.lua")
+	defaultConf := filepath.Join(configDir, "hypr", "hyprland.conf")
+	defaultFile := defaultConf
+	if _, err := os.Stat(defaultLua); err == nil {
+		defaultFile = defaultLua
+	}
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -1561,6 +1567,25 @@ func (a *App) handleHyprconfigEdit(args []string) {
 		return
 	}
 
+	// Use hyprctl for runtime set/reset regardless of file format
+	for _, kv := range setArgs {
+		key := kv[0]
+		value := kv[1]
+		exec.Command("hyprctl", "keyword", key, value).Run()
+	}
+	for _, key := range resetKeys {
+		exec.Command("hyprctl", "keyword", key, "undef").Run()
+	}
+
+	// Also update the config file
+	if strings.HasSuffix(filePath, ".lua") {
+		a.editLuaConfig(filePath, setArgs, resetKeys)
+	} else {
+		a.editConfConfig(filePath, setArgs, resetKeys)
+	}
+}
+
+func (a *App) editConfConfig(filePath string, setArgs [][2]string, resetKeys []string) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if len(setArgs) > 0 {
@@ -1621,4 +1646,62 @@ func (a *App) handleHyprconfigEdit(args []string) {
 	}
 
 	os.WriteFile(filePath, []byte(strings.Join(newLines, "\n")), 0644)
+}
+
+func (a *App) editLuaConfig(filePath string, setArgs [][2]string, resetKeys []string) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if len(setArgs) > 0 {
+			var lines []string
+			for _, kv := range setArgs {
+				lines = append(lines, formatLuaConfig(kv[0], kv[1]))
+			}
+			os.MkdirAll(filepath.Dir(filePath), 0755)
+			os.WriteFile(filePath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+		}
+		return
+	}
+
+	content := string(data)
+
+	// For each set arg, find and replace the value in Lua table syntax.
+	// Keys use dot notation: "general.border_size" → look for "border_size = VALUE"
+	for _, kv := range setArgs {
+		parts := strings.Split(kv[0], ".")
+		leafKey := parts[len(parts)-1]
+		// Match Lua table key: key = VALUE (with optional trailing comma)
+		pattern := regexp.MustCompile("(?m)(\\b" + regexp.QuoteMeta(leafKey) + "\\s*=\\s*)[^,}\n]+")
+		if pattern.MatchString(content) {
+			content = pattern.ReplaceAllStringFunc(content, func(match string) string {
+				return parts[0] + " = " + kv[1]
+			})
+			content = pattern.ReplaceAllString(content, "${1}"+kv[1])
+		} else {
+			// Key not found in file, append as hl.config call
+			content = strings.TrimRight(content, "\n") + "\n" + formatLuaConfig(kv[0], kv[1]) + "\n"
+		}
+	}
+
+	// For each reset key, remove the line containing it
+	for _, key := range resetKeys {
+		parts := strings.Split(key, ".")
+		leafKey := parts[len(parts)-1]
+		pattern := regexp.MustCompile("(?m)^.*\\b" + regexp.QuoteMeta(leafKey) + "\\s*=.*$\n?")
+		content = pattern.ReplaceAllString(content, "")
+	}
+
+	os.WriteFile(filePath, []byte(content), 0644)
+}
+
+func formatLuaConfig(key, value string) string {
+	parts := strings.Split(key, ".")
+	if len(parts) == 1 {
+		return fmt.Sprintf("hl.config({ %s = %s })", parts[0], value)
+	}
+	// Build nested table: general.border_size → hl.config({ general = { border_size = VALUE } })
+	inner := fmt.Sprintf("%s = %s", parts[len(parts)-1], value)
+	for i := len(parts) - 2; i >= 0; i-- {
+		inner = fmt.Sprintf("%s = { %s }", parts[i], inner)
+	}
+	return fmt.Sprintf("hl.config({ %s })", inner)
 }

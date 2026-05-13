@@ -66,12 +66,16 @@ func Autoscale(ctx context.Context) error {
 	return nil
 }
 
-// getMonitorConfigPath returns the likely hyprland general.conf path.
+// getMonitorConfigPath returns the likely hyprland config path.
 func getMonitorConfigPath() string {
 	configHome := os.Getenv("XDG_CONFIG_HOME")
 	if configHome == "" {
 		home, _ := os.UserHomeDir()
 		configHome = home + "/.config"
+	}
+	luaPath := configHome + "/hypr/hyprland/general.lua"
+	if _, err := os.Stat(luaPath); err == nil {
+		return luaPath
 	}
 	return configHome + "/hypr/hyprland/general.conf"
 }

@@ -302,7 +302,7 @@ func syncHyprland(cfg Config) error {
 	allSteps = append(allSteps, hyprlandSteps...)
 
 	// Individual config files
-	confFiles := []string{"hyprlock.conf", "hyprland.conf", "hypridle.conf"}
+	confFiles := []string{"hyprlock.conf", "hyprland.conf", "hyprland.lua", "hypridle.conf"}
 	for _, f := range confFiles {
 		srcFile := cfg.ConfigsDir() + "/hyprland-entries/" + f
 		if _, err := os.Stat(srcFile); err != nil {

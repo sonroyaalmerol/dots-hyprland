@@ -1,0 +1,8 @@
+-- Put general config stuff here
+-- Here's a list of every variable: https://wiki.hyprland.org/Configuring/Variables/
+
+hl.config({
+	misc = {
+		vrr = 0,
+	},
+})
