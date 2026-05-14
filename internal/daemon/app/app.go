@@ -290,23 +290,10 @@ func (a *App) Run(ctx context.Context) error {
 		sourceDir = filepath.Join(a.repoRoot(), "configs", "hypr", "hyprland")
 	}
 	hlGuardCfg := guard.Config{
-		WatchDir:  filepath.Join(configDir, "hypr", "hyprland"),
-		SourceDir: sourceDir,
-		Excludes:  []string{"monitors.lua", "workspaces.lua"},
-		Regenerate: func(rel string) error {
-			managerCfg := manager.Config{
-				RepoRoot: a.repoRoot(),
-			}
-			managerCfg.XDG.ConfigHome = configDir
-			switch rel {
-			case "monitors.lua":
-				return manager.GenerateMonitorsLua(managerCfg, a.hyprlandSvc)
-			case "workspaces.lua":
-				return manager.GenerateWorkspacesLua(managerCfg, a.hyprlandSvc)
-			default:
-				return nil
-			}
-		},
+		WatchDir:   filepath.Join(configDir, "hypr", "hyprland"),
+		SourceDir:  sourceDir,
+		Excludes:   []string{"monitors.lua", "workspaces.lua"},
+		Regenerate: a.regenerateGeneratedConfig,
 	}
 	a.hlGuardSvc = guard.New(hlGuardCfg)
 
@@ -346,7 +333,11 @@ func (a *App) Run(ctx context.Context) error {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
 		defer cleanup()
-		a.regenerateConfigs()
+		for _, rel := range []string{"monitors.lua", "workspaces.lua"} {
+			if err := a.regenerateGeneratedConfig(rel); err != nil {
+				log.Printf("[app] generate %s: %v", rel, err)
+			}
+		}
 		a.hlGuardSvc.EnsureGenerated()
 	}()
 
@@ -854,21 +845,21 @@ func (a *App) repoRoot() string {
 	return "."
 }
 
-func (a *App) regenerateConfigs() {
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+// regenerateGeneratedConfig regenerates a single excluded (generated) config file.
+// It is used as the guard's Regenerate callback and by the startup/monitor-event path.
+func (a *App) regenerateGeneratedConfig(rel string) error {
+	managerCfg := manager.Config{RepoRoot: a.repoRoot()}
+	managerCfg.XDG.ConfigHome = os.Getenv("XDG_CONFIG_HOME")
+	if managerCfg.XDG.ConfigHome == "" {
+		managerCfg.XDG.ConfigHome = filepath.Join(os.Getenv("HOME"), ".config")
 	}
-	cfg := manager.Config{
-		RepoRoot: a.repoRoot(),
-	}
-	cfg.XDG.ConfigHome = configDir
-
-	if err := manager.GenerateMonitorsLua(cfg, a.hyprlandSvc); err != nil {
-		log.Printf("[app] generate monitors.lua: %v", err)
-	}
-	if err := manager.GenerateWorkspacesLua(cfg, a.hyprlandSvc); err != nil {
-		log.Printf("[app] generate workspaces.lua: %v", err)
+	switch rel {
+	case "monitors.lua":
+		return manager.GenerateMonitorsLua(managerCfg, a.hyprlandSvc)
+	case "workspaces.lua":
+		return manager.GenerateWorkspacesLua(managerCfg, a.hyprlandSvc)
+	default:
+		return nil
 	}
 }
 
@@ -904,7 +895,13 @@ func (a *App) hyprlandEmitFunc(emit func(map[string]any)) func(map[string]any) {
 		}
 		a.lastMonitorHash = newHash
 
-		go a.regenerateConfigs()
+		go func() {
+			for _, rel := range []string{"monitors.lua", "workspaces.lua"} {
+				if err := a.regenerateGeneratedConfig(rel); err != nil {
+					log.Printf("[app] generate %s: %v", rel, err)
+				}
+			}
+		}()
 	}
 }
 
