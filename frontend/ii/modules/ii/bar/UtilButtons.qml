@@ -108,9 +108,9 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: event => {
                     if (Appearance.m3colors.darkmode) {
-                        Hyprland.dispatch(`exec gsettings set org.gnome.desktop.interface color-scheme prefer-light`);
+                        DaemonSocket.execCommand( "gsettings set org.gnome.desktop.interface color-scheme prefer-light");
                     } else {
-                        Hyprland.dispatch(`exec gsettings set org.gnome.desktop.interface color-scheme prefer-dark`);
+                        DaemonSocket.execCommand( "gsettings set org.gnome.desktop.interface color-scheme prefer-dark");
                     }
                 }
                 MaterialSymbol {

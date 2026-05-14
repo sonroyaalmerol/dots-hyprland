@@ -146,7 +146,7 @@ Item {
                                 onPressed: {
                                     if (root.draggingTargetWorkspace === -1) {
                                         GlobalStates.overviewOpen = false
-                                        Hyprland.dispatch(`workspace ${workspace.workspaceValue}`)
+                                        DaemonSocket.workspaceFocus(workspace.workspaceValue)
                                     }
                                 }
                             }
@@ -270,7 +270,7 @@ Item {
                             window.Drag.active = false
                             root.draggingFromWorkspace = -1
                             if (targetWorkspace !== -1 && targetWorkspace !== windowData?.workspace.id) {
-                                Hyprland.dispatch(`movetoworkspacesilent ${targetWorkspace}, address:${window.windowData?.address}`)
+                                DaemonSocket.windowMoveWorkspace(targetWorkspace, `address:${window.windowData?.address}`)
                                 updateWindowPosition.restart()
                             }
                             else {
@@ -280,7 +280,7 @@ Item {
                                 }
                                 const percentageX = Math.round((window.x - xOffset) / root.workspaceImplicitWidth * 100)
                                 const percentageY = Math.round((window.y - yOffset) / root.workspaceImplicitHeight * 100)
-                                Hyprland.dispatch(`movewindowpixel exact ${percentageX}% ${percentageY}%, address:${window.windowData?.address}`)
+                                DaemonSocket.windowMoveCoords(percentageX + "%", percentageY + "%", `address:${window.windowData?.address}`)
                             }
                         }
                         onClicked: (event) => {
@@ -288,10 +288,10 @@ Item {
 
                             if (event.button === Qt.LeftButton) {
                                 GlobalStates.overviewOpen = false
-                                Hyprland.dispatch(`focuswindow address:${windowData.address}`)
+                                DaemonSocket.windowFocus(`address:${windowData.address}`)
                                 event.accepted = true
                             } else if (event.button === Qt.MiddleButton) {
-                                Hyprland.dispatch(`closewindow address:${windowData.address}`)
+                                DaemonSocket.windowClose(`address:${windowData.address}`)
                                 event.accepted = true
                             }
                         }

@@ -6,7 +6,7 @@ import qs.modules.common.functions
 import qs.modules.common.panels.lock
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
+import Quickshell.Wayland
 
 LockScreen {
     id: root
@@ -19,17 +19,15 @@ LockScreen {
         interval: 150
         repeat: false
         onTriggered: {
-            var batch = ""
             for (var j = 0; j < Quickshell.screens.length; ++j) {
                 var monName = Quickshell.screens[j].name
                 var wsId = root.savedWorkspaces[monName]
                 if (wsId !== undefined) {
-                    batch += "dispatch focusmonitor " + monName + "; dispatch workspace " + wsId + "; "
+                    DaemonSocket.monitorFocus(monName)
+                    DaemonSocket.workspaceFocus(wsId.toString())
                 }
             }
-            if (batch.length > 0) {
-                Quickshell.execDetached(["hyprctl", "--batch", batch + "reload"])
-            }
+            DaemonSocket.reload()
         }
     }
 
@@ -37,14 +35,13 @@ LockScreen {
         context: root.context
     }
 
-    // Single batch for lock and unlock so we don't race multiple hyprctl calls
+    // Lock and unlock via individual daemon commands
     Connections {
         target: GlobalStates
         function onScreenLockedChanged() {
             if (GlobalStates.screenLocked) {
-                // Lock: save workspace per monitor and move all to temp workspace in one batch
+                // Lock: save workspace per monitor and move all to temp workspace
                 var next = {}
-                var batch = "keyword animation workspaces,1,7,menu_decel,slidevert; "
                 for (var i = 0; i < Quickshell.screens.length; ++i) {
                     var mon = Quickshell.screens[i].name
                     var mData = HyprlandData.monitors.find(m => m.name === mon)
@@ -53,10 +50,16 @@ LockScreen {
                     }
                     var ws = (mData?.activeWorkspace?.id ?? 1)
                     next[mon] = ws
-                    batch += "dispatch focusmonitor " + mon + "; dispatch workspace " + (2147483647 - ws) + "; "
                 }
                 root.savedWorkspaces = next
-                Quickshell.execDetached(["hyprctl", "--batch", batch + "reload"])
+                DaemonSocket.configAnimation("workspaces", "true", "7", "menu_decel", "slidevert")
+                for (i = 0; i < Quickshell.screens.length; ++i) {
+                    mon = Quickshell.screens[i].name
+                    ws = next[mon]
+                    DaemonSocket.monitorFocus(mon)
+                    DaemonSocket.workspaceFocus((2147483647 - ws).toString())
+                }
+                DaemonSocket.reload()
             } else {
                 restoreTimer.start()
             }

@@ -200,6 +200,44 @@ Singleton {
 	function hyprconfigSet(key, value) { sendCommand("hyprconfig-set " + key + " " + value) }
 	function hyprconfigReset(key) { sendCommand("hyprconfig-reset " + key) }
 
+	// ── Hyprland compositor API (REST-like) ──
+	// All Hyprland operations go through these semantic methods.
+	// The daemon translates to the correct IPC — QML never touches Hyprland directly.
+
+	function workspaceFocus(selector) { sendCommand("workspace focus " + selector) }
+	function workspaceSpecial(name) {
+		if (name !== undefined && name !== "")
+			sendCommand("workspace special " + name)
+		else
+			sendCommand("workspace special")
+	}
+	function windowFocus(selector) { sendCommand("window focus " + selector) }
+	function windowClose(selector) { sendCommand("window close " + selector) }
+	function windowMoveWorkspace(ws, win) {
+		if (win !== undefined && win !== "")
+			sendCommand("window move workspace " + ws + " " + win)
+		else
+			sendCommand("window move workspace " + ws)
+	}
+	function windowMoveCoords(x, y, win) {
+		if (win !== undefined && win !== "")
+			sendCommand("window move coords " + x + " " + y + " " + win)
+		else
+			sendCommand("window move coords " + x + " " + y)
+	}
+	function monitorFocus(name) { sendCommand("monitor focus " + name) }
+	function execCommand(cmd) { sendCommand("exec " + cmd) }
+	function globalShortcut(name) { sendCommand("global " + name) }
+	function configSet(key, value) { sendCommand("config set " + key + " " + value) }
+	function configReset(key) { sendCommand("config reset " + key) }
+	function configAnimation(leaf, enabled, speed, curve, style) {
+		var cmd = "config animation " + leaf + " " + enabled + " " + speed + " " + curve
+		if (style !== undefined && style !== "")
+			cmd += " " + style
+		sendCommand(cmd)
+	}
+	function reload() { sendCommand("reload") }
+
 	Socket {
 		id: daemonSocket
 		path: root.socketPath

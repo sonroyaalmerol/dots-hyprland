@@ -269,7 +269,7 @@ Item {
                 buttonIcon: "restart_alt"
                 onClicked: {
                     DaemonSocket.sendCommand("restart");
-                    Hyprland.dispatch("reload");
+                    DaemonSocket.reload();
                 }
                 StyledToolTip {
                     text: Translation.tr("Restart Daemon & Reload Hyprland")
