@@ -762,6 +762,7 @@ func (a *App) handleLaunch(candidates []string) {
 			continue
 		}
 		cmd := exec.Command("sh", "-c", candidate)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		cmd.Stdout = nil
 		cmd.Stderr = nil
 		if err := cmd.Start(); err != nil {
