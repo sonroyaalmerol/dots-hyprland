@@ -84,19 +84,6 @@ func BuildConfigLua(key, value string) string {
 	return fmt.Sprintf("hl.config({ %s })", inner)
 }
 
-// BuildResetLua translates a dot-separated key into a nil-setting hl.config() Lua expression.
-func BuildResetLua(key string) string {
-	parts := splitConfigKey(key)
-	if len(parts) == 1 {
-		return fmt.Sprintf("hl.config({ %s = nil })", parts[0])
-	}
-	inner := fmt.Sprintf("%s = nil", parts[len(parts)-1])
-	for i := len(parts) - 2; i >= 0; i-- {
-		inner = fmt.Sprintf("%s = { %s }", parts[i], inner)
-	}
-	return fmt.Sprintf("hl.config({ %s })", inner)
-}
-
 // splitConfigKey normalizes a config key to dot-separated parts. Accepts both dot and colon notation.
 func splitConfigKey(key string) []string {
 	normalized := strings.ReplaceAll(key, ":", ".")

@@ -712,11 +712,21 @@ func (s *Service) SetOption(key, value string) error {
 	)
 }
 
+// ResetOption resets a config key to its default value.
+//
+// On legacy (pre-0.55): uses "keyword <key> default" which is the documented reset mechanism.
+//
+// On v0.55+ (Lua config): there is no per-key reset API. "keyword" returns an error
+// on non-legacy parsers, and hl.config({key = nil}) silently skips nil values during
+// table iteration. The only correct way to reset runtime overrides is a full reload,
+// which resets all values to their compiled defaults then re-parses config files.
+// Since runtime overrides set via hl.config() are not persisted, the user's config
+// files don't contain them, so reload effectively clears them.
 func (s *Service) ResetOption(key string) error {
 	legacyKey := strings.ReplaceAll(key, ".", ":")
 	return s.send(
 		cmdVariant{vLegacy, fmt.Sprintf("keyword %s default", legacyKey)},
-		cmdVariant{v0_55, "eval " + BuildResetLua(key)},
+		cmdVariant{v0_55, "reload"},
 	)
 }
 

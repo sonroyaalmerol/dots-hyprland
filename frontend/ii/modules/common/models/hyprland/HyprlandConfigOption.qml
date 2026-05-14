@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQml
 import QtQuick
 import qs.services
-import "../"
+import qs.modules.common.models.hyprland
 
 NestableObject {
     id: root
@@ -27,11 +27,11 @@ NestableObject {
     }
 
     function setValue(newValue) {
-        HyprlandConfig.set(root.key, newValue)
+        DaemonSocket.configSet(root.key, newValue)
     }
 
     function reset() {
-        HyprlandConfig.reset(root.key)
+        DaemonSocket.configReset(root.key)
     }
 
     Connections {
