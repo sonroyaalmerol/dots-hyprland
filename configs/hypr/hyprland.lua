@@ -18,8 +18,8 @@ pcall(require, "custom.rules")
 pcall(require, "custom.keybinds")
 
 -- Auto-generated (do not remove)
-pcall(require, "workspaces")
-pcall(require, "monitors")
+pcall(require, "hyprland.monitors")
+pcall(require, "hyprland.workspaces")
 
 -- Shell overrides (managed)
 pcall(require, "hyprland.shellOverrides.main")

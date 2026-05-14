@@ -319,22 +319,6 @@ func syncHyprland(cfg Config, hl hyprland.API) error {
 		})
 	}
 
-	// monitors.conf and workspaces.conf (skip-if-exists via categorizer)
-	for _, f := range []string{"monitors.conf", "workspaces.conf"} {
-		srcFile := cfg.ConfigsDir() + "/hyprland-entries/" + f
-		if _, err := os.Stat(srcFile); err != nil {
-			srcFile = cfg.RepoRoot + "/configs/hypr/" + f
-		}
-		if _, err := os.Stat(srcFile); err != nil {
-			continue
-		}
-		allSteps = append(allSteps, syncengine.SyncStep{
-			UpstreamPath: srcFile,
-			DeployPath:   cfg.XDG.ConfigHome + "/hypr/" + f,
-			RelPath:      "hypr/" + f,
-		})
-	}
-
 	// Custom dir (don't delete existing)
 	customSrc := cfg.ConfigsDir() + "/hypr/custom"
 	if _, err := os.Stat(customSrc); err != nil {

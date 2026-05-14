@@ -206,7 +206,7 @@ func GenerateMonitorsLua(cfg Config, hl hyprland.API) error {
 		return nil
 	}
 
-	deployPath := cfg.XDG.ConfigHome + "/hypr/monitors.lua"
+	deployPath := cfg.XDG.ConfigHome + "/hypr/hyprland/monitors.lua"
 
 	// Build the lua content
 	var b strings.Builder
@@ -278,7 +278,7 @@ func GenerateWorkspacesLua(cfg Config, hl hyprland.API) error {
 		return nil
 	}
 
-	deployPath := cfg.XDG.ConfigHome + "/hypr/workspaces.lua"
+	deployPath := cfg.XDG.ConfigHome + "/hypr/hyprland/workspaces.lua"
 	totalWS := 10
 	wsPerMonitor := totalWS / len(monitors)
 

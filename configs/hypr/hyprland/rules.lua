@@ -9,7 +9,7 @@ hl.window_rule({ match = { class = ".*" }, no_blur = true })
 -- Floating
 hl.window_rule({ match = { title = "^(Open File)(.*)$" }, center = true, float = true })
 hl.window_rule({ match = { title = "^(Select a File)(.*)$" }, center = true, float = true })
-hl.window_rule({ match = { title = "^(Choose wallpaper)(.*)$" }, center = true, float = true, size = { w = "monitor_w*.60", h = "monitor_h*.65" } })
+hl.window_rule({ match = { title = "^(Choose wallpaper)(.*)$" }, center = true, float = true, size = { "monitor_w*.60", "monitor_h*.65" } })
 hl.window_rule({ match = { title = "^(Open Folder)(.*)$" }, center = true, float = true })
 hl.window_rule({ match = { title = "^(Save As)(.*)$" }, center = true, float = true })
 hl.window_rule({ match = { title = "^(Library)(.*)$" }, center = true, float = true })
@@ -18,30 +18,30 @@ hl.window_rule({ match = { title = "^(.*)(wants to save)$" }, center = true, flo
 hl.window_rule({ match = { title = "^(.*)(wants to open)$" }, center = true, float = true })
 hl.window_rule({ match = { class = "^(blueberry\\.py)$" }, float = true })
 hl.window_rule({ match = { class = "^(guifetch)$" }, float = true })
-hl.window_rule({ match = { class = "^(pavucontrol)$" }, float = true, size = { w = "monitor_w*.45", h = "monitor_h*.45" }, center = true })
-hl.window_rule({ match = { class = "^(org.pulseaudio.pavucontrol)$" }, float = true, size = { w = "monitor_w*.45", h = "monitor_h*.45" }, center = true })
-hl.window_rule({ match = { class = "^(nm-connection-editor)$" }, float = true, size = { w = "monitor_w*.45", h = "monitor_h*.45" }, center = true })
+hl.window_rule({ match = { class = "^(pavucontrol)$" }, float = true, size = { "monitor_w*.45", "monitor_h*.45" }, center = true })
+hl.window_rule({ match = { class = "^(org.pulseaudio.pavucontrol)$" }, float = true, size = { "monitor_w*.45", "monitor_h*.45" }, center = true })
+hl.window_rule({ match = { class = "^(nm-connection-editor)$" }, float = true, size = { "monitor_w*.45", "monitor_h*.45" }, center = true })
 hl.window_rule({ match = { class = ".*plasmawindowed.*" }, float = true })
 hl.window_rule({ match = { class = "kcm_.*" }, float = true })
 hl.window_rule({ match = { class = ".*bluedevilwizard" }, float = true })
 hl.window_rule({ match = { title = ".*Welcome" }, float = true })
 hl.window_rule({ match = { title = "^(snry-shell Settings)$" }, float = true })
 hl.window_rule({ match = { title = ".*Shell conflicts.*" }, float = true })
-hl.window_rule({ match = { class = "org.freedesktop.impl.portal.desktop.kde" }, float = true, size = { w = "monitor_w*.60", h = "monitor_h*.65" } })
-hl.window_rule({ match = { class = "^(Zotero)$" }, float = true, size = { w = "monitor_w*.45", h = "monitor_h*.45" } })
+hl.window_rule({ match = { class = "org.freedesktop.impl.portal.desktop.kde" }, float = true, size = { "monitor_w*.60", "monitor_h*.65" } })
+hl.window_rule({ match = { class = "^(Zotero)$" }, float = true, size = { "monitor_w*.45", "monitor_h*.45" } })
 
 -- Move
-hl.window_rule({ match = { class = "^(plasma-changeicons)$" }, float = true, no_initial_focus = true, move = { x = 999999, y = 999999 } })
-hl.window_rule({ match = { title = "^(Copying — Dolphin)$" }, move = { x = 40, y = 80 } })
+hl.window_rule({ match = { class = "^(plasma-changeicons)$" }, float = true, no_initial_focus = true, move = { 999999, 999999 } })
+hl.window_rule({ match = { title = "^(Copying — Dolphin)$" }, move = { 40, 80 } })
 
 -- Tiling
 hl.window_rule({ match = { class = "^dev\\.warp\\.Warp$" }, tile = true })
 
 -- Picture-in-Picture
-hl.window_rule({ match = { title = "^([Pp]icture[-\\s]?[Ii]n[-\\s]?[Pp]icture)(.*)$" }, float = true, keep_aspect_ratio = true, move = { x = "monitor_w*.73", y = "monitor_h*.72" }, size = { w = "monitor_w*.25", h = "monitor_h*.25" }, pin = true })
+hl.window_rule({ match = { title = "^([Pp]icture[-\\s]?[Ii]n[-\\s]?[Pp]icture)(.*)$" }, float = true, keep_aspect_ratio = true, move = { "monitor_w*.73", "monitor_h*.72" }, size = { "monitor_w*.25", "monitor_h*.25" }, pin = true })
 
 -- Screen sharing
-hl.window_rule({ match = { title = ".*is sharing (a window|your screen).*" }, float = true, pin = true, move = { x = "monitor_w*.5-window_w*.5", y = "monitor_h-window_h-12" } })
+hl.window_rule({ match = { title = ".*is sharing (a window|your screen).*" }, float = true, pin = true, move = { "monitor_w*.5-window_w*.5", "monitor_h-window_h-12" } })
 
 -- Tearing
 hl.window_rule({ match = { title = ".*\\.exe" }, immediate = true })
