@@ -1,10 +1,5 @@
 #
 # ~/.profile — sourced by all POSIX login shells (sh, bash, zsh, fish, etc.)
 #
-
-# Auto-start Hyprland on first TTY login (no display manager).
-# The daemon (snry-daemon) is managed by systemd --user, not by hyprland exec-once.
-if [ -z "${WAYLAND_DISPLAY}" ] && [ "${XDG_VTNR}" -eq 1 ] && [ -z "${HYPRLAND_INSTANCE_SIGNATURE}" ]; then
-    clear
-    exec start-hyprland
-fi
+# The compositor (Hyprland) is started by the snry-daemon systemd user service.
+# No shell-level autostart is needed.

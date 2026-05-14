@@ -1,14 +1,14 @@
 [Unit]
 Description=Snry Shell Daemon
 Documentation=https://github.com/sonroyaalmerol/snry-shell
-After=graphical-session.target hyprland-session.target
-PartOf=graphical-session.target
+# No After=graphical-session.target — the daemon launches Hyprland itself.
+# It should start early in the user session.
 
 [Service]
 Type=simple
 ExecStart=/usr/bin/snry-daemon daemon
 Restart=on-failure
-RestartSec=5
+RestartSec=3
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=default.target

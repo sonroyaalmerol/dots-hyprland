@@ -13,13 +13,9 @@ if ! infocmp "$TERM" &>/dev/null; then
     fi
 fi
 
-# ─── Auto start Hyprland on tty1 ───
-# See ~/.profile for the canonical auto-start (shell-agnostic).
-# This fallback is kept for interactive non-login bash sessions.
-if [ -z "${WAYLAND_DISPLAY}" ] && [ "${XDG_VTNR}" -eq 1 ] && [ -z "${HYPRLAND_INSTANCE_SIGNATURE}" ]; then
-    mkdir -p ~/.cache
-    exec start-hyprland > ~/.cache/hyprland.log 2>&1
-fi
+# ─── Compositor ───
+# Hyprland is started by the snry-daemon systemd user service.
+# No shell-level autostart is needed.
 
 # ─── Environment ───
 export CARGO_TARGET_DIR="$HOME/cargo-target"

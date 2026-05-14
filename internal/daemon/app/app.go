@@ -15,6 +15,7 @@ import (
 	"github.com/godbus/dbus/v5"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/brightness"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/cliphist"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/compositor"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/conflict"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/darkmode"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/easyeffects"
@@ -181,6 +182,18 @@ func (a *App) Run(ctx context.Context) error {
 	a.uinput = uinput.NewKeyboard()
 	if err := a.uinput.Init(); err != nil {
 		log.Printf("uinput: %v (virtual keyboard disabled)", err)
+	}
+
+	// Launch the Wayland compositor first (if not already running).
+	// This blocks until Hyprland's IPC socket is available.
+	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") == "" {
+		log.Printf("[app] Hyprland not detected, launching compositor...")
+		if _, err := compositor.Launch(ctx); err != nil {
+			log.Printf("[app] compositor launch failed: %v", err)
+			// Continue anyway — some daemon features work without Hyprland.
+		}
+	} else {
+		log.Printf("[app] Hyprland already running (signature=%s)", os.Getenv("HYPRLAND_INSTANCE_SIGNATURE"))
 	}
 
 	a.socketServer = socket.New(a.cfg.SocketPath)
