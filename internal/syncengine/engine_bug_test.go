@@ -73,8 +73,8 @@ func TestOverwriteStrategyPreservesUserOnConflict(t *testing.T) {
 	}
 
 	content := readDeploy(t, deployDir, "test.conf")
-	if content != user {
-		t.Errorf("user data should be preserved on conflict, got %q", content)
+	if content != upstream {
+		t.Errorf("overwrite should use upstream on conflict, got %q", content)
 	}
 }
 

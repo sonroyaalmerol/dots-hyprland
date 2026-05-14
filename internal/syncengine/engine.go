@@ -238,11 +238,6 @@ func handleOverwrite(decision SyncDecision, current, upstream []byte) ([]byte, *
 	switch decision {
 	case DecisionNoop, DecisionKeep:
 		return current, nil
-	case DecisionConflict:
-		// On conflict, keep user's version but log the conflict
-		return current, &ConflictInfo{
-			Reason: "both modified: keeping current, upstream deferred",
-		}
 	default:
 		return upstream, nil
 	}

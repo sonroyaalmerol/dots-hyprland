@@ -289,21 +289,19 @@ func extractEmbeddedFrontend(cfg Config) (string, error) {
 }
 
 func syncHyprland(cfg Config, hl hyprland.API) error {
-	var allSteps []syncengine.SyncStep
+	deployDir := cfg.XDG.ConfigHome + "/hypr"
 
-	// Sync hyprland config dir
-	hyprlandSrc := cfg.ConfigsDir() + "/hypr/hyprland"
-	if _, err := os.Stat(hyprlandSrc); err != nil {
-		hyprlandSrc = cfg.RepoRoot + "/configs/hypr/hyprland"
+	// 1. hyprland/ config dir — always overwrites every file
+	srcDir := cfg.ConfigsDir() + "/hypr/hyprland"
+	if _, err := os.Stat(srcDir); err != nil {
+		srcDir = cfg.RepoRoot + "/configs/hypr/hyprland"
 	}
-	hyprlandSteps, err := smartSyncSteps(cfg, hyprlandSrc, cfg.XDG.ConfigHome+"/hypr/hyprland", "hypr/hyprland")
-	if err != nil {
-		return fmt.Errorf("scan %s: %w", hyprlandSrc, err)
+	if err := copyDir(srcDir, deployDir+"/hyprland"); err != nil {
+		return fmt.Errorf("copy hyprland: %w", err)
 	}
-	allSteps = append(allSteps, hyprlandSteps...)
 
-	// Individual config files
-	confFiles := []string{"hyprlock.conf", "hyprland.conf", "hyprland.lua", "hypridle.conf"}
+	// 2. Top-level config files
+	confFiles := []string{"hyprland.lua", "hyprlock.conf", "hypridle.conf"}
 	for _, f := range confFiles {
 		srcFile := cfg.ConfigsDir() + "/hyprland-entries/" + f
 		if _, err := os.Stat(srcFile); err != nil {
@@ -312,34 +310,76 @@ func syncHyprland(cfg Config, hl hyprland.API) error {
 		if _, err := os.Stat(srcFile); err != nil {
 			continue
 		}
-		allSteps = append(allSteps, syncengine.SyncStep{
-			UpstreamPath: srcFile,
-			DeployPath:   cfg.XDG.ConfigHome + "/hypr/" + f,
-			RelPath:      "hypr/" + f,
-		})
+		if err := copyFile(srcFile, deployDir+"/"+f, 0o644); err != nil {
+			return fmt.Errorf("copy %s: %w", f, err)
+		}
 	}
 
-	// Custom dir (don't delete existing)
+	// 3. Custom dir — only create if missing (user overrides)
 	customSrc := cfg.ConfigsDir() + "/hypr/custom"
 	if _, err := os.Stat(customSrc); err != nil {
 		customSrc = cfg.RepoRoot + "/configs/hypr/custom"
 	}
-	customSteps, err := smartSyncSteps(cfg, customSrc, cfg.XDG.ConfigHome+"/hypr/custom", "hypr/custom")
-	if err != nil {
-		return fmt.Errorf("scan %s: %w", customSrc, err)
+	if err := copyDirIfMissing(customSrc, deployDir+"/custom"); err != nil {
+		return fmt.Errorf("copy custom: %w", err)
 	}
-	allSteps = append(allSteps, customSteps...)
 
-	if err := runSmartSync(cfg, allSteps); err != nil {
-		return err
-	}
-	if err := migrateHyprlandLua(cfg); err != nil {
-		return err
-	}
+	// 4. Generated configs
 	if err := GenerateMonitorsLua(cfg, hl); err != nil {
 		return err
 	}
 	return GenerateWorkspacesLua(cfg, hl)
+}
+
+func copyDir(src, dst string) error {
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		srcPath := filepath.Join(src, e.Name())
+		dstPath := filepath.Join(dst, e.Name())
+		if e.IsDir() {
+			if err := copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			if err := copyFile(srcPath, dstPath, 0o644); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func copyDirIfMissing(src, dst string) error {
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		srcPath := filepath.Join(src, e.Name())
+		dstPath := filepath.Join(dst, e.Name())
+		if e.IsDir() {
+			if err := copyDirIfMissing(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			if _, err := os.Stat(dstPath); err == nil {
+				continue // already exists, skip
+			}
+			if err := copyFile(srcPath, dstPath, 0o644); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // migrateHyprlandLua removes old .conf files when their .lua replacements
