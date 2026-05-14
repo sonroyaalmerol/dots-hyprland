@@ -52,7 +52,7 @@ func FilesSteps(cfg Config) []Step {
 				if cfg.SkipHyprland {
 					return nil
 				}
-				return syncHyprland(cfg, nil)
+				return syncHyprland(cfg, hyprland.New(hyprland.DefaultConfig(), nil))
 			},
 		},
 		{
