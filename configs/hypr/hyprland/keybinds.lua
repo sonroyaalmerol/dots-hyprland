@@ -2,8 +2,6 @@
 -- Lines ending with `# [hidden]` won't be shown on cheatsheet
 -- Lines starting with #! are section headings
 
--- DO NOT REMOVE OR ALL KEYBINDS BREAK
-hl.dispatch(hl.dsp.submap("global"))
 -- This is required for catchall to work
 hl.define_submap("global", function()
 
@@ -245,3 +243,6 @@ hl.define_submap("global", function()
 	hl.bind("CTRL + SUPER + Backslash", hl.dsp.window.resize({ x = 640, y = 480, relative = false })) -- [hidden]
 
 end)
+
+-- Activate the global submap (must run AFTER define_submap)
+hl.dispatch(hl.dsp.submap("global"))
