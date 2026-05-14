@@ -256,3 +256,60 @@ func GenerateMonitorsLua(cfg Config, hl hyprland.API) error {
 	fmt.Printf("  Writing monitor config to %s\n", deployPath)
 	return os.WriteFile(deployPath, []byte(b.String()), 0o644)
 }
+
+// GenerateWorkspacesLua splits workspaces 1-10 equally across connected monitors
+// and writes workspace_rule entries to workspaces.lua.
+func GenerateWorkspacesLua(cfg Config, hl hyprland.API) error {
+	if hl == nil || !hl.IsRunning() {
+		return nil
+	}
+
+	out, err := hl.GetMonitors()
+	if err != nil {
+		return fmt.Errorf("hyprland monitors: %w", err)
+	}
+
+	var monitors []monitor
+	if err := json.Unmarshal(out, &monitors); err != nil {
+		return fmt.Errorf("parse monitor data: %w", err)
+	}
+
+	if len(monitors) == 0 {
+		return nil
+	}
+
+	deployPath := cfg.XDG.ConfigHome + "/hypr/workspaces.lua"
+	totalWS := 10
+	wsPerMonitor := totalWS / len(monitors)
+
+	var b strings.Builder
+	b.WriteString("-- Auto-generated workspace configuration\n")
+	b.WriteString("-- DO NOT EDIT: regenerated on each sync. Override in custom/rules.lua\n\n")
+
+	for i, m := range monitors {
+		start := i*wsPerMonitor + 1
+		end := start + wsPerMonitor - 1
+		if i == len(monitors)-1 {
+			end = totalWS // last monitor gets remainder
+		}
+		for ws := start; ws <= end; ws++ {
+			opts := fmt.Sprintf("monitor = %q", m.Name)
+			if ws == start {
+				opts += ", default = true"
+			}
+			fmt.Fprintf(&b, "hl.workspace_rule({ workspace = %q, %s })\n", strconv.Itoa(ws), opts)
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(deployPath), 0o755); err != nil {
+		return err
+	}
+
+	existing, err := os.ReadFile(deployPath)
+	if err == nil && string(existing) == b.String() {
+		return nil
+	}
+
+	fmt.Printf("  Writing workspace config to %s\n", deployPath)
+	return os.WriteFile(deployPath, []byte(b.String()), 0o644)
+}

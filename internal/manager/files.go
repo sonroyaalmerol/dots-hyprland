@@ -352,7 +352,10 @@ func syncHyprland(cfg Config, hl hyprland.API) error {
 	if err := migrateHyprlandLua(cfg); err != nil {
 		return err
 	}
-	return GenerateMonitorsLua(cfg, hl)
+	if err := GenerateMonitorsLua(cfg, hl); err != nil {
+		return err
+	}
+	return GenerateWorkspacesLua(cfg, hl)
 }
 
 // migrateHyprlandLua removes old .conf files when their .lua replacements

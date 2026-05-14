@@ -37,8 +37,8 @@ func TestCategorizeFuzzelIni(t *testing.T) {
 func TestCategorizeMonitorsConf(t *testing.T) {
 	c := DefaultCategorizer()
 	s := c.Categorize("hypr/monitors.conf")
-	if s != StrategySkipIfExists {
-		t.Errorf("expected %q, got %q", StrategySkipIfExists, s)
+	if s != StrategyMergeKV {
+		t.Errorf("expected %q, got %q", StrategyMergeKV, s)
 	}
 }
 
@@ -95,7 +95,7 @@ func TestCategorizeFontconfig(t *testing.T) {
 func TestCategorizeHyprCustom(t *testing.T) {
 	c := DefaultCategorizer()
 	s := c.Categorize("hypr/custom/rules.conf")
-	if s != StrategySkipIfExists {
-		t.Errorf("expected %q, got %q", StrategySkipIfExists, s)
+	if s != StrategyMergeKV {
+		t.Errorf("expected %q, got %q", StrategyMergeKV, s)
 	}
 }
