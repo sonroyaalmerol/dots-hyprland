@@ -322,6 +322,18 @@ func (a *App) Run(ctx context.Context) error {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
 		defer cleanup()
+		a.regenerateConfigs()
+		// Periodically regenerate generated configs
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				a.regenerateConfigs()
+			}
+		}
 	})
 
 	<-ctx.Done()
@@ -826,6 +838,24 @@ func (a *App) repoRoot() string {
 		return shareDir
 	}
 	return "."
+}
+
+func (a *App) regenerateConfigs() {
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	cfg := manager.Config{
+		RepoRoot: a.repoRoot(),
+	}
+	cfg.XDG.ConfigHome = configDir
+
+	if err := manager.GenerateMonitorsLua(cfg, a.hyprlandSvc); err != nil {
+		log.Printf("[app] generate monitors.lua: %v", err)
+	}
+	if err := manager.GenerateWorkspacesLua(cfg, a.hyprlandSvc); err != nil {
+		log.Printf("[app] generate workspaces.lua: %v", err)
+	}
 }
 
 func (a *App) DispatchCommand(line string) {
