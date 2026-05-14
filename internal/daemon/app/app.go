@@ -6,7 +6,6 @@ import (
 	"hash/fnv"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -134,7 +133,8 @@ type App struct {
 	networkSvc      *network.Service
 	warpSvc         *warp.Service
 	gamemodeSvc     *gamemode.Service
-	guardSvc        *guard.Service
+	guardSvc          *guard.Service
+	hlGuardSvc        *guard.Service
 	darkmodeSvc     *darkmode.Service
 	conflictSvc     *conflict.Service
 
@@ -182,14 +182,16 @@ func (a *App) Run(ctx context.Context) error {
 
 	a.socketServer = socket.New(a.cfg.SocketPath)
 
-	a.lockscreenSvc = lockscreen.New(a.cfg.LockscreenCfg, a.onLockscreenEvent)
+	a.hyprlandSvc = hyprland.New(a.cfg.HyprlandCfg, a.socketServer.Emitter().Emit)
+
+	a.lockscreenSvc = lockscreen.New(a.cfg.LockscreenCfg, a.hyprlandSvc, a.onLockscreenEvent)
 	a.powersaveSvc = powersave.New(a.cfg.PowersaveTimeout, a.onPowerState)
 
 	idleConn, err := dbus.SystemBus()
 	if err != nil {
 		log.Printf("system bus: %v (idle service disabled)", err)
 	} else {
-		a.idleSvc = idle.New(dbusutil.NewRealConn(idleConn), a.cfg.IdleCfg)
+		a.idleSvc = idle.New(dbusutil.NewRealConn(idleConn), a.cfg.IdleCfg, a.hyprlandSvc)
 		a.idleSvc.SetLockedProvider(a.lockscreenSvc.IsLocked)
 		a.idleSvc.SetOnLock(func() {
 			if a.lockscreenSvc != nil {
@@ -221,7 +223,6 @@ func (a *App) Run(ctx context.Context) error {
 	}
 
 	a.resourcesSvc = resources.New(a.cfg.ResourcesCfg, a.socketServer.Emitter().Emit)
-	a.hyprlandSvc = hyprland.New(a.cfg.HyprlandCfg, a.socketServer.Emitter().Emit)
 	a.qsSvc = quickshell.New(a.cfg.QuickshellCfg)
 
 	isSuspended := func() bool {
@@ -237,7 +238,7 @@ func (a *App) Run(ctx context.Context) error {
 	a.updatesSvc = updates.New(updatesCfg, a.socketServer.Emitter().Emit)
 
 	a.cliphistSvc = cliphist.New(a.cfg.CliphistCfg, a.socketServer.Emitter().Emit)
-	a.brightnessSvc = brightness.New(a.cfg.BrightnessCfg, a.socketServer.Emitter().Emit)
+	a.brightnessSvc = brightness.New(a.cfg.BrightnessCfg, a.hyprlandSvc, a.socketServer.Emitter().Emit)
 
 	// New daemon services
 	a.sysinfoSvc = sysinfo.New(a.socketServer.Emitter().Emit)
@@ -258,7 +259,7 @@ func (a *App) Run(ctx context.Context) error {
 	a.networkSvc = network.New(a.cfg.NetworkCfg, a.socketServer.Emitter().Emit)
 
 	a.warpSvc = warp.New(a.cfg.WarpCfg, a.socketServer.Emitter().Emit)
-	a.gamemodeSvc = gamemode.New(a.cfg.GamemodeCfg, a.socketServer.Emitter().Emit)
+	a.gamemodeSvc = gamemode.New(a.cfg.GamemodeCfg, a.hyprlandSvc, a.socketServer.Emitter().Emit)
 	a.darkmodeSvc = darkmode.New(a.cfg.DarkmodeCfg, a.socketServer.Emitter().Emit)
 	a.conflictSvc = conflict.New()
 
@@ -271,6 +272,18 @@ func (a *App) Run(ctx context.Context) error {
 		WatchDir: filepath.Join(configDir, "quickshell", "ii"),
 	}
 	a.guardSvc = guard.New(guardCfg)
+
+	// Guard: protect deployed hyprland config from tampering (except custom/).
+	sourceDir := "/usr/share/snry-shell/configs/hypr/hyprland"
+	if info, err := os.Stat(sourceDir); err != nil || !info.IsDir() {
+		// Fallback: use repo configs during development
+		sourceDir = filepath.Join(a.repoRoot(), "configs", "hypr", "hyprland")
+	}
+	hlGuardCfg := guard.Config{
+		WatchDir:  filepath.Join(configDir, "hypr", "hyprland"),
+		SourceDir: sourceDir,
+	}
+	a.hlGuardSvc = guard.New(hlGuardCfg)
 
 	// Generate terminal theme files on startup if colors are available.
 	go a.handleApplyTerminalColors()
@@ -301,6 +314,7 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runService(ctx, "gamemode", a.gamemodeSvc) })
 	wg.Go(func() { a.runService(ctx, "darkmode", a.darkmodeSvc) })
 	wg.Go(func() { a.runService(ctx, "guard", a.guardSvc) })
+	wg.Go(func() { a.runService(ctx, "hlguard", a.hlGuardSvc) })
 	wg.Go(func() {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
@@ -685,23 +699,20 @@ func (a *App) runQuickshell(ctx context.Context) {
 
 func (a *App) setupHyprlandSystemBinds() func() {
 	binds := []struct{ key, cmd string }{
-		{"XF86PowerOff", "~/.local/bin/snry-daemon send power-button"},
-		{"switch:on:Lid Switch", "~/.local/bin/snry-daemon send lid-close"},
+		{"XF86PowerOff", os.Getenv("HOME") + "/.local/bin/snry-daemon send power-button"},
+		{"switch:on:Lid Switch", os.Getenv("HOME") + "/.local/bin/snry-daemon send lid-close"},
 	}
 	for _, b := range binds {
-		val := ", " + b.key + ", exec, " + b.cmd
-		out, err := exec.Command("hyprctl", "keyword", "bindl", val).CombinedOutput()
-		if err != nil {
-			log.Printf("hyprland bindl %s: %v: %s", b.key, err, string(out))
+		if err := a.hyprlandSvc.BindKey(b.key, b.cmd, true); err != nil {
+			log.Printf("hyprland bind %s: %v", b.key, err)
 		} else {
 			log.Printf("hyprland bindl registered: %s", b.key)
 		}
 	}
 	return func() {
 		for _, b := range binds {
-			out, err := exec.Command("hyprctl", "keyword", "unbind", ", "+b.key).CombinedOutput()
-			if err != nil {
-				log.Printf("hyprland unbind %s: %v: %s", b.key, err, string(out))
+			if err := a.hyprlandSvc.UnbindKey(b.key); err != nil {
+				log.Printf("hyprland unbind %s: %v", b.key, err)
 			}
 		}
 	}
@@ -752,7 +763,7 @@ func (a *App) onPowerState(suspended bool) {
 
 func (a *App) handleAutoscale() {
 	a.socketServer.Emitter().Emit(map[string]any{"event": "autoscale_start"})
-	err := manager.Autoscale(context.Background())
+	err := manager.Autoscale(context.Background(), a.hyprlandSvc)
 	if err != nil {
 		a.socketServer.Emitter().Emit(map[string]any{
 			"event": "autoscale_error",

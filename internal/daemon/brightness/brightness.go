@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
 )
 
 type Monitor struct {
@@ -46,6 +48,7 @@ func DefaultConfig() Config {
 
 type Service struct {
 	cfg      Config
+	hl       hyprland.API
 	callback func(map[string]any)
 	mu       sync.RWMutex
 
@@ -54,9 +57,10 @@ type Service struct {
 	monitors2   []Monitor
 }
 
-func New(cfg Config, cb func(map[string]any)) *Service {
+func New(cfg Config, hl hyprland.API, cb func(map[string]any)) *Service {
 	return &Service{
 		cfg:         cfg,
+		hl:          hl,
 		callback:    cb,
 		multipliers: make(map[string]float64),
 	}
@@ -135,9 +139,9 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) refreshMonitors() {
-	out, err := exec.Command("hyprctl", "-j", "monitors").Output()
+	out, err := s.hl.GetMonitors()
 	if err != nil {
-		log.Printf("[brightness] hyprctl monitors error: %v", err)
+		log.Printf("[brightness] hyprland monitors error: %v", err)
 		return
 	}
 
@@ -376,12 +380,12 @@ func (s *Service) setBrightness(name string, value float64, isDDC bool, busNum s
 	return exec.Command("brightnessctl", "--class", "backlight", "s", strconv.Itoa(percent)+"%", "--quiet").Run()
 }
 
-// detectMonitors runs ddcutil detect and hyprctl monitors once at startup.
+// detectMonitors runs ddcutil detect and queries monitor info via IPC once at startup.
 // This is expensive (probes I2C buses) so it should NOT be called on every poll.
 func (s *Service) detectMonitors() {
 	ddcMonitors := s.detectDDCMonitors()
 
-	out, err := exec.Command("hyprctl", "-j", "monitors").Output()
+	out, err := s.hl.GetMonitors()
 	if err != nil {
 		return
 	}

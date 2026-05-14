@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
 )
 
 type monitor struct {
@@ -27,16 +28,15 @@ type monitor struct {
 }
 
 // Autoscale detects connected monitors and sets ideal Hyprland scale factors.
-func Autoscale(ctx context.Context) error {
+func Autoscale(ctx context.Context, hl hyprland.API) error {
 	// Check Hyprland is running
-	if err := exec.CommandContext(ctx, "hyprctl", "version").Run(); err != nil {
-		return fmt.Errorf("hyprland not running: %w", err)
+	if hl == nil || !hl.IsRunning() {
+		return fmt.Errorf("hyprland not available")
 	}
 
-	// Get monitor data
-	out, err := exec.CommandContext(ctx, "hyprctl", "monitors", "-j").Output()
+	out, err := hl.GetMonitors()
 	if err != nil {
-		return fmt.Errorf("hyprctl monitors: %w", err)
+		return fmt.Errorf("hyprland monitors: %w", err)
 	}
 
 	var monitors []monitor
@@ -49,14 +49,12 @@ func Autoscale(ctx context.Context) error {
 		idealScale := math.Round(math.Max(1.0, float64(m.Height)/1080.0)*4) / 4.0
 		idealScale = math.Round(idealScale*100) / 100
 
-		pos := fmt.Sprintf("%dx%d", m.X, m.Y)
 		fmt.Printf("  %s: %dx%d (current: %.2f, ideal: %.2f)\n",
 			m.Name, m.Width, m.Height, m.Scale, idealScale)
 
 		if m.Scale != idealScale {
-			arg := fmt.Sprintf("%s,%dx%d,%s,%.2f", m.Name, m.Width, m.Height, pos, idealScale)
-			cmd := exec.Command("hyprctl", "keyword", "monitor", arg)
-			if err := cmd.Run(); err != nil {
+			err := hl.SetMonitor(m.Name, fmt.Sprintf("%dx%d@", m.Width, m.Height), fmt.Sprintf("%dx%d", m.X, m.Y), idealScale)
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "  [warn] set scale for %s: %v\n", m.Name, err)
 			} else {
 				changed = true
@@ -188,15 +186,15 @@ func bestMode(modes []string) modeInfo {
 // monitors.lua file with optimal resolution and refresh rate for each display.
 // If the file already exists, it is regenerated only if the monitor topology
 // has changed.
-func GenerateMonitorsLua(cfg Config) error {
+func GenerateMonitorsLua(cfg Config, hl hyprland.API) error {
 	// Check Hyprland is running
-	if err := exec.Command("hyprctl", "version").Run(); err != nil {
+	if hl == nil || !hl.IsRunning() {
 		return nil // not running, skip silently
 	}
 
-	out, err := exec.Command("hyprctl", "monitors", "-j").Output()
+	out, err := hl.GetMonitors()
 	if err != nil {
-		return fmt.Errorf("hyprctl monitors: %w", err)
+		return fmt.Errorf("hyprland monitors: %w", err)
 	}
 
 	var monitors []monitor

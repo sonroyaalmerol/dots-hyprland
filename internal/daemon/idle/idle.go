@@ -12,6 +12,7 @@ import (
 
 	"github.com/godbus/dbus/v5"
 	"github.com/rajveermalviya/go-wayland/wayland/client"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/idle/dbusutil"
 	protocol "github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/idle/protocol"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/waylandutil"
@@ -40,6 +41,7 @@ type Service struct {
 	bus  *bus
 	conn dbusutil.DBusConn
 	cfg  Config
+	hl   hyprland.API
 
 	mu             sync.Mutex
 	idleStarted    time.Time
@@ -61,11 +63,12 @@ type Service struct {
 }
 
 // New creates the idle service.
-func New(conn dbusutil.DBusConn, cfg Config) *Service {
+func New(conn dbusutil.DBusConn, cfg Config, hl hyprland.API) *Service {
 	return &Service{
 		bus:  newBus(),
 		conn: conn,
 		cfg:  cfg,
+		hl:   hl,
 	}
 }
 
@@ -189,10 +192,10 @@ func (s *Service) setDisplay(on bool) {
 
 	if on {
 		log.Printf("[idle] turning display ON")
-		exec.Command("hyprctl", "dispatch", "dpms", "on").Run()
+		s.hl.SetDPMS("on")
 	} else {
 		log.Printf("[idle] turning display OFF")
-		exec.Command("hyprctl", "dispatch", "dpms", "off").Run()
+		s.hl.SetDPMS("off")
 	}
 
 	s.mu.Lock()
@@ -425,9 +428,9 @@ func (s *Service) doLock() {
 	go func() {
 		if err := exec.Command("qs", "-c", "ii", "ipc", "call", "lock", "activate").Run(); err != nil {
 			log.Printf("[idle] qs ipc lock failed: %v", err)
-			// Fallback: try hyprctl dispatch
-			if err := exec.Command("hyprctl", "dispatch", "global", "quickshell:lock").Run(); err != nil {
-				log.Printf("[idle] hyprctl dispatch failed, falling back to hyprlock")
+			// Fallback: activate global shortcut via IPC
+			if err := s.hl.ActivateGlobalShortcut("quickshell:lock"); err != nil {
+				log.Printf("[idle] global shortcut fallback failed, falling back to hyprlock")
 				// Last resort: hyprlock
 				exec.Command("hyprlock").Run()
 			}

@@ -1,12 +1,14 @@
 package lockscreen
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
-	"os/exec"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
 )
 
 type EventType int
@@ -45,6 +47,7 @@ type EventCallback func(EventType, any)
 // Service manages lock/unlock state, attempt tracking, and lockout.
 type Service struct {
 	cfg         Config
+	hl          hyprland.API
 	onEvent     EventCallback
 	maxAttempts int
 
@@ -58,9 +61,10 @@ type Service struct {
 }
 
 // New creates a lockscreen service.
-func New(cfg Config, cb EventCallback) *Service {
+func New(cfg Config, hl hyprland.API, cb EventCallback) *Service {
 	return &Service{
 		cfg:         cfg,
+		hl:          hl,
 		onEvent:     cb,
 		maxAttempts: cfg.MaxAttempts,
 	}
@@ -87,7 +91,7 @@ func (s *Service) Authenticate(password string) AuthResult {
 		s.locked.Store(false)
 
 		go unlockKeyring(password)
-		go cleanupSpecialWorkspaces()
+		go s.cleanupSpecialWorkspaces()
 
 		s.emit(EventLockState, false)
 		result := AuthResult{Success: true, Remaining: s.maxAttempts}
@@ -155,7 +159,7 @@ func (s *Service) startLockout() {
 func (s *Service) Lock() {
 	// Allow session lock restore so QS can re-lock after Hyprland crash recovery.
 	go func() {
-		exec.Command("hyprctl", "keyword", "misc:allow_session_lock_restore", "1").Run()
+		s.hl.SetOption("misc.allow_session_lock_restore", "true")
 	}()
 
 	s.locked.Store(true)
@@ -172,7 +176,7 @@ func (s *Service) LockWithAutoUnlock() bool {
 		s.lockedOut.Store(false)
 		s.locked.Store(false)
 
-		go cleanupSpecialWorkspaces()
+		go s.cleanupSpecialWorkspaces()
 
 		s.emit(EventLockState, false)
 		s.emit(EventAuthResult, AuthResult{Success: true, Remaining: s.maxAttempts})
@@ -187,7 +191,7 @@ func (s *Service) Unlock() {
 	s.locked.Store(false)
 	s.attempts.Store(0)
 	s.lockedOut.Store(false)
-	go cleanupSpecialWorkspaces()
+	go s.cleanupSpecialWorkspaces()
 	s.emit(EventLockState, false)
 }
 
@@ -195,17 +199,34 @@ func (s *Service) Unlock() {
 // lock-screen workspace (ID >= 1000) back to workspace 1 and switches
 // to it. This prevents stale high-ID workspaces from leaking into the
 // bar/overview workspace calculations.
-func cleanupSpecialWorkspaces() {
-	// Small delay to let WlSessionLock teardown complete.
+func (s *Service) cleanupSpecialWorkspaces() {
 	time.Sleep(500 * time.Millisecond)
-	cmd := exec.Command("bash", "-c",
-		`addrs=$(hyprctl clients -j | jq -r '.[] | select(.workspace.id > 1000) | .address'); `+
-			`for a in $addrs; do hyprctl dispatch movetoworkspacesilent "1,address:$a"; done; `+
-			`hyprctl dispatch workspace 1`,
-	)
-	if err := cmd.Run(); err != nil {
-		log.Printf("[lockscreen] workspace cleanup: %v", err)
+
+	data, err := s.hl.GetClients()
+	if err != nil {
+		log.Printf("[lockscreen] cleanup clients: %v", err)
+		return
 	}
+	var clients []map[string]any
+	if err := json.Unmarshal(data, &clients); err != nil {
+		log.Printf("[lockscreen] cleanup parse: %v", err)
+		return
+	}
+
+	for _, c := range clients {
+		ws, _ := c["workspace"].(map[string]any)
+		if ws == nil {
+			continue
+		}
+		wsID, _ := ws["id"].(float64)
+		if wsID > 1000 {
+			addr, _ := c["address"].(string)
+			if addr != "" {
+				s.hl.MoveWindowToWorkspace("1", "address:"+addr)
+			}
+		}
+	}
+	s.hl.FocusWorkspace("1")
 }
 
 // IsLocked reports whether the screen is locked.
@@ -225,7 +246,7 @@ func (s *Service) TryAutoUnlock() bool {
 	s.locked.Store(false)
 	s.attempts.Store(0)
 	s.lockedOut.Store(false)
-	go cleanupSpecialWorkspaces()
+	go s.cleanupSpecialWorkspaces()
 	s.emit(EventLockState, false)
 	s.emit(EventAuthResult, AuthResult{Success: true, Remaining: s.maxAttempts})
 	return true

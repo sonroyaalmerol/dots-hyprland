@@ -3,10 +3,11 @@ package gamemode
 import (
 	"context"
 	"log"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
 )
 
 type Config struct {
@@ -19,14 +20,16 @@ func DefaultConfig() Config {
 
 type Service struct {
 	cfg      Config
+	hl       hyprland.API
 	callback func(map[string]any)
 	mu       sync.RWMutex
 	enabled  bool
 }
 
-func New(cfg Config, cb func(map[string]any)) *Service {
+func New(cfg Config, hl hyprland.API, cb func(map[string]any)) *Service {
 	return &Service{
 		cfg:      cfg,
+		hl:       hl,
 		callback: cb,
 	}
 }
@@ -46,7 +49,7 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) detectState() {
-	out, err := exec.Command("hyprctl", "getoption", "animations:enabled", "-j").Output()
+	out, err := s.hl.GetOption("animations.enabled")
 	if err != nil {
 		log.Printf("[gamemode] detect state: %v", err)
 		return
@@ -79,18 +82,23 @@ func (s *Service) EmitSnapshot(callback func(map[string]any)) {
 }
 
 func (s *Service) Enable() {
-	_, err := exec.Command("hyprctl", "--batch",
-		"keyword animations:enabled 0;"+
-			" keyword decoration:shadow:enabled 0;"+
-			" keyword decoration:blur:enabled 0;"+
-			" keyword general:gaps_in 0;"+
-			" keyword general:gaps_out 0;"+
-			" keyword general:border_size 1;"+
-			" keyword decoration:rounding 0;"+
-			" keyword general:allow_tearing 1").CombinedOutput()
-	if err != nil {
-		log.Printf("[gamemode] enable failed: %v", err)
-		return
+	configs := []string{
+		"animations:enabled 0",
+		"decoration:shadow:enabled 0",
+		"decoration:blur:enabled 0",
+		"general:gaps_in 0",
+		"general:gaps_out 0",
+		"general:border_size 1",
+		"decoration:rounding 0",
+		"general:allow_tearing 1",
+	}
+	for _, cfg := range configs {
+		parts := strings.SplitN(cfg, " ", 2)
+		key := strings.ReplaceAll(parts[0], ":", ".")
+		val := parts[1]
+		if err := s.hl.SetOption(key, val); err != nil {
+			log.Printf("[gamemode] set %s: %v", cfg, err)
+		}
 	}
 
 	s.mu.Lock()
@@ -102,9 +110,9 @@ func (s *Service) Enable() {
 }
 
 func (s *Service) Disable() {
-	out, err := exec.Command("hyprctl", "reload").CombinedOutput()
+	err := s.hl.Reload()
 	if err != nil {
-		log.Printf("[gamemode] disable (reload) failed: %v: %s", err, strings.TrimSpace(string(out)))
+		log.Printf("[gamemode] disable (reload) failed: %v", err)
 		return
 	}
 

@@ -14,7 +14,8 @@ import (
 )
 
 type Config struct {
-	WatchDir string // the deployed quickshell dir, e.g. ~/.config/quickshell/ii/
+	WatchDir  string // directory to watch (e.g. ~/.config/quickshell/ii/)
+	SourceDir string // source directory to restore from (filesystem); empty = use embedded FS
 }
 
 type Service struct {
@@ -88,22 +89,25 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 
-// restoreFile restores a single file from the embedded FS.
+// restoreFile restores a single file from the source (embedded FS or filesystem).
 func (s *Service) restoreFile(deployedPath string) {
-	// Get the relative path under the watch dir.
 	rel, err := filepath.Rel(s.cfg.WatchDir, deployedPath)
 	if err != nil {
 		return
 	}
 
-	// In the embedded FS, paths are prefixed with "ii/".
-	embedPath := "ii/" + filepath.ToSlash(rel)
+	var data []byte
+	if s.cfg.SourceDir != "" {
+		// Filesystem source: read from SourceDir/<relative-path>
+		sourcePath := filepath.Join(s.cfg.SourceDir, filepath.ToSlash(rel))
+		data, err = os.ReadFile(sourcePath)
+	} else {
+		// Embedded FS source (quickshell): paths are prefixed with "ii/"
+		embedPath := "ii/" + filepath.ToSlash(rel)
+		data, err = fs.ReadFile(frontend.FS, embedPath)
+	}
 
-	// Read from embedded FS.
-	data, err := fs.ReadFile(frontend.FS, embedPath)
 	if err != nil {
-		// File doesn't exist in embedded FS — it was a user-created file.
-		// Delete it since it shouldn't be there.
 		if err := os.Remove(deployedPath); err != nil && !os.IsNotExist(err) {
 			log.Printf("guard: failed to remove unauthorized file %s: %v", deployedPath, err)
 		} else {
@@ -112,7 +116,6 @@ func (s *Service) restoreFile(deployedPath string) {
 		return
 	}
 
-	// Write back to disk.
 	if err := os.WriteFile(deployedPath, data, 0o644); err != nil {
 		log.Printf("guard: failed to restore %s: %v", rel, err)
 		return

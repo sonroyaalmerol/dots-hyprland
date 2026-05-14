@@ -129,7 +129,7 @@ func runUninstall() { runManagerCommand("uninstall", manager.Uninstall) }
 func runAutoscale() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	if err := manager.Autoscale(ctx); err != nil {
+	if err := manager.Autoscale(ctx, nil); err != nil {
 		fmt.Fprintf(os.Stderr, "autoscale error: %v\n", err)
 		os.Exit(1)
 	}

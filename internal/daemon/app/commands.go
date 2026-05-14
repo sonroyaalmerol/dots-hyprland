@@ -16,6 +16,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
 )
 
 const maxKey = 248
@@ -136,6 +138,24 @@ func dispatchCommand(a *App, line string) {
 		go a.handleDiagnose()
 	case "workspace-action":
 		a.handleWorkspaceAction(fields[1:])
+	case "workspace":
+		a.routeWorkspace(fields[1:])
+	case "window":
+		a.routeWindow(fields[1:])
+	case "monitor":
+		a.routeMonitor(fields[1:])
+	case "exec":
+		if len(fields) >= 2 {
+			go a.hyprlandSvc.ExecCommand(strings.Join(fields[1:], " "))
+		}
+	case "global":
+		if len(fields) >= 2 {
+			go a.hyprlandSvc.ActivateGlobalShortcut(fields[1])
+		}
+	case "config":
+		a.routeConfig(fields[1:])
+	case "reload":
+		go a.hyprlandSvc.Reload()
 	case "zoom":
 		a.handleZoom(fields[1:])
 	case "ai-summary":
@@ -407,7 +427,7 @@ func dispatchCommand(a *App, line string) {
 	case "hyprconfig-get":
 		if len(fields) >= 2 {
 			key := strings.Join(fields[1:], " ")
-			out, err := exec.Command("hyprctl", "getoption", "-j", key).Output()
+			out, err := a.hyprlandSvc.GetOption(key)
 			if err != nil {
 				return
 			}
@@ -423,12 +443,12 @@ func dispatchCommand(a *App, line string) {
 		if len(fields) >= 3 {
 			key := fields[1]
 			value := strings.Join(fields[2:], " ")
-			exec.Command("hyprctl", "keyword", key, value).Run()
+			a.hyprlandSvc.SetOption(key, value)
 		}
 	case "hyprconfig-reset":
 		if len(fields) >= 2 {
 			key := strings.Join(fields[1:], " ")
-			exec.Command("hyprctl", "keyword", key, "undef").Run()
+			a.hyprlandSvc.ResetOption(key)
 		}
 	case "record":
 		go a.handleRecord(fields[1:])
@@ -483,12 +503,11 @@ func (a *App) handleWorkspaceAction(args []string) {
 	if len(args) < 2 || a.hyprlandSvc == nil {
 		return
 	}
-	dispatcher := args[0]
 	target := args[1]
 
 	if strings.ContainsAny(target, "+-") {
-		if err := a.hyprlandSvc.Dispatch(dispatcher, target); err != nil {
-			log.Printf("[app] workspace-action dispatch: %v", err)
+		if err := a.hyprlandSvc.FocusWorkspace(target); err != nil {
+			log.Printf("[app] workspace-action focus: %v", err)
 		}
 		return
 	}
@@ -500,14 +519,111 @@ func (a *App) handleWorkspaceAction(args []string) {
 			return
 		}
 		targetWS := ((currID-1)/10)*10 + id
-		if err := a.hyprlandSvc.Dispatch(dispatcher, strconv.Itoa(targetWS)); err != nil {
-			log.Printf("[app] workspace-action dispatch: %v", err)
+		if err := a.hyprlandSvc.FocusWorkspace(strconv.Itoa(targetWS)); err != nil {
+			log.Printf("[app] workspace-action focus: %v", err)
 		}
 		return
 	}
 
-	if err := a.hyprlandSvc.Dispatch(dispatcher, target); err != nil {
-		log.Printf("[app] workspace-action dispatch: %v", err)
+	if err := a.hyprlandSvc.FocusWorkspace(target); err != nil {
+		log.Printf("[app] workspace-action focus: %v", err)
+	}
+}
+
+// ── REST-like Hyprland routing ─────────────────────────────────────────────────
+
+func (a *App) routeWorkspace(args []string) {
+	if len(args) < 1 || a.hyprlandSvc == nil {
+		return
+	}
+	switch args[0] {
+	case "focus":
+		if len(args) >= 2 {
+			go a.hyprlandSvc.FocusWorkspace(args[1])
+		}
+	case "special":
+		name := ""
+		if len(args) >= 2 {
+			name = args[1]
+		}
+		go a.hyprlandSvc.ToggleSpecialWorkspace(name)
+	}
+}
+
+func (a *App) routeWindow(args []string) {
+	if len(args) < 1 || a.hyprlandSvc == nil {
+		return
+	}
+	switch args[0] {
+	case "focus":
+		if len(args) >= 2 {
+			go a.hyprlandSvc.FocusWindow(args[1])
+		}
+	case "close":
+		if len(args) >= 2 {
+			go a.hyprlandSvc.CloseWindow(args[1])
+		}
+	case "move":
+		if len(args) < 2 {
+			return
+		}
+		switch args[1] {
+		case "workspace":
+			if len(args) >= 3 {
+				win := ""
+				if len(args) >= 4 {
+					win = args[3]
+				}
+				go a.hyprlandSvc.MoveWindowToWorkspace(args[2], win)
+			}
+		case "coords":
+			if len(args) >= 4 {
+				win := ""
+				if len(args) >= 5 {
+					win = args[4]
+				}
+				go a.hyprlandSvc.MoveWindowToCoords(args[2], args[3], win)
+			}
+		}
+	}
+}
+
+func (a *App) routeMonitor(args []string) {
+	if len(args) < 1 || a.hyprlandSvc == nil {
+		return
+	}
+	switch args[0] {
+	case "focus":
+		if len(args) >= 2 {
+			go a.hyprlandSvc.FocusMonitor(args[1])
+		}
+	}
+}
+
+func (a *App) routeConfig(args []string) {
+	if len(args) < 1 || a.hyprlandSvc == nil {
+		return
+	}
+	switch args[0] {
+	case "set":
+		if len(args) >= 3 {
+			go a.hyprlandSvc.SetOption(args[1], strings.Join(args[2:], " "))
+		}
+	case "reset":
+		if len(args) >= 2 {
+			go a.hyprlandSvc.ResetOption(args[1])
+		}
+	case "animation":
+		// config animation <leaf> <enabled> <speed> <curve> [style]
+		if len(args) >= 5 {
+			enabled := args[2] == "true"
+			speed, _ := strconv.ParseFloat(args[3], 64)
+			style := ""
+			if len(args) >= 6 {
+				style = args[5]
+			}
+			go a.hyprlandSvc.SetAnimation(args[1], enabled, speed, args[4], style)
+		}
 	}
 }
 
@@ -524,13 +640,13 @@ func (a *App) handleZoom(args []string) {
 	}
 
 	if action == "reset" {
-		if _, err := a.hyprlandSvc.QuerySocket("keyword cursor:zoom_factor 1.0"); err != nil {
+		if err := a.hyprlandSvc.SetOption("cursor.zoom_factor", "1.0"); err != nil {
 			log.Printf("[app] zoom reset: %v", err)
 		}
 		return
 	}
 
-	data, err := a.hyprlandSvc.QuerySocket("j/getoption cursor:zoom_factor")
+	data, err := a.hyprlandSvc.GetOption("cursor.zoom_factor")
 	if err != nil {
 		log.Printf("[app] zoom getoption: %v", err)
 		return
@@ -553,8 +669,7 @@ func (a *App) handleZoom(args []string) {
 		return
 	}
 
-	cmd := fmt.Sprintf("keyword cursor:zoom_factor %f", newZoom)
-	if _, err := a.hyprlandSvc.QuerySocket(cmd); err != nil {
+	if err := a.hyprlandSvc.SetOption("cursor.zoom_factor", fmt.Sprintf("%f", newZoom)); err != nil {
 		log.Printf("[app] zoom set: %v", err)
 	}
 }
@@ -874,7 +989,7 @@ func (a *App) handleGenerateThumbnails(sizeName, mode, target string) {
 }
 
 func (a *App) handleCapslockCheck() {
-	data, err := a.hyprlandSvc.QuerySocket("devices")
+	data, err := a.hyprlandSvc.GetDevices()
 	if err != nil {
 		return
 	}
@@ -988,7 +1103,7 @@ func (a *App) handleRecord(args []string) {
 
 	if fullscreen {
 		if a.hyprlandSvc != nil {
-			if monitor, err := a.hyprlandSvc.QuerySocket("j/monitors"); err == nil {
+			if monitor, err := a.hyprlandSvc.GetMonitors(); err == nil {
 				var monitors []map[string]any
 				if json.Unmarshal(monitor, &monitors) == nil {
 					for _, m := range monitors {
@@ -1567,14 +1682,12 @@ func (a *App) handleHyprconfigEdit(args []string) {
 		return
 	}
 
-	// Use hyprctl for runtime set/reset regardless of file format
+	// Use IPC for runtime set/reset
 	for _, kv := range setArgs {
-		key := kv[0]
-		value := kv[1]
-		exec.Command("hyprctl", "keyword", key, value).Run()
+		a.hyprlandSvc.SetOption(kv[0], kv[1])
 	}
 	for _, key := range resetKeys {
-		exec.Command("hyprctl", "keyword", key, "undef").Run()
+		a.hyprlandSvc.ResetOption(key)
 	}
 
 	// Also update the config file
@@ -1654,7 +1767,7 @@ func (a *App) editLuaConfig(filePath string, setArgs [][2]string, resetKeys []st
 		if len(setArgs) > 0 {
 			var lines []string
 			for _, kv := range setArgs {
-				lines = append(lines, formatLuaConfig(kv[0], kv[1]))
+				lines = append(lines, hyprland.BuildConfigLua(kv[0], kv[1]))
 			}
 			os.MkdirAll(filepath.Dir(filePath), 0755)
 			os.WriteFile(filePath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
@@ -1678,7 +1791,7 @@ func (a *App) editLuaConfig(filePath string, setArgs [][2]string, resetKeys []st
 			content = pattern.ReplaceAllString(content, "${1}"+kv[1])
 		} else {
 			// Key not found in file, append as hl.config call
-			content = strings.TrimRight(content, "\n") + "\n" + formatLuaConfig(kv[0], kv[1]) + "\n"
+			content = strings.TrimRight(content, "\n") + "\n" + hyprland.BuildConfigLua(kv[0], kv[1]) + "\n"
 		}
 	}
 
@@ -1693,15 +1806,3 @@ func (a *App) editLuaConfig(filePath string, setArgs [][2]string, resetKeys []st
 	os.WriteFile(filePath, []byte(content), 0644)
 }
 
-func formatLuaConfig(key, value string) string {
-	parts := strings.Split(key, ".")
-	if len(parts) == 1 {
-		return fmt.Sprintf("hl.config({ %s = %s })", parts[0], value)
-	}
-	// Build nested table: general.border_size → hl.config({ general = { border_size = VALUE } })
-	inner := fmt.Sprintf("%s = %s", parts[len(parts)-1], value)
-	for i := len(parts) - 2; i >= 0; i-- {
-		inner = fmt.Sprintf("%s = { %s }", parts[i], inner)
-	}
-	return fmt.Sprintf("hl.config({ %s })", inner)
-}
