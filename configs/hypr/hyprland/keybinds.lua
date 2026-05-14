@@ -10,7 +10,7 @@ hl.define_submap("global", function()
 	hl.bind("SUPER + Super_R", hl.dsp.global("quickshell:searchToggleRelease"), { description = "Toggle search" }) -- [hidden]
 	hl.bind("SUPER + Super_L", hl.dsp.exec_cmd("qs -c " .. qsConfig .. " ipc call TEST_ALIVE || pkill fuzzel || fuzzel")) -- [hidden] Launcher (fallback)
 	hl.bind("SUPER + Super_R", hl.dsp.exec_cmd("qs -c " .. qsConfig .. " ipc call TEST_ALIVE || pkill fuzzel || fuzzel")) -- [hidden] Launcher (fallback)
-	hl.bind("catchall", hl.dsp.global("quickshell:searchToggleReleaseInterrupt")) -- [hidden]
+	hl.bind("catchall", hl.dsp.global("quickshell:searchToggleReleaseInterrupt"), { non_consuming = true }) -- [hidden]
 	hl.bind("CTRL + Super_L", hl.dsp.global("quickshell:searchToggleReleaseInterrupt")) -- [hidden]
 	hl.bind("CTRL + Super_R", hl.dsp.global("quickshell:searchToggleReleaseInterrupt")) -- [hidden]
 	hl.bind("SUPER + mouse:272", hl.dsp.global("quickshell:searchToggleReleaseInterrupt")) -- [hidden]
