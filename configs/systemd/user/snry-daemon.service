@@ -10,15 +10,5 @@ ExecStart=/usr/bin/snry-daemon daemon
 Restart=on-failure
 RestartSec=5
 
-# Security hardening
-ProtectSystem=strict
-ReadWritePaths=%h/.config %h/.cache %h/.local %h/.local/state
-PrivateTmp=true
-NoNewPrivileges=true
-
-# Environment
-Environment=DISPLAY=:0
-Environment=WAYLAND_DISPLAY=wayland-1
-
 [Install]
 WantedBy=graphical-session.target

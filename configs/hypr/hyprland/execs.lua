@@ -9,7 +9,6 @@ hl.on("hyprland.start", function()
 	-- Core components
 	hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
 	hl.exec_cmd("/usr/lib/pam_kwallet_init")
-	hl.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon")
 
 	-- Display
 	hl.exec_cmd("xrandr --output DP-1 --primary")
