@@ -133,8 +133,8 @@ type App struct {
 	networkSvc      *network.Service
 	warpSvc         *warp.Service
 	gamemodeSvc     *gamemode.Service
-	guardSvc          *guard.Service
-	hlGuardSvc        *guard.Service
+	guardSvc        *guard.Service
+	hlGuardSvc      *guard.Service
 	darkmodeSvc     *darkmode.Service
 	conflictSvc     *conflict.Service
 
@@ -188,10 +188,13 @@ func (a *App) Run(ctx context.Context) error {
 	a.powersaveSvc = powersave.New(a.cfg.PowersaveTimeout, a.onPowerState)
 
 	idleConn, err := dbus.SystemBus()
+	sessionConn, sessionErr := dbus.SessionBus()
 	if err != nil {
 		log.Printf("system bus: %v (idle service disabled)", err)
+	} else if sessionErr != nil {
+		log.Printf("session bus: %v (idle service disabled)", sessionErr)
 	} else {
-		a.idleSvc = idle.New(dbusutil.NewRealConn(idleConn), a.cfg.IdleCfg, a.hyprlandSvc)
+		a.idleSvc = idle.New(dbusutil.NewRealConn(idleConn), dbusutil.NewRealConn(sessionConn), a.cfg.IdleCfg, a.hyprlandSvc)
 		a.idleSvc.SetLockedProvider(a.lockscreenSvc.IsLocked)
 		a.idleSvc.SetOnLock(func() {
 			if a.lockscreenSvc != nil {

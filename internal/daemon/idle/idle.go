@@ -7,6 +7,7 @@ import (
 	"context"
 	"log"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,10 +39,11 @@ func DefaultConfig() Config {
 
 // Service detects user inactivity and triggers locking and optional suspend.
 type Service struct {
-	bus  *bus
-	conn dbusutil.DBusConn
-	cfg  Config
-	hl   hyprland.API
+	bus         *bus
+	conn        dbusutil.DBusConn
+	sessionConn dbusutil.DBusConn
+	cfg         Config
+	hl          hyprland.API
 
 	mu             sync.Mutex
 	idleStarted    time.Time
@@ -63,12 +65,15 @@ type Service struct {
 }
 
 // New creates the idle service.
-func New(conn dbusutil.DBusConn, cfg Config, hl hyprland.API) *Service {
+// sysConn is the system bus (for logind).
+// sessionConn is the session bus (for ScreenSaver).
+func New(sysConn dbusutil.DBusConn, sessionConn dbusutil.DBusConn, cfg Config, hl hyprland.API) *Service {
 	return &Service{
-		bus:  newBus(),
-		conn: conn,
-		cfg:  cfg,
-		hl:   hl,
+		bus:         newBus(),
+		conn:        sysConn,
+		sessionConn: sessionConn,
+		cfg:         cfg,
+		hl:          hl,
 	}
 }
 
@@ -137,6 +142,12 @@ func (s *Service) recreateTimers() {
 			notif, err := s.manager.GetIdleNotification(ms, s.seat)
 			if err == nil {
 				notif.SetIdledHandler(func(protocol.ExtIdleNotificationV1IdledEvent) {
+					s.mu.Lock()
+					inhibited := s.inhibited
+					s.mu.Unlock()
+					if inhibited {
+						return
+					}
 					s.setDisplay(false)
 				})
 				notif.SetResumedHandler(func(protocol.ExtIdleNotificationV1ResumedEvent) {
@@ -152,6 +163,12 @@ func (s *Service) recreateTimers() {
 			notif, err := s.manager.GetIdleNotification(ms, s.seat)
 			if err == nil {
 				notif.SetIdledHandler(func(protocol.ExtIdleNotificationV1IdledEvent) {
+					s.mu.Lock()
+					inhibited := s.inhibited
+					s.mu.Unlock()
+					if inhibited {
+						return
+					}
 					s.setDisplay(false)
 					// Start cancellable lock goroutine
 					var ctx context.Context
@@ -208,10 +225,25 @@ func (s *Service) setDisplay(on bool) {
 
 // Run starts monitoring. Blocks until ctx is cancelled.
 func (s *Service) Run(ctx context.Context) error {
-	// Start logind monitor and ScreenSaver D-Bus
+	// Start logind monitor on system bus
 	if realConn, ok := s.conn.(*dbusutil.RealConn); ok && realConn.Conn != nil {
 		go s.monitorLogind(ctx)
-		if err := registerScreenSaver(realConn.Conn, newScreenSaver(s.bus)); err != nil {
+		go s.monitorLogindInhibit(ctx, realConn.Conn)
+
+		// Inhibit logind from handling power button / lid switch
+		_, err := dbusutil.LogindInhibit(realConn.Conn,
+			"handle-power-key:handle-lid-switch",
+			"snry-idle", "Shell handling system buttons", "block")
+		if err != nil {
+			log.Printf("[idle] logind inhibit: %v", err)
+		} else {
+			log.Printf("[idle] logind button handling inhibited")
+		}
+	}
+
+	// Register ScreenSaver on session bus (where browsers/media players call Inhibit)
+	if sessConn, ok := s.sessionConn.(*dbusutil.RealConn); ok && sessConn.Conn != nil {
+		if err := registerScreenSaver(sessConn.Conn, newScreenSaver(s.bus)); err != nil {
 			log.Printf("[idle] screensaver dbus: %v", err)
 		}
 	}
@@ -222,20 +254,18 @@ func (s *Service) Run(ctx context.Context) error {
 		s.mu.Lock()
 		s.inhibited = active
 		s.mu.Unlock()
-		log.Printf("[idle] inhibition: %v", active)
-	})
+		log.Printf("[idle] inhibition: %v (active inhibitors)", active)
 
-	// Inhibit logind from handling power button / lid switch
-	if realConn, ok := s.conn.(*dbusutil.RealConn); ok && realConn.Conn != nil {
-		_, err := dbusutil.LogindInhibit(realConn.Conn,
-			"handle-power-key:handle-lid-switch",
-			"snry-idle", "Shell handling system buttons", "block")
-		if err != nil {
-			log.Printf("[idle] logind inhibit: %v", err)
-		} else {
-			log.Printf("[idle] logind button handling inhibited")
+		// Recreate timers when inhibition state changes.
+		// If inhibition became active while we already idled, the display
+		// is off — turn it back on. If inhibition dropped while idled,
+		// restart the timers so the lock delay runs again.
+		s.waylandMu.Lock()
+		if s.manager != nil {
+			s.recreateTimers()
 		}
-	}
+		s.waylandMu.Unlock()
+	})
 
 	go s.waylandLoop(ctx)
 
@@ -450,6 +480,71 @@ func (s *Service) Lock() {
 func (s *Service) Unlock() {
 	// Ensure display is on when unlocking.
 	s.setDisplay(true)
+}
+
+// monitorLogindInhibit watches the logind BlockInhibited property for
+// systemd-inhibit --what=idle inhibitors. When :idle: appears in the
+// colon-separated list, we treat it as active idle inhibition.
+func (s *Service) monitorLogindInhibit(ctx context.Context, conn *dbus.Conn) {
+	// Get initial value
+	s.updateLogindInhibit(conn)
+
+	// Watch for property changes
+	if err := s.conn.AddMatchSignal(
+		dbus.WithMatchInterface("org.freedesktop.DBus.Properties"),
+		dbus.WithMatchMember("PropertiesChanged"),
+		dbus.WithMatchObjectPath(dbus.ObjectPath(dbusutil.LogindPath)),
+	); err != nil {
+		log.Printf("[idle] logind PropertiesChanged match: %v", err)
+		return
+	}
+
+	ch := make(chan *dbus.Signal, 16)
+	s.conn.Signal(ch)
+	defer s.conn.RemoveSignal(ch)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case sig, ok := <-ch:
+			if !ok {
+				return
+			}
+			if sig.Name == "org.freedesktop.DBus.Properties.PropertiesChanged" &&
+				string(sig.Path) == dbusutil.LogindPath &&
+				len(sig.Body) >= 2 {
+				if iface, _ := sig.Body[0].(string); iface == dbusutil.LogindManager {
+					if changed, ok := sig.Body[1].(map[string]dbus.Variant); ok {
+						if v, exists := changed["BlockInhibited"]; exists {
+							s.handleBlockInhibited(v.String())
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// updateLogindInhibit fetches the current BlockInhibited property from logind.
+func (s *Service) updateLogindInhibit(conn *dbus.Conn) {
+	v, err := conn.Object(dbusutil.LogindDest, dbus.ObjectPath(dbusutil.LogindPath)).
+		GetProperty(dbusutil.LogindManager + ".BlockInhibited")
+	if err != nil {
+		log.Printf("[idle] logind BlockInhibited get: %v", err)
+		return
+	}
+	s.handleBlockInhibited(v.String())
+}
+
+// handleBlockInhibited parses the BlockInhibited colon-separated string
+// and activates/deactivates idle inhibition.
+func (s *Service) handleBlockInhibited(inhibits string) {
+	// BlockInhibited is colon-separated. Wrap in colons for easier checking.
+	wrapped := ":" + inhibits + ":"
+	active := strings.Contains(wrapped, ":idle:")
+	log.Printf("[idle] systemd inhibit: %q idle-active=%v", inhibits, active)
+	s.bus.publish(topicIdleInhibit, active)
 }
 
 func (s *Service) monitorLogind(ctx context.Context) {
