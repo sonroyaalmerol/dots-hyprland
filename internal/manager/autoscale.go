@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/lualint"
 )
 
 type monitor struct {
@@ -201,6 +202,11 @@ func GenerateMonitorsLua(cfg Config, hl hyprland.API) error {
 		return nil // no change
 	}
 
+	// Validate Lua syntax before writing.
+	if err := lualint.Validate(b.String()); err != nil {
+		return fmt.Errorf("validate monitors.lua: %w", err)
+	}
+
 	fmt.Printf("  Writing monitor config to %s\n", deployPath)
 	return os.WriteFile(deployPath, []byte(b.String()), 0o644)
 }
@@ -256,6 +262,11 @@ func GenerateWorkspacesLua(cfg Config, hl hyprland.API) error {
 	existing, err := os.ReadFile(deployPath)
 	if err == nil && string(existing) == b.String() {
 		return nil
+	}
+
+	// Validate Lua syntax before writing.
+	if err := lualint.Validate(b.String()); err != nil {
+		return fmt.Errorf("validate workspaces.lua: %w", err)
 	}
 
 	fmt.Printf("  Writing workspace config to %s\n", deployPath)

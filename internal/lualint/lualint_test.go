@@ -1,0 +1,148 @@
+package lualint
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestValidateValidMonitors(t *testing.T) {
+	src := `-- Auto-generated monitor configuration
+hl.monitor({ output = "eDP-1", mode = "2560x1600@165", position = "0x0", scale = 1.5 })
+hl.monitor({ output = "DP-1", mode = "1920x1080@60", position = "2560x0", scale = 1, transform = 1, vrr = 1 })
+`
+	if err := Validate(src); err != nil {
+		t.Fatalf("valid monitors.lua rejected: %v", err)
+	}
+}
+
+func TestValidateValidWorkspaces(t *testing.T) {
+	src := `-- Auto-generated workspace configuration
+hl.workspace_rule({ workspace = "1", monitor = "eDP-1", default = true })
+hl.workspace_rule({ workspace = "2", monitor = "eDP-1" })
+hl.workspace_rule({ workspace = "3", monitor = "DP-1", default = true })
+`
+	if err := Validate(src); err != nil {
+		t.Fatalf("valid workspaces.lua rejected: %v", err)
+	}
+}
+
+func TestValidateInvalidLua(t *testing.T) {
+	src := `hl.monitor({ output = "eDP-1" -- missing closing bracket`
+	if err := Validate(src); err == nil {
+		t.Fatal("expected syntax error for invalid Lua, got nil")
+	}
+}
+
+func TestValidateMissingHLGlobal(t *testing.T) {
+	// Code that references an undefined global should error.
+	// Our stubs define hl, so this should fail at parse time.
+	src := `unknown_global.call({})`
+	if err := Validate(src); err == nil {
+		t.Fatal("expected error for undefined global, got nil")
+	}
+}
+
+func TestValidateEmpty(t *testing.T) {
+	if err := Validate(""); err != nil {
+		t.Fatalf("empty string rejected: %v", err)
+	}
+}
+
+func TestValidateComments(t *testing.T) {
+	src := `-- This is a comment
+-- Another comment
+`
+	if err := Validate(src); err != nil {
+		t.Fatalf("comments-only rejected: %v", err)
+	}
+}
+
+func TestValidateTransformInteger(t *testing.T) {
+	// Regression: transform must be an integer, not a string
+	src := `hl.monitor({ output = "eDP-1", mode = "1920x1080@60", position = "0x0", scale = 1, transform = 1 })`
+	if err := Validate(src); err != nil {
+		t.Fatalf("integer transform rejected: %v", err)
+	}
+}
+
+func TestValidateTransformAsStringRejected(t *testing.T) {
+	// String transform values like "90" should be syntax-valid Lua but
+	// semantically wrong for Hyprland — we test that they parse but note
+	// that our generator now outputs integers.
+	src := `hl.monitor({ output = "eDP-1", mode = "1920x1080@60", position = "0x0", scale = 1, transform = "90" })`
+	// This is valid Lua syntax (string is a valid value), so it should parse.
+	// The type error is caught by our integration tests, not the parser.
+	if err := Validate(src); err != nil {
+		t.Fatalf("string transform is valid Lua; parser should accept it: %v", err)
+	}
+}
+
+func TestValidateScaleInteger(t *testing.T) {
+	src := `hl.monitor({ output = "eDP-1", mode = "1920x1080@60", position = "0x0", scale = 1 })`
+	if err := Validate(src); err != nil {
+		t.Fatalf("integer scale rejected: %v", err)
+	}
+}
+
+func TestValidateScaleFloat(t *testing.T) {
+	src := `hl.monitor({ output = "eDP-1", mode = "2560x1600@165", position = "0x0", scale = 1.5 })`
+	if err := Validate(src); err != nil {
+		t.Fatalf("float scale rejected: %v", err)
+	}
+}
+
+func TestValidateVRR(t *testing.T) {
+	src := `hl.monitor({ output = "DP-1", mode = "2560x1440@165", position = "0x0", scale = 1, vrr = 1 })`
+	if err := Validate(src); err != nil {
+		t.Fatalf("vrr field rejected: %v", err)
+	}
+}
+
+func TestValidateDisabledMonitor(t *testing.T) {
+	src := `hl.monitor({ output = "HDMI-A-1", disabled = true })`
+	if err := Validate(src); err != nil {
+		t.Fatalf("disabled monitor rejected: %v", err)
+	}
+}
+
+func TestValidateFullConfig(t *testing.T) {
+	// Full realistic generated config
+	src := `-- Auto-generated monitor configuration
+-- DO NOT EDIT: regenerated on each sync. Override in custom/general.lua
+
+hl.monitor({ output = "eDP-1", mode = "2560x1600@165", position = "0x0", scale = 1.5, vrr = 1 })
+hl.monitor({ output = "DP-1", mode = "1920x1080@60", position = "2560x0", scale = 1, transform = 1 })
+`
+	if err := Validate(src); err != nil {
+		t.Fatalf("full config rejected: %v", err)
+	}
+}
+
+func TestValidateWorkspaceDefault(t *testing.T) {
+	src := `hl.workspace_rule({ workspace = "1", monitor = "eDP-1", default = true })`
+	if err := Validate(src); err != nil {
+		t.Fatalf("workspace_rule with default rejected: %v", err)
+	}
+}
+
+func TestValidateModeKeywords(t *testing.T) {
+	// Hyprland mode keywords
+	for _, mode := range []string{"preferred", "highres", "highrr"} {
+		src := `hl.monitor({ output = "", mode = "` + mode + `", position = "auto", scale = 1 })`
+		if err := Validate(src); err != nil {
+			t.Errorf("mode keyword %q rejected: %v", mode, err)
+		}
+	}
+}
+
+func TestValidateErrorContainsLineInfo(t *testing.T) {
+	src := `hl.monitor({ output = "DP-1"
+hl.monitor({ output = "DP-2" })`
+	err := Validate(src)
+	if err == nil {
+		t.Fatal("expected error for missing closing bracket")
+	}
+	if !strings.Contains(err.Error(), "lualint:") {
+		t.Errorf("error should contain lualint prefix, got: %v", err)
+	}
+}

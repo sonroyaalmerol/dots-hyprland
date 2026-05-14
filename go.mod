@@ -11,4 +11,7 @@ require (
 	golang.org/x/sys v0.27.0
 )
 
-require github.com/fsnotify/fsnotify v1.10.0
+require (
+	github.com/fsnotify/fsnotify v1.10.0
+	github.com/yuin/gopher-lua v1.1.2
+)
