@@ -539,14 +539,18 @@ func (a *App) routeWorkspace(args []string) {
 	switch args[0] {
 	case "focus":
 		if len(args) >= 2 {
-			go a.hyprlandSvc.FocusWorkspace(args[1])
+			if err := a.hyprlandSvc.FocusWorkspace(args[1]); err != nil {
+				log.Printf("[app] workspace focus: %v", err)
+			}
 		}
 	case "special":
 		name := ""
 		if len(args) >= 2 {
 			name = args[1]
 		}
-		go a.hyprlandSvc.ToggleSpecialWorkspace(name)
+		if err := a.hyprlandSvc.ToggleSpecialWorkspace(name); err != nil {
+			log.Printf("[app] workspace special: %v", err)
+		}
 	}
 }
 

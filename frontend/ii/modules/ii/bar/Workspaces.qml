@@ -93,9 +93,9 @@ Item {
     WheelHandler {
         onWheel: (event) => {
             if (event.angleDelta.y < 0)
-                DaemonSocket.workspaceFocus("r+1");
+                DaemonSocket.sendCommand("workspace-action workspace r+1");
             else if (event.angleDelta.y > 0)
-                DaemonSocket.workspaceFocus("r-1");
+                DaemonSocket.sendCommand("workspace-action workspace r-1");
         }
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
     }
@@ -204,7 +204,7 @@ Item {
                 property int workspaceValue: workspaceGroup * root.workspacesShown + index + 1
                 implicitHeight: vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
                 implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.verticalBarWidth
-                onPressed: DaemonSocket.workspaceFocus(workspaceValue)
+                onPressed: DaemonSocket.sendCommand("workspace-action workspace " + (index + 1))
                 width: vertical ? undefined : workspaceButtonWidth
                 height: vertical ? workspaceButtonWidth : undefined
 
