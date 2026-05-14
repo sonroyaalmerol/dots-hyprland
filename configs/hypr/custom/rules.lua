@@ -1,3 +1,4 @@
--- You can put custom rules here
--- Window/layer rules: https://wiki.hyprland.org/Configuring/Window-Rules/
--- Workspace rules: https://wiki.hyprland.org/Configuring/Workspace-Rules/
+-- Add your custom window/layer/workspace rules here
+-- https://wiki.hyprland.org/Configuring/Window-Rules/
+-- https://wiki.hyprland.org/Configuring/Workspace-Rules/
+-- They will never be overwritten by snry-shell updates

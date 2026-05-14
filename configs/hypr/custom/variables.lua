@@ -1,1 +1,2 @@
--- For all available variables, see hyprland/variables.lua
+-- Add your custom variables here
+-- They will never be overwritten by snry-shell updates

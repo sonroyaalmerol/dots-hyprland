@@ -1,8 +1,8 @@
--- Put general config stuff here
--- Here's a list of every variable: https://wiki.hyprland.org/Configuring/Variables/
-
-hl.config({
-	misc = {
-		vrr = 0,
-	},
-})
+-- Add your custom general config here
+-- Example:
+-- hl.config({
+--     general = {
+--         gaps_in = 8,
+--     },
+-- })
+-- It will never be overwritten by snry-shell updates

@@ -29,10 +29,6 @@ hl.define_submap("global", function()
 	hl.bind("SUPER + Tab", hl.dsp.global("quickshell:overviewWorkspacesToggle"), { description = "Toggle overview" })
 	hl.bind("SUPER + V", hl.dsp.global("quickshell:overviewClipboardToggle"), { description = "Clipboard history >> clipboard" })
 	hl.bind("SUPER + Period", hl.dsp.global("quickshell:overviewEmojiToggle"), { description = "Emoji >> clipboard" })
-	hl.bind("SUPER + A", hl.dsp.global("quickshell:sidebarLeftToggle"), { description = "Toggle left sidebar" })
-	hl.bind("SUPER + ALT + A", hl.dsp.global("quickshell:sidebarLeftToggleDetach")) -- [hidden]
-	hl.bind("SUPER + B", hl.dsp.global("quickshell:sidebarLeftToggle")) -- [hidden]
-	hl.bind("SUPER + O", hl.dsp.global("quickshell:sidebarLeftToggle")) -- [hidden]
 	hl.bind("SUPER + N", hl.dsp.global("quickshell:sidebarRightToggle"), { description = "Toggle right sidebar" })
 	hl.bind("SUPER + Slash", hl.dsp.global("quickshell:cheatsheetToggle"), { description = "Toggle cheatsheet" })
 	hl.bind("SUPER + K", hl.dsp.global("quickshell:oskToggle"), { description = "Toggle on-screen keyboard" })
@@ -111,7 +107,7 @@ hl.define_submap("global", function()
 	hl.bind("SUPER + Apostrophe", hl.dsp.layout("splitratio +0.1"), { repeating = true }) -- [hidden]
 	-- Positioning mode
 	hl.bind("SUPER + ALT + Space", hl.dsp.window.float(), { description = "Float/Tile" })
-	hl.bind("SUPER + D", hl.dsp.window.fullscreen({ mode = "maximized" }), { description = "Maximize" })
+	hl.bind("SUPER + D", hl.dsp.global("quickshell:overviewWorkspacesToggle"), { description = "Toggle overview" })
 	hl.bind("SUPER + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }), { description = "Fullscreen" })
 	hl.bind("SUPER + ALT + F", hl.dsp.window.fullscreen_state({ internal = 0, client = 3 })) -- Fullscreen spoof
 	hl.bind("SUPER + P", hl.dsp.window.pin()) -- Pin
