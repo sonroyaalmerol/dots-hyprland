@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -60,6 +61,20 @@ func Launch(ctx context.Context) (string, error) {
 	// Set the environment so all subsequent code can find Hyprland.
 	os.Setenv("HYPRLAND_INSTANCE_SIGNATURE", sig)
 
+	// Detect and set WAYLAND_DISPLAY and DISPLAY so child processes
+	// (quickshell, wl-paste, etc.) can connect to the compositor.
+	// systemd --user doesn't have these set before the compositor starts.
+	if os.Getenv("WAYLAND_DISPLAY") == "" {
+		if wl := detectWaylandDisplay(runtimeDir); wl != "" {
+			os.Setenv("WAYLAND_DISPLAY", wl)
+			log.Printf("[compositor] set WAYLAND_DISPLAY=%s", wl)
+		}
+	}
+	if os.Getenv("DISPLAY") == "" {
+		os.Setenv("DISPLAY", ":0")
+		log.Printf("[compositor] set DISPLAY=:0")
+	}
+
 	log.Printf("[compositor] Hyprland ready (signature=%s)", sig)
 	return sig, nil
 }
@@ -106,4 +121,31 @@ func waitForSocket(ctx context.Context, runtimeDir string) (string, error) {
 			}
 		}
 	}
+}
+
+// detectWaylandDisplay scans runtimeDir for wayland-N sockets created by
+// the compositor and returns the display name (e.g. "wayland-1").
+func detectWaylandDisplay(runtimeDir string) string {
+	entries, err := os.ReadDir(runtimeDir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !e.Type().IsRegular() {
+			continue
+		}
+		name := e.Name()
+		// wayland sockets are named wayland-<N> or wayland-<N>-lock
+		if strings.HasPrefix(name, "wayland-") && !strings.HasSuffix(name, "-lock") {
+			// Verify it's a socket, not just a matching filename.
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			if info.Mode()&os.ModeSocket != 0 {
+				return name
+			}
+		}
+	}
+	return ""
 }
