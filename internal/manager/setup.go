@@ -183,7 +183,10 @@ func setupLogind(ctx context.Context, cfg Config) error {
 func disableDisplayManagers(ctx context.Context) error {
 	fmt.Println("  Disabling display managers...")
 	for _, dm := range []string{"gdm", "sddm", "lightdm", "display-manager"} {
-		_, _ = platform.RunSudo(ctx, "systemctl", "disable", "--now", dm)
+		// NOTE: --now is intentionally omitted. Stopping the DM would
+		// kill the current graphical session, which may be where the
+		// package manager / terminal is running.
+		_, _ = platform.RunSudo(ctx, "systemctl", "disable", dm)
 	}
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/sonroyaalmerol/snry-shell-qs/frontend"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/platform"
 	syncengine "github.com/sonroyaalmerol/snry-shell-qs/internal/syncengine"
 )
@@ -51,7 +52,7 @@ func FilesSteps(cfg Config) []Step {
 				if cfg.SkipHyprland {
 					return nil
 				}
-				return syncHyprland(cfg)
+				return syncHyprland(cfg, nil)
 			},
 		},
 		{
@@ -125,7 +126,7 @@ func FilesSteps(cfg Config) []Step {
 		{
 			Name: "reload-hyprland",
 			Fn: func(ctx context.Context) error {
-				_ = exec.Command("hyprctl", "reload").Run()
+				_ = hyprland.ReloadConfig()
 				return nil
 			},
 			Optional: true,
@@ -287,7 +288,7 @@ func extractEmbeddedFrontend(cfg Config) (string, error) {
 	return cacheDir, nil
 }
 
-func syncHyprland(cfg Config) error {
+func syncHyprland(cfg Config, hl hyprland.API) error {
 	var allSteps []syncengine.SyncStep
 
 	// Sync hyprland config dir
@@ -351,7 +352,7 @@ func syncHyprland(cfg Config) error {
 	if err := migrateHyprlandLua(cfg); err != nil {
 		return err
 	}
-	return GenerateMonitorsLua(cfg)
+	return GenerateMonitorsLua(cfg, hl)
 }
 
 // migrateHyprlandLua removes old .conf files when their .lua replacements
@@ -410,9 +411,12 @@ func syncBash(cfg Config) error {
 
 	// Install dotfiles to home dir
 	dotfiles := map[string]string{
+		"profile":      cfg.Home + "/.profile",
 		"bashrc":       cfg.Home + "/.bashrc",
 		"bash_profile": cfg.Home + "/.bash_profile",
 		"zprofile":     cfg.Home + "/.zprofile",
+		"zshrc":        cfg.Home + "/.zshrc",
+		"p10k.zsh":     cfg.Home + "/.p10k.zsh",
 		"inputrc":      cfg.Home + "/.inputrc",
 	}
 	for name, dstPath := range dotfiles {

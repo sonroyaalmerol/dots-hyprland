@@ -54,6 +54,8 @@ depends=(
 	matugen
 	otf-space-grotesk
 	starship
+	zsh
+	zsh-theme-powerlevel10k
 	ttf-jetbrains-mono-nerd
 	ttf-material-symbols-variable-git
 	ttf-readex-pro
