@@ -192,8 +192,15 @@ func (a *App) Run(ctx context.Context) error {
 			log.Printf("[app] compositor launch failed: %v", err)
 			// Continue anyway — some daemon features work without Hyprland.
 		}
-	} else {
+	} else if compositor.IsAlive(os.Getenv("HYPRLAND_INSTANCE_SIGNATURE")) {
 		log.Printf("[app] Hyprland already running (signature=%s)", os.Getenv("HYPRLAND_INSTANCE_SIGNATURE"))
+	} else {
+		log.Printf("[app] stale HYPRLAND_INSTANCE_SIGNATURE detected, clearing and relaunching compositor")
+		os.Unsetenv("HYPRLAND_INSTANCE_SIGNATURE")
+		os.Unsetenv("WAYLAND_DISPLAY")
+		if _, err := compositor.Launch(ctx); err != nil {
+			log.Printf("[app] compositor launch failed: %v", err)
+		}
 	}
 
 	a.socketServer = socket.New(a.cfg.SocketPath)

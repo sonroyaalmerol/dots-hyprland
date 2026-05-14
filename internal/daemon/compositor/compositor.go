@@ -26,7 +26,7 @@ import (
 func Launch(ctx context.Context) (string, error) {
 	// If Hyprland is already running and reachable, just return its instance signature.
 	if sig := os.Getenv("HYPRLAND_INSTANCE_SIGNATURE"); sig != "" {
-		if sigAlive(sig) {
+		if IsAlive(sig) {
 			return sig, nil
 		}
 		log.Printf("[compositor] stale HYPRLAND_INSTANCE_SIGNATURE=%q (socket unreachable), clearing", sig)
@@ -130,9 +130,9 @@ func waitForSocket(ctx context.Context, runtimeDir string) (string, error) {
 	}
 }
 
-// sigAlive checks whether the Hyprland compositor is reachable by testing
-// its IPC socket.
-func sigAlive(sig string) bool {
+// IsAlive checks whether the Hyprland compositor with the given signature
+// is reachable by testing its IPC socket.
+func IsAlive(sig string) bool {
 	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
 	if runtimeDir == "" {
 		runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
