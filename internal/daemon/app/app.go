@@ -148,6 +148,9 @@ type App struct {
 	lastStateHash   uint64
 	lastFocusActive time.Time
 
+	// Monitor change dedup: only regenerate monitors/workspaces when topology changes.
+	lastMonitorHash uint64
+
 	// Canonical state (accessed only from stateLoop goroutine).
 	hwTablet     bool
 	textFocus    bool
@@ -182,7 +185,9 @@ func (a *App) Run(ctx context.Context) error {
 
 	a.socketServer = socket.New(a.cfg.SocketPath)
 
-	a.hyprlandSvc = hyprland.New(a.cfg.HyprlandCfg, a.socketServer.Emitter().Emit)
+	// Wrap the socket emitter to also react to Hyprland monitor changes.
+	hlEmit := a.hyprlandEmitFunc(a.socketServer.Emitter().Emit)
+	a.hyprlandSvc = hyprland.New(a.cfg.HyprlandCfg, hlEmit)
 
 	a.lockscreenSvc = lockscreen.New(a.cfg.LockscreenCfg, a.hyprlandSvc, a.onLockscreenEvent)
 	a.powersaveSvc = powersave.New(a.cfg.PowersaveTimeout, a.onPowerState)
@@ -277,6 +282,8 @@ func (a *App) Run(ctx context.Context) error {
 	a.guardSvc = guard.New(guardCfg)
 
 	// Guard: protect deployed hyprland config from tampering (except custom/).
+	// Generated files (monitors.lua, workspaces.lua) are excluded from
+	// source restoration — they are regenerated from live Hyprland data instead.
 	sourceDir := "/usr/share/snry-shell/configs/hypr/hyprland"
 	if info, err := os.Stat(sourceDir); err != nil || !info.IsDir() {
 		// Fallback: use repo configs during development
@@ -285,6 +292,21 @@ func (a *App) Run(ctx context.Context) error {
 	hlGuardCfg := guard.Config{
 		WatchDir:  filepath.Join(configDir, "hypr", "hyprland"),
 		SourceDir: sourceDir,
+		Excludes:  []string{"monitors.lua", "workspaces.lua"},
+		Regenerate: func(rel string) error {
+			managerCfg := manager.Config{
+				RepoRoot: a.repoRoot(),
+			}
+			managerCfg.XDG.ConfigHome = configDir
+			switch rel {
+			case "monitors.lua":
+				return manager.GenerateMonitorsLua(managerCfg, a.hyprlandSvc)
+			case "workspaces.lua":
+				return manager.GenerateWorkspacesLua(managerCfg, a.hyprlandSvc)
+			default:
+				return nil
+			}
+		},
 	}
 	a.hlGuardSvc = guard.New(hlGuardCfg)
 
@@ -318,23 +340,15 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runService(ctx, "darkmode", a.darkmodeSvc) })
 	wg.Go(func() { a.runService(ctx, "guard", a.guardSvc) })
 	wg.Go(func() { a.runService(ctx, "hlguard", a.hlGuardSvc) })
-	wg.Go(func() {
+
+	// Initial setup: bind keys, generate config files, then seed any that are missing.
+	go func() {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
 		defer cleanup()
 		a.regenerateConfigs()
-		// Periodically regenerate generated configs
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				a.regenerateConfigs()
-			}
-		}
-	})
+		a.hlGuardSvc.EnsureGenerated()
+	}()
 
 	<-ctx.Done()
 	log.Printf("shutting down...")
@@ -855,6 +869,42 @@ func (a *App) regenerateConfigs() {
 	}
 	if err := manager.GenerateWorkspacesLua(cfg, a.hyprlandSvc); err != nil {
 		log.Printf("[app] generate workspaces.lua: %v", err)
+	}
+}
+
+// hyprlandEmitFunc returns a wrapper around the socket emitter that detects
+// monitor topology changes and triggers regeneration of monitors.lua and
+// workspaces.lua. This replaces the old 5-minute polling ticker.
+func (a *App) hyprlandEmitFunc(emit func(map[string]any)) func(map[string]any) {
+	return func(m map[string]any) {
+		// Always forward the event to socket clients.
+		emit(m)
+
+		// Detect monitor topology changes for reactive config regeneration.
+		if m["event"] != "hyprland_data" {
+			return
+		}
+		data, ok := m["data"].(map[string]any)
+		if !ok {
+			return
+		}
+		mons, ok := data["monitors"].([]map[string]any)
+		if !ok || len(mons) == 0 {
+			return
+		}
+
+		// Hash monitor topology (name + resolution) to detect real changes.
+		h := fnv.New64a()
+		for _, m := range mons {
+			fmt.Fprintf(h, "%v|%v|%v|%v", m["name"], m["width"], m["height"], m["refreshRate"])
+		}
+		newHash := h.Sum64()
+		if newHash == a.lastMonitorHash {
+			return // no topology change
+		}
+		a.lastMonitorHash = newHash
+
+		go a.regenerateConfigs()
 	}
 }
 

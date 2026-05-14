@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -16,6 +17,16 @@ import (
 type Config struct {
 	WatchDir  string // directory to watch (e.g. ~/.config/quickshell/ii/)
 	SourceDir string // source directory to restore from (filesystem); empty = use embedded FS
+
+	// Excludes lists relative paths (forward-slash, e.g. "monitors.lua") that
+	// should NOT be restored from SourceDir. Instead, the Regenerate callback
+	// is invoked so the caller can rebuild the file from live data.
+	Excludes []string
+
+	// Regenerate is called when an excluded file is modified or created.
+	// The rel argument is the forward-slash relative path within WatchDir.
+	// If nil, excluded files are simply left untouched (not restored, not removed).
+	Regenerate func(rel string) error
 }
 
 type Service struct {
@@ -89,10 +100,30 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 
-// restoreFile restores a single file from the source (embedded FS or filesystem).
+// isExcluded returns true if the relative path matches an entry in Excludes.
+func (s *Service) isExcluded(rel string) bool {
+	normalized := filepath.ToSlash(rel)
+	return slices.Contains(s.cfg.Excludes, normalized)
+}
+
+// restoreFile restores a single file from the source (embedded FS or filesystem),
+// or delegates to the Regenerate callback for excluded (generated) files.
 func (s *Service) restoreFile(deployedPath string) {
 	rel, err := filepath.Rel(s.cfg.WatchDir, deployedPath)
 	if err != nil {
+		return
+	}
+
+	// Generated files: regenerate instead of restoring from source.
+	if s.isExcluded(rel) {
+		if s.cfg.Regenerate != nil {
+			log.Printf("guard: regenerating excluded file: %s", rel)
+			if err := s.cfg.Regenerate(filepath.ToSlash(rel)); err != nil {
+				log.Printf("guard: failed to regenerate %s: %v", rel, err)
+			}
+		} else {
+			log.Printf("guard: leaving excluded file untouched: %s", rel)
+		}
 		return
 	}
 
@@ -121,6 +152,23 @@ func (s *Service) restoreFile(deployedPath string) {
 		return
 	}
 	log.Printf("guard: restored modified file: %s", rel)
+}
+
+// EnsureGenerated writes generated files that don't exist yet on disk.
+// This should be called on startup to seed monitors.lua and workspaces.lua
+// before the guard starts watching.
+func (s *Service) EnsureGenerated() {
+	for _, rel := range s.cfg.Excludes {
+		path := filepath.Join(s.cfg.WatchDir, rel)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			if s.cfg.Regenerate != nil {
+				log.Printf("guard: generating missing file: %s", rel)
+				if err := s.cfg.Regenerate(rel); err != nil {
+					log.Printf("guard: failed to generate %s: %v", rel, err)
+				}
+			}
+		}
+	}
 }
 
 // addWatchRecursive adds a watch on dir and all existing subdirectories.
