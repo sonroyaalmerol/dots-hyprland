@@ -2,8 +2,8 @@
 -- Lines ending with `# [hidden]` won't be shown on cheatsheet
 -- Lines starting with #! are section headings
 
--- DO NOT REMOVE THIS EXEC OR YOU WON'T BE ABLE TO USE ANY KEYBIND
-hl.exec_cmd("hyprctl dispatch submap global")
+-- DO NOT REMOVE OR ALL KEYBINDS BREAK
+hl.dispatch(hl.dsp.submap("global"))
 -- This is required for catchall to work
 hl.define_submap("global", function()
 
@@ -196,9 +196,9 @@ hl.define_submap("global", function()
 	hl.bind("CTRL + SUPER + Down", hl.dsp.focus({ workspace = "r+5" })) -- [hidden]
 
 	-- Virtual machines
-	hl.bind("SUPER + ALT + F1", hl.dsp.exec_cmd("notify-send 'Entered Virtual Machine submap' 'Keybinds disabled. Hit Super+Alt+F1 to escape' -a 'Hyprland' && hyprctl dispatch submap virtual-machine")) -- Disable keybinds
+	hl.bind("SUPER + ALT + F1", hl.dsp.exec_cmd("notify-send 'Entered Virtual Machine submap' 'Keybinds disabled. Hit Super+Alt+F1 to escape' -a 'Hyprland' && hyprctl dispatch 'hl.dsp.submap(\"virtual-machine\")'")) -- Disable keybinds
 	hl.define_submap("virtual-machine", function()
-		hl.bind("SUPER + ALT + F1", hl.dsp.exec_cmd("notify-send 'Exited Virtual Machine submap' 'Keybinds re-enabled' -a 'Hyprland' && hyprctl dispatch submap global")) -- [hidden]
+		hl.bind("SUPER + ALT + F1", hl.dsp.exec_cmd("notify-send 'Exited Virtual Machine submap' 'Keybinds re-enabled' -a 'Hyprland' && hyprctl dispatch 'hl.dsp.submap(\"global\")'")) -- [hidden]
 	end)
 
 	-- Session
