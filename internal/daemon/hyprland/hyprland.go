@@ -108,11 +108,11 @@ func querySocket(cmd string) ([]byte, error) {
 // Input format: "Hyprland 0.55.1, built from branch main at commit ..."
 func parseVersion(output string) Version {
 	const prefix = "Hyprland "
-	i := strings.Index(output, prefix)
-	if i < 0 {
+	_, after, ok := strings.Cut(output, prefix)
+	if !ok {
 		return v0_55
 	}
-	s := output[i+len(prefix):]
+	s := after
 	major, minor := 0, 0
 	// Parse major
 	for len(s) > 0 && s[0] >= '0' && s[0] <= '9' {
@@ -232,8 +232,16 @@ func (s *Service) fetchWorkspacesAndUpdate() {
 	if err != nil {
 		log.Printf("[hyprland] fetchActiveWorkspace error: %v", err)
 	}
+	// Also refresh monitors — each monitor's activeWorkspace changes on workspace switch.
+	m, err := fetchMonitors()
+	if err != nil {
+		log.Printf("[hyprland] fetchMonitors error: %v", err)
+	}
 	s.mu.Lock()
 	s.workspaces = ws
+	if m != nil {
+		s.monitors = m
+	}
 	if aw != nil {
 		s.activeWorkspace = aw
 	}

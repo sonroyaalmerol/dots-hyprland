@@ -8,7 +8,6 @@ import QtQuick
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import Quickshell.Widgets
 import Qt5Compat.GraphicalEffects
 
@@ -16,12 +15,13 @@ Item {
     id: root
     property bool vertical: false
     property bool borderless: Config.options.bar.borderless
-    readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
+    readonly property string screenName: root.QsWindow.window?.screen?.name ?? ""
+    readonly property var monitorData: HyprlandData.monitors.find(m => m.name === screenName)
     readonly property Toplevel activeWindow: ToplevelManager.activeToplevel
     // Avoid lock-screen temp workspace (2147483646+) leaking into UI.
     // Fall back to 1 for any workspace outside normal range (1-100).
     readonly property int effectiveActiveWorkspaceId: {
-        const raw = monitor?.activeWorkspace?.id ?? 1
+        const raw = monitorData?.activeWorkspace?.id ?? 1
         return (raw >= 1 && raw <= 100) ? raw : 1
     }
     
@@ -67,21 +67,18 @@ Item {
         workspaceOccupied = Array.from({ length: root.workspacesShown }, (_, i) => {
             const targetId = workspaceGroup * root.workspacesShown + i + 1
             if (targetId > maxWsId) return false
-            return Hyprland.workspaces.values.some(ws => ws.id === targetId)
+            return HyprlandData.workspaceIds.includes(targetId)
         })
     }
 
     // Occupied workspace updates
     Component.onCompleted: updateWorkspaceOccupied()
     Connections {
-        target: Hyprland.workspaces
-        function onValuesChanged() {
+        target: DaemonSocket
+        function onHyprWorkspacesChanged() {
             updateWorkspaceOccupied();
         }
-    }
-    Connections {
-        target: Hyprland
-        function onFocusedWorkspaceChanged() {
+        function onHyprMonitorsChanged() {
             updateWorkspaceOccupied();
         }
     }
