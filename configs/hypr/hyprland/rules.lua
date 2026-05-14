@@ -49,13 +49,13 @@ hl.window_rule({ match = { title = ".*minecraft.*" }, immediate = true })
 hl.window_rule({ match = { class = "^(steam_app).*" }, immediate = true })
 
 -- Fix Jetbrain IDEs focus/rerendering problem
-hl.window_rule({ match = { class = "^jetbrains-.*$", float = 1, title = "^$|^\\s$|^win\\d+$" }, no_initial_focus = true })
+hl.window_rule({ match = { class = "^jetbrains-.*$", float = true, title = "^$|^\\s$|^win\\d+$" }, no_initial_focus = true })
 
 -- No shadow for tiled windows
-hl.window_rule({ match = { float = 0 }, no_shadow = true })
+hl.window_rule({ match = { float = false }, no_shadow = true })
 
 -- Workspace rules
-hl.workspace_rule({ workspace = "special:special", gapsout = 30 })
+hl.workspace_rule({ workspace = "special:special", gaps_out = 30 })
 
 -- Layer rules
 hl.layer_rule({ match = { namespace = ".*" }, xray = true })

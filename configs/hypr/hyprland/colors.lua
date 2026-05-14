@@ -20,4 +20,4 @@ hl.config({
 -- For now, keep as exec commands until hyprbars supports Lua natively.
 
 -- Pinned window border color
-hl.window_rule({ match = { pin = 1 }, border_color = { "rgba(FFB2BCAA)", "rgba(FFB2BC77)" } })
+hl.window_rule({ match = { pin = true }, border_color = "rgba(FFB2BCAA) rgba(FFB2BC77)" })
