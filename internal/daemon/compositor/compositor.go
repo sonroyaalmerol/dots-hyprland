@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,12 +19,18 @@ import (
 // available (or ctx is cancelled). It returns the HYPRLAND_INSTANCE_SIGNATURE
 // that should be set in the environment for subsequent Hyprland IPC calls.
 //
-// If HYPRLAND_INSTANCE_SIGNATURE is already set (compositor already running),
-// Launch is a no-op and returns the existing signature immediately.
+// If HYPRLAND_INSTANCE_SIGNATURE is already set AND the compositor's socket is
+// reachable, Launch is a no-op and returns the existing signature immediately.
+// If the signature is stale (socket unreachable), it is cleared and Hyprland
+// is relaunched.
 func Launch(ctx context.Context) (string, error) {
-	// If Hyprland is already running, just return its instance signature.
+	// If Hyprland is already running and reachable, just return its instance signature.
 	if sig := os.Getenv("HYPRLAND_INSTANCE_SIGNATURE"); sig != "" {
-		return sig, nil
+		if sigAlive(sig) {
+			return sig, nil
+		}
+		log.Printf("[compositor] stale HYPRLAND_INSTANCE_SIGNATURE=%q (socket unreachable), clearing", sig)
+		os.Unsetenv("HYPRLAND_INSTANCE_SIGNATURE")
 	}
 
 	// Launch start-hyprland as a subprocess.
@@ -121,6 +128,22 @@ func waitForSocket(ctx context.Context, runtimeDir string) (string, error) {
 			}
 		}
 	}
+}
+
+// sigAlive checks whether the Hyprland compositor is reachable by testing
+// its IPC socket.
+func sigAlive(sig string) bool {
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
+	}
+	sockPath := filepath.Join(runtimeDir, "hypr", sig, ".socket.sock")
+	conn, err := net.Dial("unix", sockPath)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 // detectWaylandDisplay scans runtimeDir for wayland-N sockets created by
