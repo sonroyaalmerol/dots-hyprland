@@ -70,73 +70,6 @@ func Autoscale(ctx context.Context, hl hyprland.API) error {
 	return nil
 }
 
-// getMonitorConfigPath returns the likely hyprland config path.
-func getMonitorConfigPath() string {
-	configHome := os.Getenv("XDG_CONFIG_HOME")
-	if configHome == "" {
-		home, _ := os.UserHomeDir()
-		configHome = home + "/.config"
-	}
-	luaPath := configHome + "/hypr/hyprland/general.lua"
-	if _, err := os.Stat(luaPath); err == nil {
-		return luaPath
-	}
-	return configHome + "/hypr/hyprland/general.conf"
-}
-
-// PersistMonitorConfig writes monitor config lines to general.conf.
-func PersistMonitorConfig(monitors []monitor) error {
-	path := getMonitorConfigPath()
-	var lines []string
-	for _, m := range monitors {
-		idealScale := math.Round(math.Max(1.0, float64(m.Height)/1080.0)*4) / 4.0
-		pos := fmt.Sprintf("%dx%d", m.X, m.Y)
-		lines = append(lines, fmt.Sprintf("monitor=%s,%dx%d,%s,%.2f",
-			m.Name, m.Width, m.Height, pos, idealScale))
-	}
-
-	// Read existing content
-	data, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
-
-	// Replace existing monitor= lines or append
-	configLine := strings.Join(lines, "\n")
-	existing := string(data)
-	if strings.Contains(existing, "monitor=") {
-		// Replace first monitor= line and remove others
-		linesSlice := strings.Split(existing, "\n")
-		var newLines []string
-		monitorWritten := false
-		for _, line := range linesSlice {
-			if strings.HasPrefix(strings.TrimSpace(line), "monitor=") {
-				if !monitorWritten {
-					newLines = append(newLines, strings.Split(configLine, "\n")...)
-					monitorWritten = true
-				}
-				continue
-			}
-			newLines = append(newLines, line)
-		}
-		if !monitorWritten {
-			newLines = append(newLines, strings.Split(configLine, "\n")...)
-		}
-		existing = strings.Join(newLines, "\n")
-	} else {
-		if existing != "" && !strings.HasSuffix(existing, "\n") {
-			existing += "\n"
-		}
-		existing += configLine + "\n"
-	}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	fmt.Printf("  Writing monitor config to %s\n", path)
-	return os.WriteFile(path, []byte(existing), 0o644)
-}
-
 // modeInfo holds parsed resolution and refresh rate from an available mode string.
 type modeInfo struct {
 	width       int
@@ -182,6 +115,19 @@ func bestMode(modes []string) modeInfo {
 	return best
 }
 
+// formatRefresh formats a resolution+refresh as a Hyprland mode string.
+// Integer refresh rates omit the decimal (e.g. "@60" not "@60.00").
+func formatRefresh(w, h int, rr float64) string {
+	s := strconv.FormatFloat(rr, 'f', -1, 64)
+	return fmt.Sprintf("%dx%d@%s", w, h, s)
+}
+
+// formatScale formats a scale factor, omitting unnecessary trailing zeros.
+// E.g. 1.0 → "1", 1.25 → "1.25", 2.0 → "2".
+func formatScale(s float64) string {
+	return strconv.FormatFloat(s, 'f', -1, 64)
+}
+
 // GenerateMonitorsLua detects connected monitors via hyprctl and writes a
 // monitors.lua file with optimal resolution and refresh rate for each display.
 // If the file already exists, it is regenerated only if the monitor topology
@@ -217,28 +163,30 @@ func GenerateMonitorsLua(cfg Config, hl hyprland.API) error {
 		idealScale := math.Round(math.Max(1.0, float64(m.Height)/1080.0)*4) / 4.0
 		idealScale = math.Round(idealScale*100) / 100
 
-		mode := fmt.Sprintf("%dx%d@%.2f", m.Width, m.Height, m.RefreshRate)
+		mode := formatRefresh(m.Width, m.Height, m.RefreshRate)
 
 		// Use available modes to find the best resolution + refresh rate
 		if len(m.AvailableModes) > 0 {
 			best := bestMode(m.AvailableModes)
 			if best.width > 0 {
-				mode = fmt.Sprintf("%dx%d@%.0f", best.width, best.height, best.refreshRate)
+				mode = formatRefresh(best.width, best.height, best.refreshRate)
 				idealScale = math.Round(math.Max(1.0, float64(best.height)/1080.0)*4) / 4.0
 				idealScale = math.Round(idealScale*100) / 100
 			}
 		}
 
 		pos := fmt.Sprintf("%dx%d", m.X, m.Y)
+		scaleStr := formatScale(idealScale)
 
-		fmt.Fprintf(&b, "hl.monitor({ output = %q, mode = %q, position = %q, scale = %.2f",
-			m.Name, mode, pos, idealScale)
+		fmt.Fprintf(&b, "hl.monitor({ output = %q, mode = %q, position = %q, scale = %s",
+			m.Name, mode, pos, scaleStr)
 
 		if m.Transform != 0 {
-			transforms := []string{"normal", "90", "180", "270", "flipped", "flipped-90", "flipped-180", "flipped-270"}
-			if int(m.Transform) < len(transforms) {
-				fmt.Fprintf(&b, ", transform = %q", transforms[m.Transform])
-			}
+			fmt.Fprintf(&b, ", transform = %d", m.Transform)
+		}
+
+		if m.VRR {
+			b.WriteString(", vrr = 1")
 		}
 
 		b.WriteString(" })\n")
