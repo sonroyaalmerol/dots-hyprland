@@ -1805,4 +1805,3 @@ func (a *App) editLuaConfig(filePath string, setArgs [][2]string, resetKeys []st
 
 	os.WriteFile(filePath, []byte(content), 0644)
 }
-

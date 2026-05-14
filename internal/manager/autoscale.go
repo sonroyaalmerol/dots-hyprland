@@ -231,13 +231,13 @@ func GenerateMonitorsLua(cfg Config, hl hyprland.API) error {
 
 		pos := fmt.Sprintf("%dx%d", m.X, m.Y)
 
-		b.WriteString(fmt.Sprintf("hl.monitor({ output = %q, mode = %q, position = %q, scale = %.2f",
-			m.Name, mode, pos, idealScale))
+		fmt.Fprintf(&b, "hl.monitor({ output = %q, mode = %q, position = %q, scale = %.2f",
+			m.Name, mode, pos, idealScale)
 
 		if m.Transform != 0 {
 			transforms := []string{"normal", "90", "180", "270", "flipped", "flipped-90", "flipped-180", "flipped-270"}
 			if int(m.Transform) < len(transforms) {
-				b.WriteString(fmt.Sprintf(", transform = %q", transforms[m.Transform]))
+				fmt.Fprintf(&b, ", transform = %q", transforms[m.Transform])
 			}
 		}
 
