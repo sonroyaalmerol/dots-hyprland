@@ -138,6 +138,7 @@ SCRIPT
 	install -dm755 "$pkgdir/usr/share/snry-shell"
 	cp -a configs data frontend "$pkgdir/usr/share/snry-shell/"
 
-	# Install systemd user unit
+	# Install systemd user units
 	install -Dm644 configs/systemd/user/snry-daemon.service "$pkgdir/usr/lib/systemd/user/snry-daemon.service"
+	install -Dm644 configs/systemd/user/snry-greeter.service "$pkgdir/usr/lib/systemd/user/snry-greeter.service"
 }

@@ -68,10 +68,11 @@ type Config struct {
 	WarpCfg          warp.Config
 	GamemodeCfg      gamemode.Config
 	DarkmodeCfg      darkmode.Config
+	GreeterMode      bool // true = start in greeter phase (lock screen only)
 }
 
 func DefaultConfig() Config {
-	return Config{
+	cfg := Config{
 		SocketPath:       os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.sock",
 		LockPath:         os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.lock",
 		QuickshellCfg:    quickshell.DefaultConfig(),
@@ -93,6 +94,51 @@ func DefaultConfig() Config {
 		GamemodeCfg:      gamemode.DefaultConfig(),
 		DarkmodeCfg:      darkmode.DefaultConfig(),
 	}
+
+	// Resolve config paths for Quickshell.
+	// ConfigPath = full shell, GreeterPath = lock-screen-only.
+	cfg.QuickshellCfg.ConfigPath = resolveQuickshellConfigPath()
+	cfg.QuickshellCfg.GreeterPath = resolveQuickshellGreeterPath()
+
+	return cfg
+}
+
+// resolveQuickshellConfigPath finds the full shell config directory.
+func resolveQuickshellConfigPath() string {
+	// 1. System package install
+	systemPath := "/usr/share/snry-shell/frontend/ii"
+	if _, err := os.Stat(systemPath + "/shell.qml"); err == nil {
+		return systemPath
+	}
+
+	// 2. Embedded frontend cache
+	cacheDir := os.Getenv("XDG_CACHE_HOME")
+	if cacheDir == "" {
+		cacheDir = filepath.Join(os.Getenv("HOME"), ".cache")
+	}
+	return cacheDir + "/snry-shell/embedded-frontend/ii"
+}
+
+// resolveQuickshellGreeterPath finds the greeter QML file.
+func resolveQuickshellGreeterPath() string {
+	// 1. System package install
+	systemPath := "/usr/share/snry-shell/frontend/ii/greeter.qml"
+	if _, err := os.Stat(systemPath); err == nil {
+		return systemPath
+	}
+
+	// 2. Source repo
+	if _, err := os.Stat("frontend/ii/greeter.qml"); err == nil {
+		abs, _ := filepath.Abs("frontend/ii/greeter.qml")
+		return abs
+	}
+
+	// 3. Embedded frontend cache
+	cacheDir := os.Getenv("XDG_CACHE_HOME")
+	if cacheDir == "" {
+		cacheDir = filepath.Join(os.Getenv("HOME"), ".cache")
+	}
+	return cacheDir + "/snry-shell/embedded-frontend/ii/greeter.qml"
 }
 
 // ── State event ───────────────────────────────────────────────────────────────
@@ -153,8 +199,10 @@ type App struct {
 	lastMonitorHash uint64
 
 	// Canonical state (accessed only from stateLoop goroutine).
+	greeterMode  bool // true when running in display manager greeter phase
 	hwTablet     bool
 	textFocus    bool
+	sessionReady bool // true after first successful auth in greeter mode
 	screenLocked bool
 	userMode     int32 // 0=auto, 1=tablet, 2=desktop
 	oskVisible   bool
@@ -245,6 +293,13 @@ func (a *App) Run(ctx context.Context) error {
 
 	a.resourcesSvc = resources.New(a.cfg.ResourcesCfg, a.socketServer.Emitter().Emit)
 	a.qsSvc = quickshell.New(a.cfg.QuickshellCfg)
+
+	// If greeter mode is enabled, start Quickshell in greeter phase.
+	a.greeterMode = a.cfg.GreeterMode
+	if a.greeterMode {
+		a.qsSvc.SetPhase(quickshell.PhaseGreeter)
+		log.Printf("[app] starting in greeter mode (display manager)")
+	}
 
 	isSuspended := func() bool {
 		return a.powersaveSvc != nil && a.powersaveSvc.IsSuspended()
@@ -595,6 +650,14 @@ func (a *App) EmitSnapshot(emit func(map[string]any)) {
 		"event": "state",
 		"data":  a.buildStateData(),
 	})
+	// Also emit greeter status so new QML clients know the phase.
+	emit(map[string]any{
+		"event": "greeter_status",
+		"data": map[string]any{
+			"greeterMode":  a.greeterMode,
+			"sessionReady": a.sessionReady,
+		},
+	})
 }
 
 // ── User mode persistence ─────────────────────────────────────────────────────
@@ -777,12 +840,39 @@ func (a *App) onLockscreenEvent(t lockscreen.EventType, data any) {
 				"message":   r.Message,
 			},
 		})
+
+		// Greeter → Session transition on first successful auth.
+		if r.Success && a.greeterMode && !a.sessionReady {
+			a.sessionReady = true
+			log.Printf("[app] greeter auth successful, transitioning to session phase")
+			go a.transitionGreeterToSession()
+		}
 	case lockscreen.EventLockoutTick:
 		a.socketServer.Emitter().Emit(map[string]any{
 			"event": "lockout_tick",
 			"data":  map[string]any{"remainingSeconds": data.(int)},
 		})
 	}
+}
+
+// transitionGreeterToSession handles the switch from greeter to full session.
+// It gives the lock screen QML a moment to animate the unlock, then restarts
+// Quickshell with the full shell config.
+func (a *App) transitionGreeterToSession() {
+	// Small delay to let the lock screen play its unlock animation.
+	time.Sleep(500 * time.Millisecond)
+
+	if a.qsSvc != nil {
+		a.qsSvc.TransitionToSession()
+	}
+
+	// Emit a session_ready event so the full shell knows it was a greeter transition.
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "session_ready",
+		"data":  map[string]any{"fromGreeter": true},
+	})
+
+	log.Printf("[app] greeter → session transition complete")
 }
 
 func (a *App) onPowerState(suspended bool) {

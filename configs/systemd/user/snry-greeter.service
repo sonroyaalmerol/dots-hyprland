@@ -1,0 +1,15 @@
+[Unit]
+Description=Snry Shell Display Manager (Greeter)
+Documentation=https://github.com/sonroyaalmerol/snry-shell
+After=systemd-user-sessions.service
+Wants=snry-daemon.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/snry-daemon daemon --greeter
+Restart=on-failure
+RestartSec=3
+KillMode=process
+
+[Install]
+WantedBy=default.target
