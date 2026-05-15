@@ -62,9 +62,9 @@ Audio, Bluetooth, Dark Mode, EasyEffects, Game Mode, Night Light, Network, Notif
 
 Battery, brightness, clipboard (cliphist), compositor (Hyprland IPC), conflict killer, dark mode, EasyEffects, Game Mode, Hyprland keybinds, Hyprsunset, XKB layout, idle detection, on-screen keyboard, lock screen, network (NM), power saving, resource monitor, session warnings, system info, tablet mode, updates, weather, keyring (gnome-keyring/secret-tool), polkit
 
-## Smart Config Sync
+## Config Sync
 
-snry-daemon includes a config sync engine that handles updates intelligently. Strategies are defined in [`internal/syncengine/categorize.go`](internal/syncengine/categorize.go):
+`snry sync` (formerly `snry-daemon files`) deploys config files from the embedded source to XDG directories. The sync engine handles updates intelligently. Strategies are defined in [`internal/syncengine/categorize.go`](internal/syncengine/categorize.go):
 
 | Strategy         | For files                                                                 | Behavior                                          |
 | ---------------- | ------------------------------------------------------------------------- | ------------------------------------------------- |
@@ -132,6 +132,7 @@ Full keybind list is available in-app via `Super + /`.
 | `Super + Shift + B`       | Previous track                  |
 | **Apps**                  |                                 |
 | `Super + Return`          | Terminal                        |
+| `Super + T`               | File manager                    |
 | `Super + E`               | File manager                    |
 | `Super + W`               | Browser                         |
 | `Super + C`               | Code editor                     |
@@ -224,7 +225,7 @@ User config lives at `~/.config/snry-shell/config.json`. The settings GUI is ava
 
 ```
 cmd/snry-daemon/         Entrypoint (daemon + CLI)
-configs/                 Dotfiles synced by snry-daemon setup
+configs/                 Dotfiles synced by `snry sync`
   bash/                  Shell configuration
   ghostty/               Terminal config
   hypr/                  Hyprland, hyprlock, hypridle configs
