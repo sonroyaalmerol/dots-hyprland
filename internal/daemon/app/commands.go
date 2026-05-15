@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
+	imgPkg "github.com/sonroyaalmerol/snry-shell-qs/internal/image"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/wallpaper"
 )
 
@@ -481,6 +482,12 @@ func dispatchCommand(a *App, line string) {
 		go a.handleApplyTerminalColors()
 	case "switch-wallpaper":
 		go a.handleSwitchWallpaper(fields[1:])
+	case "find-regions":
+		go a.handleFindRegions(fields[1:])
+	case "least-busy-region":
+		go a.handleLeastBusyRegion(fields[1:])
+	case "text-color":
+		go a.handleTextColor(fields[1:])
 	case "hyprconfig-edit":
 		if len(fields) < 3 {
 			return
@@ -994,6 +1001,11 @@ func (a *App) handleGenerateThumbnails(sizeName, mode, target string) {
 			}
 		}
 	}
+
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "thumbnail_generated",
+		"data":  map[string]any{"directory": target, "size": sizeName},
+	})
 }
 
 func (a *App) handleCapslockCheck() {
@@ -1892,4 +1904,232 @@ func (a *App) editLuaConfig(filePath string, setArgs [][2]string, resetKeys []st
 	}
 
 	os.WriteFile(filePath, []byte(content), 0644)
+}
+
+func (a *App) handleFindRegions(args []string) {
+	params := imgPkg.DefaultFindRegionsParams("")
+	params.Hyprctl = true
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--image", "-i":
+			if i+1 < len(args) {
+				params.ImagePath = args[i+1]
+				i++
+			}
+		case "--hyprctl":
+			params.Hyprctl = true
+		case "--single":
+			params.Single = true
+		case "--quality":
+			params.Quality = true
+		case "--min-width":
+			if i+1 < len(args) {
+				params.MinWidth, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--min-height":
+			if i+1 < len(args) {
+				params.MinHeight, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--max-width":
+			if i+1 < len(args) {
+				v, _ := strconv.Atoi(args[i+1])
+				params.MaxWidth = &v
+				i++
+			}
+		case "--max-height":
+			if i+1 < len(args) {
+				v, _ := strconv.Atoi(args[i+1])
+				params.MaxHeight = &v
+				i++
+			}
+		case "--k":
+			if i+1 < len(args) {
+				params.K, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--min-size":
+			if i+1 < len(args) {
+				params.MinSize, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--sigma":
+			if i+1 < len(args) {
+				params.Sigma, _ = strconv.ParseFloat(args[i+1], 64)
+				i++
+			}
+		case "--resize-factor":
+			if i+1 < len(args) {
+				params.ResizeFactor, _ = strconv.ParseFloat(args[i+1], 64)
+				i++
+			}
+		case "--debug-output", "-do":
+			if i+1 < len(args) {
+				params.DebugOutput = args[i+1]
+				i++
+			}
+		}
+	}
+
+	if params.ImagePath == "" {
+		log.Printf("[image] find-regions: no image path specified")
+		return
+	}
+
+	result, err := imgPkg.FindRegionsJSON(params)
+	if err != nil {
+		log.Printf("[image] find-regions error: %v", err)
+		return
+	}
+
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "find-regions",
+		"data":  map[string]any{"result": result, "imagePath": params.ImagePath},
+	})
+}
+
+func (a *App) handleLeastBusyRegion(args []string) {
+	params := imgPkg.DefaultLeastBusyRegionParams("")
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--image", "-i":
+			// positional arg: consume tokens until next flag
+			i++
+			var parts []string
+			for i < len(args) && !strings.HasPrefix(args[i], "-") {
+				parts = append(parts, args[i])
+				i++
+			}
+			if len(parts) > 0 {
+				params.ImagePath = strings.Join(parts, " ")
+			}
+			i--
+		case "--width":
+			if i+1 < len(args) {
+				params.RegionWidth, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--height":
+			if i+1 < len(args) {
+				params.RegionHeight, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--screen-width":
+			if i+1 < len(args) {
+				params.ScreenWidth, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--screen-height":
+			if i+1 < len(args) {
+				params.ScreenHeight, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--stride":
+			if i+1 < len(args) {
+				params.Stride, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--screen-mode":
+			if i+1 < len(args) {
+				params.ScreenMode = args[i+1]
+				i++
+			}
+		case "--horizontal-padding", "-hp":
+			if i+1 < len(args) {
+				params.HorizontalPadding, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--vertical-padding", "-vp":
+			if i+1 < len(args) {
+				params.VerticalPadding, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--busiest":
+			params.Busiest = true
+		case "--visual-output", "-v":
+			params.VisualOutput = true
+		}
+	}
+
+	if params.ImagePath == "" {
+		log.Printf("[image] least-busy-region: no image path specified")
+		return
+	}
+
+	result, err := imgPkg.FindLeastBusyRegionJSON(params)
+	if err != nil {
+		log.Printf("[image] least-busy-region error: %v", err)
+		return
+	}
+
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "least-busy-region",
+		"data":  map[string]any{"result": result, "imagePath": params.ImagePath},
+	})
+}
+
+func (a *App) handleTextColor(args []string) {
+	var imagePath string
+	var cropX, cropY, cropW, cropH int
+	hasCrop := false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--image", "-i":
+			if i+1 < len(args) {
+				imagePath = args[i+1]
+				i++
+			}
+		case "--crop-x":
+			if i+1 < len(args) {
+				cropX, _ = strconv.Atoi(args[i+1])
+				hasCrop = true
+				i++
+			}
+		case "--crop-y":
+			if i+1 < len(args) {
+				cropY, _ = strconv.Atoi(args[i+1])
+				hasCrop = true
+				i++
+			}
+		case "--crop-w", "--crop-width":
+			if i+1 < len(args) {
+				cropW, _ = strconv.Atoi(args[i+1])
+				hasCrop = true
+				i++
+			}
+		case "--crop-h", "--crop-height":
+			if i+1 < len(args) {
+				cropH, _ = strconv.Atoi(args[i+1])
+				hasCrop = true
+				i++
+			}
+		}
+	}
+
+	var result *imgPkg.TextColorResult
+	var err error
+
+	if imagePath != "" {
+		if hasCrop && cropW > 0 && cropH > 0 {
+			result, err = imgPkg.DetectTextColorFromPathCropped(imagePath, cropX, cropY, cropW, cropH)
+		} else {
+			result, err = imgPkg.DetectTextColorFromPath(imagePath)
+		}
+	} else {
+		result, err = imgPkg.DetectTextColorFromReader(os.Stdin)
+	}
+
+	if err != nil {
+		log.Printf("[image] text-color error: %v", err)
+		return
+	}
+
+	jsonResult, _ := json.Marshal(result)
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "text-color",
+		"data":  map[string]any{"result": string(jsonResult)},
+	})
 }

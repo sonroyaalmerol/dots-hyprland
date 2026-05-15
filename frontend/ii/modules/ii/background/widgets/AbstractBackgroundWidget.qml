@@ -61,42 +61,29 @@ AbstractWidget {
     function refreshPlacementIfNeeded() {
         if (!Config.ready) return;
         if (root.placementStrategy === "free" && !root.needsColText) return;
-        leastBusyRegionProc.wallpaperPath = root.wallpaperPath;
-        leastBusyRegionProc.running = false;
-        leastBusyRegionProc.running = true;
+        root.startLeastBusyRegion();
     }
-    Process {
-        id: leastBusyRegionProc
-        property string wallpaperPath: root.wallpaperPath
-        // TODO: make these less arbitrary
-        property int contentWidth: 300
-        property int contentHeight: 300
-        property int horizontalPadding: 200
-        property int verticalPadding: 200
-        command: [Quickshell.shellPath("scripts/images/least-busy-region-venv.sh") // Comments to force the formatter to break lines
-            , "--screen-width", Math.round(root.scaledScreenWidth) //
-            , "--screen-height", Math.round(root.scaledScreenHeight) //
-            , "--width", contentWidth //
-            , "--height", contentHeight //
-            , "--horizontal-padding", horizontalPadding //
-            , "--vertical-padding", verticalPadding //
-            , wallpaperPath //
-            , ...(root.placementStrategy === "mostBusy" ? ["--busiest"] : [])
-            // "--visual-output",
-        ]
-        stdout: StdioCollector {
-            id: leastBusyRegionOutputCollector
-            onStreamFinished: {
-                const output = leastBusyRegionOutputCollector.text;
-                // console.log("[Background] Least busy region output:", output)
-                if (output.length === 0) return;
-                const parsedContent = JSON.parse(output);
-                root.dominantColor = parsedContent.dominant_color || Appearance.colors.colPrimary;
-                if (root.placementStrategy === "free") return;
-                root.targetX = parsedContent.center_x * root.wallpaperScale - root.width / 2;
-                root.targetY  = parsedContent.center_y * root.wallpaperScale - root.height / 2;
-            }
+    Connections {
+        target: DaemonSocket
+        function onLeastBusyRegionResult(data) {
+            if (data.imagePath !== root.wallpaperPath) return
+            try {
+                const parsedContent = JSON.parse(data.result)
+                root.dominantColor = parsedContent.dominant_color || Appearance.colors.colPrimary
+                if (root.placementStrategy === "free") return
+                root.targetX = parsedContent.center_x * root.wallpaperScale - root.width / 2
+                root.targetY = parsedContent.center_y * root.wallpaperScale - root.height / 2
+            } catch (e) {}
         }
+    }
+    function startLeastBusyRegion() {
+        const args = "least-busy-region --screen-width " + Math.round(root.scaledScreenWidth)
+            + " --screen-height " + Math.round(root.scaledScreenHeight)
+            + " --width 300 --height 300"
+            + " --horizontal-padding 200 --vertical-padding 200"
+            + (root.placementStrategy === "mostBusy" ? " --busiest" : "")
+            + " --image " + root.wallpaperPath
+        DaemonSocket.sendCommand(args)
     }
 }
 

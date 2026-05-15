@@ -192,7 +192,7 @@ PanelWindow {
         screenshotDir: root.screenshotDir
         screenshotPath: root.screenshotPath
         onExited: (exitCode, exitStatus) => {
-            if (root.enableContentRegions) imageDetectionProcess.running = true;
+            if (root.enableContentRegions) root.startImageDetection();
             root.preparationDone = !checkRecordingProc.running;
         }
     }
@@ -218,22 +218,23 @@ PanelWindow {
         root.visible = true;
     }
 
-    Process {
-        id: imageDetectionProcess
-        command: ["bash", "-c", `${Directories.scriptPath}/images/find-regions-venv.sh ` 
-            + `--hyprctl ` 
-            + `--image '${StringUtils.shellSingleQuoteEscape(root.screenshotPath)}' ` 
-            + `--max-width ${Math.round(root.screen.width * root.falsePositivePreventionRatio)} ` 
-            + `--max-height ${Math.round(root.screen.height * root.falsePositivePreventionRatio)} `]
-        stdout: StdioCollector {
-            id: imageDimensionCollector
-            onStreamFinished: {
+    Connections {
+        target: DaemonSocket
+        function onFindRegionsResult(data) {
+            if (data.imagePath !== root.screenshotPath) return
+            try {
                 imageRegions = RegionFunctions.filterImageRegions(
-                    JSON.parse(imageDimensionCollector.text),
+                    JSON.parse(data.result),
                     root.windowRegions
                 );
-            }
+            } catch (e) {}
         }
+    }
+
+    function startImageDetection() {
+        const maxW = Math.round(root.screen.width * root.falsePositivePreventionRatio)
+        const maxH = Math.round(root.screen.height * root.falsePositivePreventionRatio)
+        DaemonSocket.sendCommand("find-regions --hyprctl --image " + root.screenshotPath + " --max-width " + maxW + " --max-height " + maxH)
     }
 
     function getScreenshotAction() {

@@ -157,6 +157,12 @@ Singleton {
 	function oskPin() { sendCommand("osk-pin") }
 	function oskUnpin() { sendCommand("osk-unpin") }
 
+	// Image analysis signals.
+	signal findRegionsResult(var data)
+	signal leastBusyRegionResult(var data)
+	signal textColorResult(var data)
+	signal thumbnailGenerated(var data)
+
 	function sendCommand(cmd) {
 		if (!daemonSocket.connected) {
 			return
@@ -411,6 +417,14 @@ Singleton {
 			root.fprintdAvailable = obj.data.available ?? false
 			root.fprintdEnrolled = obj.data.enrolled ?? false
 			fprintdResult(root.fprintdAvailable, root.fprintdEnrolled)
+		} else if (obj.event === "thumbnail_generated" && obj.data) {
+			thumbnailGenerated(obj.data)
+		} else if (obj.event === "find-regions" && obj.data) {
+			findRegionsResult(obj.data)
+		} else if (obj.event === "least-busy-region" && obj.data) {
+			leastBusyRegionResult(obj.data)
+		} else if (obj.event === "text-color" && obj.data) {
+			textColorResult(obj.data)
 		} else if (obj.event === "hyprconfig_value" && obj.data) {
 			hyprconfigValue(obj.data.key ?? "", obj.data.value ?? "")
 		}

@@ -12,6 +12,10 @@ require (
 )
 
 require (
+	github.com/chai2010/webp v1.4.0
+	github.com/disintegration/imaging v1.6.2
 	github.com/fsnotify/fsnotify v1.10.0
 	github.com/yuin/gopher-lua v1.1.2
 )
+
+require golang.org/x/image v0.0.0-20211028202545-6944b10bf410 // indirect

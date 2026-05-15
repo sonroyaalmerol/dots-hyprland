@@ -22,7 +22,7 @@ Item {
     required property string screenshotPath
 
     readonly property string wikiLink: "https://ii.clsty.link/en/ii-qs/02usage/#setting-it-up" // TODO: write a page for this
-    readonly property string textColorDetectionScriptPath: Quickshell.shellPath("scripts/images/text-color-venv.sh")
+    readonly property string wikiLink: "https://ii.clsty.link/en/ii-qs/02usage/#setting-it-up" // TODO: write a page for this
 
     property bool loading: true
     property var visionParagraphs: []
@@ -306,19 +306,25 @@ Item {
 
         Loader {
             active: ti.visible
-            sourceComponent: MultiTurnProcess {
-                Component.onCompleted: {
-                    runSequence([ //
-                        [ //
-                            "bash", "-c", //
-                            `magick ${StringUtils.shellSingleQuoteEscape(root.screenshotPath)} +repage -crop ${StringUtils.shellSingleQuoteEscape(ti.unscaledWidth)}x${StringUtils.shellSingleQuoteEscape(ti.unscaledHeight)}+${StringUtils.shellSingleQuoteEscape(ti.unscaledX)}+${StringUtils.shellSingleQuoteEscape(ti.unscaledY)} png:- | ${root.textColorDetectionScriptPath}`
-                        ],
-                        (out => {
-                            var colorData = JSON.parse(out);
-                            ti.color = ColorUtils.transparentize(colorData.background, 0.4);
-                            tiText.color = colorData.text;
-                        })
-                    ]);
+            sourceComponent: Component {
+                Item {
+                    Component.onCompleted: {
+                        DaemonSocket.sendCommand("text-color --image " + root.screenshotPath
+                            + " --crop-x " + Math.round(ti.unscaledX)
+                            + " --crop-y " + Math.round(ti.unscaledY)
+                            + " --crop-w " + Math.round(ti.unscaledWidth)
+                            + " --crop-h " + Math.round(ti.unscaledHeight))
+                    }
+                    Connections {
+                        target: DaemonSocket
+                        function onTextColorResult(data) {
+                            try {
+                                var colorData = typeof data.result === 'string' ? JSON.parse(data.result) : data.result
+                                ti.color = ColorUtils.transparentize(colorData.background, 0.4)
+                                tiText.color = colorData.text
+                            } catch (e) {}
+                        }
+                    }
                 }
             }
         }
