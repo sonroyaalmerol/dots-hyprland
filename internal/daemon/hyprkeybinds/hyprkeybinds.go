@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -138,10 +139,20 @@ func (s *Service) Reload() {
 		return
 	}
 
-	defaultPath := home + "/.config/hypr/hyprland/keybinds.lua"
-	defaultPathConf := home + "/.config/hypr/hyprland/keybinds.conf"
-	userPath := home + "/.config/hypr/custom/keybinds.lua"
-	userPathConf := home + "/.config/hypr/custom/keybinds.conf"
+	defaultPath := "/usr/share/snry-shell/configs/hypr/hyprland/keybinds.lua"
+	defaultPathConf := "/usr/share/snry-shell/configs/hypr/hyprland/keybinds.conf"
+	// Dev fallback: repo source
+	if _, err := os.Stat(defaultPath); err != nil {
+		if exe, err2 := os.Executable(); err2 == nil {
+			repoDefault := filepath.Join(filepath.Dir(exe), "..", "share", "snry-shell", "configs", "hypr", "hyprland", "keybinds.lua")
+			if _, err2 := os.Stat(repoDefault); err2 == nil {
+				defaultPath = repoDefault
+				defaultPathConf = filepath.Join(filepath.Dir(exe), "..", "share", "snry-shell", "configs", "hypr", "hyprland", "keybinds.conf")
+			}
+		}
+	}
+	userPath := home + "/.config/hypr/snry-override.lua"
+	userPathConf := home + "/.config/hypr/snry-override.conf"
 
 	// Prefer .lua, fall back to .conf
 	if _, err := os.Stat(defaultPath); err != nil {

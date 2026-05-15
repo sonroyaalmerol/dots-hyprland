@@ -58,7 +58,15 @@ func Launch(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("start-hyprland not found: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, bin)
+	// Determine the system config entry point.
+	systemConfig := systemHyprlandConfig()
+
+	args := []string{}
+	if systemConfig != "" {
+		args = append(args, "--", "--config", systemConfig)
+	}
+
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Env = os.Environ()
 	// Detach from the terminal so the compositor runs independently.
 	cmd.Stdin = nil
@@ -214,6 +222,31 @@ func ImportEnvironment(runtimeDir string) {
 	}
 
 	log.Printf("[compositor] imported WAYLAND_DISPLAY=%s DISPLAY=%s", wlDisplay, display)
+}
+
+// systemHyprlandConfig returns the path to the system-level Hyprland entry point
+// (hyprland.lua preferred, hyprland.conf fallback). Returns empty string if not found.
+func systemHyprlandConfig() string {
+	systemDir := "/usr/share/snry-shell/configs/hypr"
+
+	for _, name := range []string{"hyprland.lua", "hyprland.conf"} {
+		p := systemDir + "/" + name
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+
+	for _, root := range []string{".", ".."} {
+		for _, name := range []string{"hyprland.lua", "hyprland.conf"} {
+			p := root + "/configs/hypr/" + name
+			if _, err := os.Stat(p); err == nil {
+				abs, _ := filepath.Abs(p)
+				return abs
+			}
+		}
+	}
+
+	return ""
 }
 
 // detectWaylandDisplay scans runtimeDir for a wayland-N socket that is actually

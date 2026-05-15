@@ -2,9 +2,9 @@
 
 hl.on("hyprland.start", function()
 	-- Bar, wallpaper
-	hl.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send start-geoclue")
+	hl.exec_cmd(snry send start-geoclue")
 	-- QuickShell video wallpaper restore
-	hl.exec_cmd(os.getenv("HOME") .. "/.config/hypr/custom/scripts/__restore_video_wallpaper.sh")
+	hl.exec_cmd(snry send restore-video-wallpaper")
 
 	-- Core components
 	hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")

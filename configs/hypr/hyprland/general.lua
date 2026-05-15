@@ -1,5 +1,5 @@
 -- Monitor config is auto-generated in monitors.lua
--- To override, add hl.monitor() calls in custom/general.lua
+-- Override in ~/.config/hypr/snry-override.lua
 
 -- Gestures
 hl.config({

@@ -72,7 +72,7 @@ Battery, brightness, clipboard (cliphist), compositor (Hyprland IPC), conflict k
 | `merge-hyprland` | `hypr/hyprland/*.conf`                                                    | Section-aware merge (key-values + binds)          |
 | `merge-kv`       | `hyprlock.conf`, `hypridle.conf`, `fuzzel/*.ini`, `**/*.conf`, `**/*.ini` | Key-value level three-way merge                   |
 | `merge-section`  | `bash/bashrc`, `bash/bash_profile`, `bash/zprofile`                       | Merge only between `# >>> snry-shell >>>` markers |
-| `skip-if-exists` | `hypr/custom/*.lua`, `monitors.conf`, `workspaces.conf`                   | Only deploy on first install                      |
+| `skip-if-exists` | `hypr/monitors.lua`, `hypr/workspaces.lua`, `hypr/snry-override.lua`      | Only deploy on first install                      |
 | `template`       | `matugen/templates/*`                                                     | Render `{{.User}}`, `{{.Home}}`, etc., then merge |
 
 Template variables: `{{.User}}`, `{{.Home}}`, `{{.ConfigDir}}`, `{{.DataDir}}`, `{{.StateDir}}`, `{{.BinDir}}`, `{{.CacheDir}}`, `{{.RuntimeDir}}`, `{{.VenvPath}}`, `{{.Fontset}}`

@@ -130,7 +130,6 @@ type App struct {
 	networkSvc      *network.Service
 	gamemodeSvc     *gamemode.Service
 	guardSvc        *guard.Service
-	hlGuardSvc      *guard.Service
 	darkmodeSvc     *darkmode.Service
 	conflictSvc     *conflict.Service
 
@@ -327,22 +326,6 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	a.guardSvc = guard.New(guardCfg)
 
-	// Guard: protect deployed hyprland config from tampering (except custom/).
-	// Generated files (monitors.lua, workspaces.lua) are excluded from
-	// source restoration — they are regenerated from live Hyprland data instead.
-	sourceDir := "/usr/share/snry-shell/configs/hypr/hyprland"
-	if info, err := os.Stat(sourceDir); err != nil || !info.IsDir() {
-		// Fallback: use repo configs during development
-		sourceDir = filepath.Join(a.repoRoot(), "configs", "hypr", "hyprland")
-	}
-	hlGuardCfg := guard.Config{
-		WatchDir:   filepath.Join(configDir, "hypr", "hyprland"),
-		SourceDir:  sourceDir,
-		Excludes:   []string{"monitors.lua", "workspaces.lua"},
-		Regenerate: a.regenerateGeneratedConfig,
-	}
-	a.hlGuardSvc = guard.New(hlGuardCfg)
-
 	// Generate terminal theme files on startup if colors are available.
 	go a.handleApplyTerminalColors()
 
@@ -371,9 +354,8 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runService(ctx, "gamemode", a.gamemodeSvc) })
 	wg.Go(func() { a.runService(ctx, "darkmode", a.darkmodeSvc) })
 	wg.Go(func() { a.runService(ctx, "guard", a.guardSvc) })
-	wg.Go(func() { a.runService(ctx, "hlguard", a.hlGuardSvc) })
 
-	// Initial setup: bind keys, generate config files, then seed any that are missing.
+	// Initial setup: bind keys, generate config files.
 	go func() {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
@@ -383,7 +365,6 @@ func (a *App) Run(ctx context.Context) error {
 				log.Printf("[app] generate %s: %v", rel, err)
 			}
 		}
-		a.hlGuardSvc.EnsureGenerated()
 	}()
 
 	<-ctx.Done()
@@ -760,8 +741,8 @@ func (a *App) runQuickshell(ctx context.Context) {
 
 func (a *App) setupHyprlandSystemBinds() func() {
 	binds := []struct{ key, cmd string }{
-		{"XF86PowerOff", os.Getenv("HOME") + "/.local/bin/snry-daemon send power-button"},
-		{"switch:on:Lid Switch", os.Getenv("HOME") + "/.local/bin/snry-daemon send lid-close"},
+		{"XF86PowerOff", "snry send power-button"},
+		{"switch:on:Lid Switch", "snry send lid-close"},
 	}
 	for _, b := range binds {
 		if err := a.hyprlandSvc.BindKey(b.key, b.cmd, true); err != nil {

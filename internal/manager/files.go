@@ -126,6 +126,12 @@ func InstallSteps(cfg Config) []Step {
 			},
 		},
 		{
+			Name: "ensure-snry-symlink",
+			Fn: func(ctx context.Context) error {
+				return ensureSnrySymlink()
+			},
+		},
+		{
 			Name: "install-python-venv",
 			Fn: func(ctx context.Context) error {
 				return installPythonVenv(cfg)
@@ -290,19 +296,10 @@ func extractEmbeddedFrontend(cfg Config) (string, error) {
 func syncHyprland(cfg Config, hl hyprland.API) error {
 	deployDir := cfg.XDG.ConfigHome + "/hypr"
 
-	// 1. hyprland/ config dir — always overwrites every file
-	srcDir := cfg.ConfigsDir() + "/hypr/hyprland"
-	if _, err := os.Stat(srcDir); err != nil {
-		srcDir = cfg.RepoRoot + "/configs/hypr/hyprland"
-	}
-	if err := copyDirRecursive(srcDir, deployDir+"/hyprland", false); err != nil {
-		return fmt.Errorf("copy hyprland: %w", err)
-	}
-
-	// 2. Top-level config files
-	confFiles := []string{"hyprland.lua", "hyprlock.conf", "hypridle.conf"}
+	// 1. Top-level user config files (hyprlock, hypridle)
+	confFiles := []string{"hyprlock.conf", "hypridle.conf"}
 	for _, f := range confFiles {
-		srcFile := cfg.ConfigsDir() + "/hyprland-entries/" + f
+		srcFile := cfg.ConfigsDir() + "/hypr/" + f
 		if _, err := os.Stat(srcFile); err != nil {
 			srcFile = cfg.RepoRoot + "/configs/hypr/" + f
 		}
@@ -314,16 +311,13 @@ func syncHyprland(cfg Config, hl hyprland.API) error {
 		}
 	}
 
-	// 3. Custom dir — only create if missing (user overrides)
-	customSrc := cfg.ConfigsDir() + "/hypr/custom"
-	if _, err := os.Stat(customSrc); err != nil {
-		customSrc = cfg.RepoRoot + "/configs/hypr/custom"
-	}
-	if err := copyDirRecursive(customSrc, deployDir+"/custom", true); err != nil {
-		return fmt.Errorf("copy custom: %w", err)
+	// 2. Seed empty snry-override.lua if it doesn't exist
+	overridePath := deployDir + "/snry-override.lua"
+	if _, err := os.Stat(overridePath); os.IsNotExist(err) {
+		_ = os.WriteFile(overridePath, []byte("-- Place your Hyprland overrides here.\n-- This file is loaded after all system defaults.\n"), 0o644)
 	}
 
-	// 4. Generated configs
+	// 3. Generated configs
 	if err := GenerateMonitorsLua(cfg, hl); err != nil {
 		return err
 	}
@@ -591,6 +585,37 @@ func installIcon(cfg Config) error {
 	}
 	_ = os.MkdirAll(filepath.Dir(dst), 0o755)
 	return CopyFile(context.Background(), src, dst, 0o644)
+}
+
+// ensureSnrySymlink guarantees that the `snry` symlink to snry-daemon exists.
+// The PKGBUILD creates it in /usr/bin on package install. For non-root
+// (dev mode), it falls back to ~/.local/bin/snry.
+func ensureSnrySymlink() error {
+	target := "snry-daemon"
+
+	// System-wide symlink (package install).
+	systemLink := "/usr/bin/snry"
+	if existing, err := os.Readlink(systemLink); err == nil && existing == target {
+		return nil
+	}
+	if os.Getuid() == 0 {
+		_ = os.Remove(systemLink)
+		return os.Symlink(target, systemLink)
+	}
+
+	// User-local fallback (dev mode).
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return nil
+	}
+	userBin := home + "/.local/bin"
+	userLink := userBin + "/snry"
+	if existing, err := os.Readlink(userLink); err == nil && existing == target {
+		return nil
+	}
+	_ = os.MkdirAll(userBin, 0o755)
+	_ = os.Remove(userLink)
+	return os.Symlink(target, userLink)
 }
 
 func installPythonVenv(cfg Config) error {
