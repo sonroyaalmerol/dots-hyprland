@@ -159,6 +159,9 @@ Singleton {
 	signal textColorResult(var data)
 	signal thumbnailGenerated(var data)
 	signal randomWallpaperReady(var data)
+	signal keyringLookupResult(var data)
+	signal keyringStatus(var data)
+	signal keyringUnlockResult(var data)
 
 	function sendCommand(cmd) {
 		if (!daemonSocket.connected) {
@@ -415,6 +418,12 @@ Singleton {
 			leastBusyRegionResult(obj.data)
 		} else if (obj.event === "text-color" && obj.data) {
 			textColorResult(obj.data)
+		} else if (obj.event === "keyring_lookup_result" && obj.data) {
+			keyringLookupResult(obj.data)
+		} else if (obj.event === "keyring_status" && obj.data) {
+			keyringStatus(obj.data)
+		} else if (obj.event === "keyring_unlock_result" && obj.data) {
+			keyringUnlockResult(obj.data)
 		} else if (obj.event === "hyprconfig_value" && obj.data) {
 			hyprconfigValue(obj.data.key ?? "", obj.data.value ?? "")
 		}

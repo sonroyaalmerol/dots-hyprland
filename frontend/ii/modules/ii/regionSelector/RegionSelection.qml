@@ -211,7 +211,7 @@ PanelWindow {
     onPreparationDoneChanged: {
         if (!preparationDone) return;
         if (root.isRecording && root.recordingShouldStop) {
-            Quickshell.execDetached([Directories.recordScriptPath]);
+            DaemonSocket.sendCommand("record");
             root.dismiss();
             return;
         }
@@ -289,11 +289,15 @@ PanelWindow {
             screenshotAction, //
             screenshotDir
         )
-        Quickshell.execDetached(command);
         if (root.action == RegionSelection.SnipAction.Record || root.action == RegionSelection.SnipAction.RecordWithSound) {
+            const region = `${Math.round(root.regionX * root.monitorScale)},${Math.round(root.regionY * root.monitorScale)} ${Math.round(root.regionWidth * root.monitorScale)}x${Math.round(root.regionHeight * root.monitorScale)}`
+            let cmd = "record --region " + region
+            if (root.action == RegionSelection.SnipAction.RecordWithSound) cmd += " --sound"
+            DaemonSocket.sendCommand(cmd)
             root.phase = RegionSelection.Phase.Post
             root.selectionMode = RegionSelection.SelectionMode.RectCorners
-        } else {
+        } else if (command) {
+            Quickshell.execDetached(command);
             root.dismiss();
         }
     }
