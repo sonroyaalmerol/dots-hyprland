@@ -194,6 +194,13 @@ func (a *App) Run(ctx context.Context) error {
 		}
 	} else if compositor.IsAlive(os.Getenv("HYPRLAND_INSTANCE_SIGNATURE")) {
 		log.Printf("[app] Hyprland already running (signature=%s)", os.Getenv("HYPRLAND_INSTANCE_SIGNATURE"))
+		// Ensure WAYLAND_DISPLAY and DISPLAY are in the systemd environment
+		// even when the daemon restarts with Hyprland already running.
+		runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+		if runtimeDir == "" {
+			runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
+		}
+		compositor.ImportEnvironment(runtimeDir)
 	} else {
 		log.Printf("[app] stale HYPRLAND_INSTANCE_SIGNATURE detected, clearing and relaunching compositor")
 		os.Unsetenv("HYPRLAND_INSTANCE_SIGNATURE")

@@ -68,19 +68,12 @@ func Launch(ctx context.Context) (string, error) {
 	// Set the environment so all subsequent code can find Hyprland.
 	os.Setenv("HYPRLAND_INSTANCE_SIGNATURE", sig)
 
-	// Detect and set WAYLAND_DISPLAY and DISPLAY so child processes
-	// (quickshell, wl-paste, etc.) can connect to the compositor.
-	// systemd --user doesn't have these set before the compositor starts.
-	if os.Getenv("WAYLAND_DISPLAY") == "" {
-		if wl := detectWaylandDisplay(runtimeDir); wl != "" {
-			os.Setenv("WAYLAND_DISPLAY", wl)
-			log.Printf("[compositor] set WAYLAND_DISPLAY=%s", wl)
-		}
-	}
-	if os.Getenv("DISPLAY") == "" {
-		os.Setenv("DISPLAY", ":0")
-		log.Printf("[compositor] set DISPLAY=:0")
-	}
+	// Import WAYLAND_DISPLAY and DISPLAY into systemd --user and D-Bus
+	// activation environments so all services (quickshell, wl-paste, etc.)
+	// can connect to the compositor. This is the standard pattern for Wayland
+	// compositors — the environment is propagated system-wide rather than
+	// relying on os.Setenv which only affects the daemon process.
+	ImportEnvironment(runtimeDir)
 
 	log.Printf("[compositor] Hyprland ready (signature=%s)", sig)
 	return sig, nil
@@ -146,29 +139,73 @@ func IsAlive(sig string) bool {
 	return true
 }
 
-// detectWaylandDisplay scans runtimeDir for wayland-N sockets created by
-// the compositor and returns the display name (e.g. "wayland-1").
+// importEnvironment detects the WAYLAND_DISPLAY socket created by the compositor,
+// sets WAYLAND_DISPLAY and DISPLAY in the current process and imports them into
+// systemd --user and D-Bus activation environments. This ensures all child
+// processes and restarted services can find the display.
+func ImportEnvironment(runtimeDir string) {
+	wlDisplay := os.Getenv("WAYLAND_DISPLAY")
+	display := os.Getenv("DISPLAY")
+
+	// Detect WAYLAND_DISPLAY if not already set, preferring a live socket.
+	if wlDisplay == "" {
+		wlDisplay = detectWaylandDisplay(runtimeDir)
+	}
+
+	// Default DISPLAY if not set.
+	if display == "" {
+		display = ":0"
+	}
+
+	// Set in current process so os.Environ() includes them for child processes.
+	os.Setenv("WAYLAND_DISPLAY", wlDisplay)
+	os.Setenv("DISPLAY", display)
+
+	// Import into systemd --user environment so all user services see these vars,
+	// including services that are started or restarted after this point.
+	if err := exec.Command("systemctl", "--user", "import-environment",
+		"WAYLAND_DISPLAY", "DISPLAY", "HYPRLAND_INSTANCE_SIGNATURE").Run(); err != nil {
+		log.Printf("[compositor] systemctl import-environment: %v", err)
+	}
+
+	// Also update D-Bus activation environment for D-Bus activated services.
+	if err := exec.Command("dbus-update-activation-environment", "--systemd",
+		"WAYLAND_DISPLAY", "DISPLAY").Run(); err != nil {
+		log.Printf("[compositor] dbus-update-activation-environment: %v", err)
+	}
+
+	log.Printf("[compositor] imported WAYLAND_DISPLAY=%s DISPLAY=%s", wlDisplay, display)
+}
+
+// detectWaylandDisplay scans runtimeDir for a wayland-N socket that is actually
+// accepting connections (not just a stale socket file), and returns the display
+// name (e.g. "wayland-1").
 func detectWaylandDisplay(runtimeDir string) string {
 	entries, err := os.ReadDir(runtimeDir)
 	if err != nil {
 		return ""
 	}
 	for _, e := range entries {
-		if !e.Type().IsRegular() {
+		name := e.Name()
+		if !strings.HasPrefix(name, "wayland-") || strings.HasSuffix(name, "-lock") {
 			continue
 		}
-		name := e.Name()
-		// wayland sockets are named wayland-<N> or wayland-<N>-lock
-		if strings.HasPrefix(name, "wayland-") && !strings.HasSuffix(name, "-lock") {
-			// Verify it's a socket, not just a matching filename.
-			info, err := e.Info()
-			if err != nil {
-				continue
-			}
-			if info.Mode()&os.ModeSocket != 0 {
-				return name
-			}
+		// Verify it's a socket file.
+		info, err := e.Info()
+		if err != nil {
+			continue
 		}
+		if info.Mode()&os.ModeSocket == 0 {
+			continue
+		}
+		// Verify the socket is actually accepting connections (not stale).
+		sockPath := filepath.Join(runtimeDir, name)
+		conn, err := net.DialTimeout("unix", sockPath, time.Second)
+		if err != nil {
+			continue
+		}
+		conn.Close()
+		return name
 	}
 	return ""
 }
