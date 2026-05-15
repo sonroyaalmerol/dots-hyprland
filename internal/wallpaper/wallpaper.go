@@ -277,6 +277,24 @@ func FullWallpaperSwitch(cfg Config, imgPath string, mode string, schemeType Sch
 
 	// Auto-detect scheme type if needed
 	if schemeType == SchemeAuto && imgPath != "" {
+		// For video files, extract a thumbnail first
+		if IsVideoFile(imgPath) {
+			thumbnailDir := filepath.Join(cfg.CacheHome, "quickshell", "mpvpaper_thumbnails")
+			os.MkdirAll(thumbnailDir, 0755)
+			thumbnailPath := filepath.Join(thumbnailDir, filepath.Base(imgPath)+".jpg")
+			if err := ExtractVideoThumbnail(imgPath, thumbnailPath); err != nil {
+				log.Printf("[wallpaper] video thumbnail extraction failed: %v", err)
+			} else {
+				// Use thumbnail for color generation
+				SetThumbnailPath(cfg.ShellConfigFile, thumbnailPath)
+				// Kill any existing mpvpaper and start video wallpaper
+				if err := StartVideoWallpaper(imgPath); err != nil {
+					log.Printf("[wallpaper] video wallpaper: %v", err)
+				}
+				// Use thumbnail for matugen
+				imgPath = thumbnailPath
+			}
+		}
 		schemeType = DetectSchemeFromImage(imgPath, SchemeAuto)
 	}
 
@@ -301,6 +319,11 @@ func FullWallpaperSwitch(cfg Config, imgPath string, mode string, schemeType Sch
 
 	// Set dark/light mode
 	SetDarkMode(mode == "dark")
+
+	// Track wallpaper path in config
+	if color == "" && imgPath != "" {
+		SetWallpaperPath(cfg.ShellConfigFile, imgPath)
+	}
 
 	// Create generated dirs
 	genDir := cfg.GenDir()
@@ -347,4 +370,55 @@ func handleKDEMaterialYouColors(cfg Config, schemeType SchemeType) {
 		return
 	}
 	exec.Command(wrapperPath, "--scheme-variant", kdeSchemeVariant).Run()
+}
+
+// IsVideoFile checks if a file path has a video extension.
+func IsVideoFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".mp4", ".webm", ".mkv", ".avi", ".mov":
+		return true
+	}
+	return false
+}
+
+// VideoWallpaperOpts contains mpvpaper options for video wallpapers.
+var VideoWallpaperOpts = []string{
+	"no-audio", "loop", "hwdec=auto", "scale=bilinear",
+	"interpolation=no", "video-sync=display-resample",
+	"panscan=1.0", "video-scale-x=1.0", "video-scale-y=1.0",
+	"video-align-x=0.5", "video-align-y=0.5", "load-scripts=no",
+}
+
+// monitorInfo represents a Hyprland monitor.
+type monitorInfo struct {
+	Name string `json:"name"`
+}
+
+// StartVideoWallpaper starts mpvpaper for the given video on all monitors.
+func StartVideoWallpaper(videoPath string) error {
+	// Kill existing mpvpaper processes
+	exec.Command("pkill", "-f", "-9", "mpvpaper").Run()
+
+	// Get monitor names from hyprctl
+	out, err := exec.Command("hyprctl", "monitors", "-j").Output()
+	if err != nil {
+		return fmt.Errorf("get monitors: %w", err)
+	}
+	var monitors []monitorInfo
+	if err := json.Unmarshal(out, &monitors); err != nil {
+		return fmt.Errorf("parse monitors: %w", err)
+	}
+
+	opts := strings.Join(VideoWallpaperOpts, " ")
+	for _, m := range monitors {
+		cmd := exec.Command("mpvpaper", "-o", opts, m.Name, videoPath)
+		go cmd.Start() // run asynchronously
+	}
+	return nil
+}
+
+// ExtractVideoThumbnail extracts the first frame from a video file.
+func ExtractVideoThumbnail(videoPath, thumbnailPath string) error {
+	return exec.Command("ffmpeg", "-y", "-i", videoPath, "-vframes", "1", thumbnailPath).Run()
 }

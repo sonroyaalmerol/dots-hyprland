@@ -259,12 +259,10 @@ func (s *Service) subscribeEvents(ctx context.Context) error {
 			return err
 
 		case line := <-eventCh:
-			parts := strings.SplitN(line, ">>", 2)
-			if len(parts) != 2 {
-				continue
+			// Hyprland format: "EVENT>>DATA\n" — event name has no whitespace.
+			if before, after, ok := strings.Cut(line, ">>"); ok {
+				s.handleSocket2Event(before, after)
 			}
-			eventName := strings.TrimSpace(parts[0])
-			s.handleSocket2Event(eventName, parts[1])
 
 			// Handle events that require a supplementary socket1 fetch.
 			if s.needsFullFetch {

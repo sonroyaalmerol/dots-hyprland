@@ -1371,7 +1371,16 @@ func (a *App) handleApplyVscodeColor() {
 	}
 	newColorStr := strings.TrimSpace(string(newColor))
 	if newColorStr == "" {
-		return
+		// Fallback: read primary color from colors.json
+		genDir := filepath.Join(stateDir, "quickshell", "user", "generated")
+		if colors, err := wallpaper.LoadColorMapFromJSON(filepath.Join(genDir, "colors.json")); err == nil {
+			if primary, ok := colors["primary"]; ok {
+				newColorStr = strings.TrimSpace(primary)
+			}
+		}
+		if newColorStr == "" {
+			return
+		}
 	}
 
 	configDir := os.Getenv("XDG_CONFIG_HOME")
@@ -1447,35 +1456,16 @@ func (a *App) handleApplyKvantumTheme() {
 	}
 	os.WriteFile(dstConfig, data, 0644)
 
-	// Read SCSS colors
+	// Read colors from colors.json (authoritative source)
 	stateDir := os.Getenv("XDG_STATE_HOME")
 	if stateDir == "" {
 		stateDir = filepath.Join(os.Getenv("HOME"), ".local", "state")
 	}
-	scssFile := filepath.Join(stateDir, "quickshell", "user", "generated", "material_colors.scss")
-	scssData, err := os.ReadFile(scssFile)
-	if err != nil {
-		return
-	}
-	// Read colors from colors.json (now authoritative source)
-	genDir := filepath.Join(filepath.Dir(scssFile), "")
-	_ = genDir
-	// Fallback: try SCSS first, then colors.json
+	genDir := filepath.Join(stateDir, "quickshell", "user", "generated")
 	colorMap := make(map[string]string)
-	if len(scssData) > 0 {
-		colorMap = parseSCSSColors(string(scssData))
-	}
-	if len(colorMap) == 0 {
-		// SCSS empty or missing - read from colors.json
-		colorsJSON := filepath.Join(filepath.Dir(scssFile), "colors.json")
-		if jsonData, err := os.ReadFile(colorsJSON); err == nil {
-			var jsonColors map[string]string
-			if json.Unmarshal(jsonData, &jsonColors) == nil {
-				// Map snake_case JSON keys to camelCase SCSS keys
-				for k, v := range jsonColors {
-					colorMap[snakeToCamel(k)] = v
-				}
-			}
+	if colors, err := wallpaper.LoadColorMapFromJSON(filepath.Join(genDir, "colors.json")); err == nil {
+		for k, v := range colors {
+			colorMap[snakeToCamel(k)] = v
 		}
 	}
 
@@ -1526,28 +1516,9 @@ func snakeToCamel(s string) string {
 	return strings.Join(parts, "")
 }
 
-func parseSCSSColors(scss string) map[string]string {
-	colors := make(map[string]string)
-	for line := range strings.SplitSeq(scss, "\n") {
-		line = strings.TrimSpace(line)
-		line = strings.TrimSuffix(line, ";")
-		if !strings.HasPrefix(line, "$") {
-			continue
-		}
-		line = line[1:]
-		before, after, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		key := strings.TrimSpace(before)
-		val := strings.TrimSpace(after)
-		colors[key] = val
-	}
-	return colors
-}
-
 func (a *App) handleSwitchWallpaper(args []string) {
 	var imgPath, mode, schemeTypeStr, color string
+	var noswitch bool
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -1571,6 +1542,16 @@ func (a *App) handleSwitchWallpaper(args []string) {
 				color = args[i+1]
 				i++
 			}
+		case "--noswitch":
+			noswitch = true
+		}
+	}
+
+	// Handle --noswitch: use current wallpaper path from config
+	if noswitch && imgPath == "" {
+		shellCfg, err := wallpaper.LoadShellConfig(wallpaper.DefaultConfig().ShellConfigFile)
+		if err == nil {
+			imgPath = shellCfg.Background.WallpaperPath
 		}
 	}
 
