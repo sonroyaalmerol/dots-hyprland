@@ -484,7 +484,7 @@ func dispatchCommand(a *App, line string) {
 		}
 		go a.handleHyprconfigEdit(fields[1:])
 	case "restart":
-		a.restartSelf()
+		a.softReload()
 	}
 }
 

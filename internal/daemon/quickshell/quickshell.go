@@ -116,16 +116,24 @@ func (s *Service) runOnce(ctx context.Context) error {
 
 // Stop gracefully terminates the managed qs process (used during daemon shutdown).
 func (s *Service) Stop() {
+	killQS(s)
+}
+
+// Restart kills the running qs process and lets the Run loop restart it.
+func (s *Service) Restart() {
+	killQS(s)
+}
+
+// killQS terminates the running qs process group. The Run loop will detect
+// the exit and restart automatically (unless the context is cancelled).
+func killQS(s *Service) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.cancel != nil {
-		s.cancel()
-	}
 	if s.cmd == nil || s.cmd.Process == nil {
 		return
 	}
 
-	// Send SIGTERM to the process group
+	// Send SIGTERM to the process group.
 	pgid, err := syscall.Getpgid(s.cmd.Process.Pid)
 	if err == nil {
 		syscall.Kill(-pgid, syscall.SIGTERM)

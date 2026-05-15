@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQml
 import QtQuick
 import qs.services
-import qs.modules.common.models.hyprland
+import qs.modules.common.models
 
 NestableObject {
     id: root

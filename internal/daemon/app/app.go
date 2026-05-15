@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -936,16 +935,39 @@ func (a *App) DispatchCommand(line string) {
 	dispatchCommand(a, line)
 }
 
-func (a *App) restartSelf() {
-	bin, err := os.Executable()
-	if err != nil {
-		log.Printf("restart: cannot find executable: %v", err)
-		return
+// softReload performs a hot reload without restarting the daemon process:
+//   - reimports WAYLAND_DISPLAY/DISPLAY into systemd environment
+//   - regenerates Hyprland config (monitors/workspaces)
+//   - reloads Hyprland config
+//   - restarts quickshell
+func (a *App) softReload() {
+	log.Printf("[app] soft reload: reimporting environment, reloading hyprland, restarting quickshell")
+
+	// Reimport environment vars so any restarted services pick them up.
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
 	}
-	args := os.Args
-	// Remove stale lock so new process can start.
-	lockPath := filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "snry-daemon.lock")
-	_ = os.Remove(lockPath)
-	log.Printf("restart: re-executing %s", bin)
-	_ = syscall.Exec(bin, args, os.Environ())
+	compositor.ImportEnvironment(runtimeDir)
+
+	// Regenerate Hyprland config from live monitor/workspace data.
+	for _, rel := range []string{"monitors.lua", "workspaces.lua"} {
+		if err := a.regenerateGeneratedConfig(rel); err != nil {
+			log.Printf("[app] generate %s: %v", rel, err)
+		}
+	}
+
+	// Reload Hyprland config.
+	if a.hyprlandSvc != nil {
+		if err := a.hyprlandSvc.Reload(); err != nil {
+			log.Printf("[app] hyprland reload: %v", err)
+		} else {
+			log.Printf("[app] hyprland config reloaded")
+		}
+	}
+
+	// Restart quickshell (the Run loop will auto-restart after the process exits).
+	if a.qsSvc != nil {
+		a.qsSvc.Restart()
+	}
 }

@@ -269,10 +269,9 @@ Item {
                 buttonIcon: "restart_alt"
                 onClicked: {
                     DaemonSocket.sendCommand("restart");
-                    DaemonSocket.reload();
                 }
                 StyledToolTip {
-                    text: Translation.tr("Restart Daemon & Reload Hyprland")
+                    text: Translation.tr("Reload Shell")
                 }
             }
             QuickToggleButton {
