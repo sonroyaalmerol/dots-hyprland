@@ -182,7 +182,7 @@ hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = tr
 
 -- Apps
 hl.bind("SUPER + Return", hl.dsp.exec_cmd(terminal), { description = "Terminal" })
-hl.bind("SUPER + T", hl.dsp.exec_cmd(terminal)) -- [hidden] (terminal) (alt)
+hl.bind("SUPER + T", hl.dsp.exec_cmd(fileManager), { description = "File manager" })
 hl.bind("CTRL + ALT + T", hl.dsp.exec_cmd(terminal)) -- [hidden] (terminal) (for Ubuntu people)
 hl.bind("SUPER + E", hl.dsp.exec_cmd(fileManager), { description = "File manager" })
 hl.bind("SUPER + W", hl.dsp.exec_cmd(browser), { description = "Browser" })
