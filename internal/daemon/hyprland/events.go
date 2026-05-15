@@ -135,6 +135,7 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 			win["workspace"] = map[string]any{"id": wsID, "name": wsName}
 		}
 		s.windows = append(s.windows, win)
+		s.needsWindowFetch = true
 		s.mu.Unlock()
 		s.emit()
 
@@ -297,7 +298,8 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 
 // putActiveWorkspace sets id/name on the activeWorkspace map, preserving the
 // existing monitor field (workspacev2 fires on same-monitor switches where
-// focusedmonv2 does NOT fire).
+// focusedmonv2 does NOT fire). Also updates the per-monitor activeWorkspace.id
+// so the bar workspace highlight stays in sync.
 func (s *Service) putActiveWorkspace(id int, name string) {
 	if s.activeWorkspace == nil {
 		s.activeWorkspace = make(map[string]any, 4)
@@ -314,6 +316,7 @@ func (s *Service) putActiveWorkspace(id int, name string) {
 	s.activeWorkspace["name"] = name
 	if mon != "" {
 		s.activeWorkspace["monitor"] = mon
+		s.putMonitorActiveWS(mon, id)
 	}
 }
 

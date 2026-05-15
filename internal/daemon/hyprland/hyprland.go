@@ -34,6 +34,7 @@ type Service struct {
 	wsNameToID          map[string]int // workspace name → ID for O(1) lookups
 	needsFullFetch      bool           // set by configreloaded, triggers full re-fetch on next iteration
 	needsMonitorDetails bool           // set by monitoraddedv2, triggers monitor re-fetch for resolution/scale
+	needsWindowFetch    bool           // set by openwindow, triggers window re-fetch for size/pid fields
 }
 
 func New(cfg Config, cb func(map[string]any)) *Service {
@@ -210,6 +211,7 @@ func (s *Service) fetchAll() error {
 	}
 	s.needsFullFetch = false
 	s.needsMonitorDetails = false
+	s.needsWindowFetch = false
 	s.mu.Unlock()
 
 	return nil
@@ -220,6 +222,7 @@ func (s *Service) fetchAll() error {
 // no socket1 round-trips. The only exceptions are:
 //   - configreloaded → triggers a full re-fetch on the next iteration
 //   - monitoraddedv2 → after the event is handled, monitors are re-fetched for full detail
+//   - openwindow → triggers a window re-fetch for size/pid fields missing from the event
 //   - On reconnect, the caller re-runs fetchAll()+emit before re-subscribing.
 func (s *Service) subscribeEvents(ctx context.Context) error {
 	sockPath := eventSocketPath()
@@ -277,6 +280,10 @@ func (s *Service) subscribeEvents(ctx context.Context) error {
 				s.needsMonitorDetails = false
 				s.fetchMonitorDetails()
 			}
+			if s.needsWindowFetch {
+				s.needsWindowFetch = false
+				s.fetchWindowDetails()
+			}
 		}
 	}
 }
@@ -292,6 +299,21 @@ func (s *Service) fetchMonitorDetails() {
 	}
 	s.mu.Lock()
 	s.monitors = m
+	s.mu.Unlock()
+	s.emit()
+}
+
+// fetchWindowDetails is a targeted fetch to fill in window size/pid fields
+// that aren't available from the openwindow event. Called inline from the
+// event loop after handling openwindow.
+func (s *Service) fetchWindowDetails() {
+	w, err := fetchWindows()
+	if err != nil {
+		log.Printf("[hyprland] fetchWindowDetails error: %v", err)
+		return
+	}
+	s.mu.Lock()
+	s.windows = w
 	s.mu.Unlock()
 	s.emit()
 }
