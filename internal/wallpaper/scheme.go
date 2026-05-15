@@ -47,7 +47,6 @@ func ParseSchemeType(s string) SchemeType {
 }
 
 // ImageColorfulness calculates the Hasler-Süsstrunk colorfulness metric for an image.
-// This replaces scheme_for_image.py for scheme auto-detection.
 func ImageColorfulness(imgPath string) (float64, error) {
 	f, err := os.Open(imgPath)
 	if err != nil {

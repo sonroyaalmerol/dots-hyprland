@@ -267,7 +267,6 @@ func FindTerminalScheme(cfg Config) string {
 }
 
 // FullWallpaperSwitch performs a complete wallpaper switch operation.
-// This replaces the switchwall.sh script.
 func FullWallpaperSwitch(cfg Config, imgPath string, mode string, schemeType SchemeType, color string) error {
 	shellCfg, err := LoadShellConfig(cfg.ShellConfigFile)
 	if err != nil {

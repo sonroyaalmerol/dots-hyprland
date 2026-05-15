@@ -244,29 +244,6 @@ func TestSchemeDetection(t *testing.T) {
 	}
 }
 
-func TestSCSSGeneration(t *testing.T) {
-	colors := ColorMap{
-		"background": "#191114",
-		"primary":    "#FFB0CC",
-	}
-	termColors := map[string]string{
-		"term0": "#282828",
-		"term1": "#CC241D",
-	}
-
-	scss := GenerateSCSSOutput(colors, termColors, true, false)
-
-	if !containsLine(scss, "$background: #191114") {
-		t.Errorf("SCSS missing $background line")
-	}
-	if !containsLine(scss, "$darkmode: true") {
-		t.Errorf("SCSS missing $darkmode line")
-	}
-	if !containsLine(scss, "$term0: #282828") {
-		t.Errorf("SCSS missing $term0 line")
-	}
-}
-
 func containsLine(s, substr string) bool {
 	return len(s) > 0 && containsAny(s, substr)
 }

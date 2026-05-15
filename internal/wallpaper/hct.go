@@ -92,14 +92,6 @@ func makeDefaultVC() *ViewingConditions {
 
 // --- Color math utilities ---
 
-func srgbToLinear100(c float64) float64 {
-	n := c / 255.0
-	if n <= 0.040449936 {
-		return n / 12.92 * 100.0
-	}
-	return math.Pow((n+0.055)/1.055, 2.4) * 100.0
-}
-
 func delinearized(v float64) float64 {
 	n := v / 100.0
 	if n <= 0.0031308 {
@@ -128,10 +120,6 @@ func yFromLstar(lstar float64) float64 {
 	return 100.0 * labInvF((lstar+16.0)/116.0)
 }
 
-func lstarFromY(y float64) float64 {
-	return 116.0*labF(y/100.0) - 16.0
-}
-
 func lstarFromARGB(argb uint32) float64 {
 	r := float64((argb >> 16) & 0xFF)
 	g := float64((argb >> 8) & 0xFF)
@@ -158,14 +146,6 @@ func labInvF(ft float64) float64 {
 		return ft3
 	}
 	return (116.0*ft - 16.0) / (24389.0 / 27.0)
-}
-
-func srgbToLinear(c float64) float64 {
-	n := c / 255.0
-	if n <= 0.040449936 {
-		return n / 12.92
-	}
-	return math.Pow((n+0.055)/1.055, 2.4)
 }
 
 func signum(x float64) float64 {

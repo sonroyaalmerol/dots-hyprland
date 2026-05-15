@@ -44,7 +44,6 @@ func LoadColorMapFromJSON(path string) (ColorMap, error) {
 }
 
 // GenerateTerminalColors harmonizes terminal base colors against the primary accent color.
-// This replaces the Python generate_colors_material.py terminal color generation.
 func GenerateTerminalColors(
 	colors ColorMap,
 	scheme *TerminalScheme,
@@ -258,28 +257,6 @@ func GenerateTerminalSequences(colors ColorMap, termColors map[string]string) st
 	return b.String()
 }
 
-// GenerateSCSSOutput generates the SCSS-format color output for backward compatibility
-// with nvim/vscode color handlers that still read from material_colors.scss.
-func GenerateSCSSOutput(colors ColorMap, termColors map[string]string, isDark, isTransparent bool) string {
-	var b strings.Builder
-
-	b.WriteString(fmt.Sprintf("$darkmode: %v;\n", isDark))
-	b.WriteString(fmt.Sprintf("$transparent: %v;\n", isTransparent))
-
-	// Material colors (snake_case keys from colors.json → camelCase for SCSS)
-	for key, hex := range colors {
-		camelKey := snakeToCamel(key)
-		b.WriteString(fmt.Sprintf("$%s: %s;\n", camelKey, hex))
-	}
-
-	// Terminal colors
-	for key, hex := range termColors {
-		b.WriteString(fmt.Sprintf("$%s: %s;\n", key, hex))
-	}
-
-	return b.String()
-}
-
 func snakeToCamel(s string) string {
 	parts := strings.Split(s, "_")
 	for i := 1; i < len(parts); i++ {
@@ -313,12 +290,6 @@ func ApplyTerminalTheme(
 	seqContent := GenerateTerminalSequences(colors, termColors)
 	if err := os.WriteFile(filepath.Join(termDir, "sequences.txt"), []byte(seqContent), 0644); err != nil {
 		return fmt.Errorf("write sequences: %w", err)
-	}
-
-	// Write SCSS for backward compat with nvim/vscode handlers
-	scssContent := GenerateSCSSOutput(colors, termColors, isDark, false)
-	if err := os.WriteFile(filepath.Join(genDir, "material_colors.scss"), []byte(scssContent), 0644); err != nil {
-		return fmt.Errorf("write scss: %w", err)
 	}
 
 	// Signal ghostty to reload

@@ -1063,15 +1063,21 @@ func (a *App) handleBatteryStatus() {
 }
 
 func (a *App) handleRestoreVideoWallpaper() {
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
-	scriptPath := filepath.Join(configDir, "hypr", "custom", "scripts", "__restore_video_wallpaper.sh")
-	if _, err := os.Stat(scriptPath); err != nil {
+	cfg := wallpaper.DefaultConfig()
+	shellCfg, err := wallpaper.LoadShellConfig(cfg.ShellConfigFile)
+	if err != nil {
 		return
 	}
-	exec.Command("bash", scriptPath).Run()
+	videoPath := shellCfg.Background.WallpaperPath
+	if videoPath == "" {
+		return
+	}
+	if !wallpaper.IsVideoFile(videoPath) {
+		return
+	}
+	if err := wallpaper.StartVideoWallpaper(videoPath); err != nil {
+		log.Printf("[wallpaper] restore video wallpaper: %v", err)
+	}
 }
 
 func (a *App) handleRecord(args []string) {
