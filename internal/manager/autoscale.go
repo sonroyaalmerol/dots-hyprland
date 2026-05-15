@@ -28,6 +28,13 @@ type monitor struct {
 	AvailableModes []string `json:"availableModes"`
 }
 
+// computeIdealScale returns the ideal Hyprland scale factor for a given
+// monitor height. It rounds to the nearest 0.25 increment with a minimum of 1.0.
+func computeIdealScale(height int) float64 {
+	s := math.Round(math.Max(1.0, float64(height)/1080.0)*4) / 4.0
+	return math.Round(s*100) / 100
+}
+
 // Autoscale detects connected monitors and sets ideal Hyprland scale factors.
 func Autoscale(ctx context.Context, hl hyprland.API) error {
 	// Check Hyprland is running
@@ -47,14 +54,16 @@ func Autoscale(ctx context.Context, hl hyprland.API) error {
 
 	changed := false
 	for _, m := range monitors {
-		idealScale := math.Round(math.Max(1.0, float64(m.Height)/1080.0)*4) / 4.0
-		idealScale = math.Round(idealScale*100) / 100
+		idealScale := computeIdealScale(m.Height)
 
 		fmt.Printf("  %s: %dx%d (current: %.2f, ideal: %.2f)\n",
 			m.Name, m.Width, m.Height, m.Scale, idealScale)
 
 		if m.Scale != idealScale {
-			err := hl.SetMonitor(m.Name, fmt.Sprintf("%dx%d@", m.Width, m.Height), fmt.Sprintf("%dx%d", m.X, m.Y), idealScale)
+			logicalX := float64(m.X) / idealScale
+			logicalY := float64(m.Y) / idealScale
+			pos := fmt.Sprintf("%dx%d", int(math.Round(logicalX)), int(math.Round(logicalY)))
+			err := hl.SetMonitor(m.Name, fmt.Sprintf("%dx%d@", m.Width, m.Height), pos, idealScale)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "  [warn] set scale for %s: %v\n", m.Name, err)
 			} else {
@@ -161,8 +170,7 @@ func GenerateMonitorsLua(cfg Config, hl hyprland.API) error {
 	b.WriteString("-- DO NOT EDIT: regenerated on each sync. Override in custom/general.lua\n\n")
 
 	for _, m := range monitors {
-		idealScale := math.Round(math.Max(1.0, float64(m.Height)/1080.0)*4) / 4.0
-		idealScale = math.Round(idealScale*100) / 100
+		idealScale := computeIdealScale(m.Height)
 
 		mode := formatRefresh(m.Width, m.Height, m.RefreshRate)
 
@@ -171,12 +179,16 @@ func GenerateMonitorsLua(cfg Config, hl hyprland.API) error {
 			best := bestMode(m.AvailableModes)
 			if best.width > 0 {
 				mode = formatRefresh(best.width, best.height, best.refreshRate)
-				idealScale = math.Round(math.Max(1.0, float64(best.height)/1080.0)*4) / 4.0
-				idealScale = math.Round(idealScale*100) / 100
+				idealScale = computeIdealScale(best.height)
 			}
 		}
 
-		pos := fmt.Sprintf("%dx%d", m.X, m.Y)
+		// Convert physical pixel position to logical coordinates using the
+		// target scale. Hyprland positions monitors in logical space, so a
+		// 2560px-wide monitor at scale 2 occupies 1280 logical pixels.
+		logicalX := float64(m.X) / idealScale
+		logicalY := float64(m.Y) / idealScale
+		pos := fmt.Sprintf("%dx%d", int(math.Round(logicalX)), int(math.Round(logicalY)))
 		scaleStr := formatScale(idealScale)
 
 		fmt.Fprintf(&b, "hl.monitor({ output = %q, mode = %q, position = %q, scale = %s",
