@@ -27,7 +27,12 @@ func Setup(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("setups: %w", err)
 	}
 
-	// Phase 3: Config files
+	// Phase 3: Install runtime dependencies
+	if err := Install(ctx, cfg); err != nil {
+		return fmt.Errorf("install: %w", err)
+	}
+
+	// Phase 4: Config files
 	if err := Files(ctx, cfg); err != nil {
 		return fmt.Errorf("files: %w", err)
 	}
@@ -116,6 +121,15 @@ func Setups(ctx context.Context, cfg Config) error {
 func Files(ctx context.Context, cfg Config) error {
 	fmt.Println("--- Syncing config files ---")
 	steps := FilesSteps(cfg)
+	results := RunSteps(ctx, steps, consoleProgress)
+	PrintResults(os.Stdout, results)
+	return firstError(results)
+}
+
+// Install runs install steps (binaries, plugins, fonts, venv, systemd unit).
+func Install(ctx context.Context, cfg Config) error {
+	fmt.Println("--- Installing runtime dependencies ---")
+	steps := InstallSteps(cfg)
 	results := RunSteps(ctx, steps, consoleProgress)
 	PrintResults(os.Stdout, results)
 	return firstError(results)

@@ -128,11 +128,8 @@ package() {
 	# Install snry-daemon binary
 	install -Dm755 snry-daemon "$pkgdir/usr/bin/snry-daemon"
 
-	# Install snry-shell wrapper (convenience alias)
-	install -Dm755 /dev/stdin "$pkgdir/usr/bin/snry-shell" <<'SCRIPT'
-#!/bin/bash
-exec /usr/bin/snry-daemon setup "$@"
-SCRIPT
+	# Convenience symlink: snry -> snry-daemon
+	ln -s snry-daemon "$pkgdir/usr/bin/snry"
 
 	# Install shared data
 	install -dm755 "$pkgdir/usr/share/snry-shell"

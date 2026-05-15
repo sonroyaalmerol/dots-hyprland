@@ -32,8 +32,10 @@ func main() {
 		} else {
 			runDeps()
 		}
-	case "files":
-		runFiles()
+	case "sync":
+		runSync()
+	case "install":
+		runInstall()
 	case "diagnose":
 		runDiagnose()
 	case "autoscale":
@@ -60,7 +62,8 @@ Usage:
   snry-daemon setup        Full installation (deps + files + system setup)
   snry-daemon deps         Install packages
   snry-daemon deps --check Check for missing packages
-  snry-daemon files        Sync config files only
+  snry-daemon sync         Sync config files to XDG directories
+  snry-daemon install      Install binaries, plugins, fonts, venv, systemd unit
   snry-daemon diagnose     Collect system diagnostics
   snry-daemon autoscale    Auto-set monitor scale
   snry-daemon uninstall    Remove installed files and revert changes
@@ -119,7 +122,8 @@ func runManagerCommand(name string, fn func(context.Context, manager.Config) err
 
 func runSetup()     { runManagerCommand("setup", manager.Setup) }
 func runDeps()      { runManagerCommand("deps", manager.Deps) }
-func runFiles()     { runManagerCommand("files", manager.Files) }
+func runSync()      { runManagerCommand("sync", manager.Files) }
+func runInstall()   { runManagerCommand("install", manager.Install) }
 func runDiagnose()  { runManagerCommand("diagnose", manager.Diagnose) }
 func runCheckDeps() { runManagerCommand("checkdeps", manager.CheckDeps) }
 func runUninstall() { runManagerCommand("uninstall", manager.Uninstall) }

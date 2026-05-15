@@ -82,6 +82,20 @@ func FilesSteps(cfg Config) []Step {
 				return syncMiscConfigs(cfg)
 			},
 		},
+	}
+}
+
+// InstallSteps returns steps for installing binaries, plugins, and runtime
+// dependencies. These are separate from config sync so that post_upgrade can
+// run them independently (e.g. network-heavy installs that may hang).
+func InstallSteps(cfg Config) []Step {
+	return []Step{
+		{
+			Name: "create-xdg-dirs",
+			Fn: func(ctx context.Context) error {
+				return createXDGDirs(cfg)
+			},
+		},
 		{
 			Name: "install-snry-daemon-binary",
 			Fn: func(ctx context.Context) error {
