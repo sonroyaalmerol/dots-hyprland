@@ -1,0 +1,227 @@
+# snry-shell
+
+A desktop shell for [Hyprland](https://hyprland.org/) built on [Quickshell](https://quickshell.outfoxxed.me/) with a Go daemon backend.
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Go-1.26-00ADD8?logo=go" alt="Go">
+  <img src="https://img.shields.io/badge/QML-Qt6-41CD52?logo=qt" alt="QML">
+  <img src="https://img.shields.io/badge/License-GPLv3-blue" alt="License">
+</p>
+
+## Architecture
+
+```
+┌─────────────────────────────────────────┐
+│            Quickshell (QML)             │
+│  shell.qml → services/ → modules/ii/    │
+│ DaemonSocket ↔ Unix domain socket (.sock)│
+└──────────────────┬──────────────────────┘
+                   │ JSON commands/events
+┌──────────────────▼──────────────────────┐
+│           snry-daemon (Go)              │
+│  cmd/snry-daemon → internal/daemon/     │
+│  25 service packages + wallpaper + image │
+└─────────────────────────────────────────┘
+```
+
+**Frontend** — QML/Qt6 panels (bar, dock, lock screen, notifications, launcher, overlay widgets, settings). Communicates with the daemon through `DaemonSocket`, a singleton that wraps a Unix domain socket connection. All image processing, color generation, recording, keyring access, and system management are routed through the daemon — no shell scripts or Python at runtime.
+
+**Backend** — `snry-daemon` is a long-running Go process listening on `$XDG_RUNTIME_DIR/snry-daemon.sock`. It accepts text commands (`switch-wallpaper <path>`, `record --fullscreen --sound`, `brightness-set 50`, etc.) and emits JSON events back to connected clients. It also doubles as a setup/management CLI (`snry-daemon setup`, `snry-daemon deps`, etc.).
+
+## Features
+
+### Panels & UI
+
+- **Bar** — workspaces, system tray, media controls, quick toggles, volume mixer, clock, weather
+- **Dock** — optional dock with pinned/running apps
+- **Launcher** — app search, web search, calculator, cliphist history, action commands
+- **Lock screen** — Hyprlock integration with Material You theming
+- **Session screen** — suspend, hibernate, poweroff, reboot, firmware setup
+- **Notifications** — notification daemon with popup history
+- **Screen corners** — rounded corner overlays for Hyprland
+- **On-screen keyboard** — virtual keyboard for tablet mode
+- **Overlay widgets** — recorder controls, cheatsheet
+- **Settings** — full GUI settings panel (`settings.qml`) plus first-run wizard (`welcome.qml`)
+- **Region selector** — screenshot region, OCR, screen recording region selection
+
+### Quick Toggles
+
+Audio, Bluetooth, Dark Mode, EasyEffects, Game Mode, Night Light, Network, Notification, On-Screen Keyboard, Power Profiles, Screen Snip, Tablet Mode, Color Picker, Idle Inhibitor, Mic
+
+### Theming
+
+- **Material You** — automatic color scheme generation from wallpaper via [matugen](https://github.com/InioX/matugen) + custom HCT color space harmonization in Go
+- **Terminal colors** — ghostty theme generation, terminal escape sequences
+- **KVantum, VS Code, Neovim** — automatic theme application
+- **Dark/light mode** — toggle with gsettings propagation
+- **14 languages** — de, en, es, fr, he, id, it, ja, pt, ru, tr, uk, vi, zh
+
+### Wallpaper
+
+- Static image and video wallpaper support
+- Random wallpaper from local collection or osu! skins
+- Automatic Material You color generation on switch
+- Contour-based region detection for smart widget placement
+- Thumbnail generation (pure Go, no OpenCV)
+- Text color detection for overlay readability
+
+### Screen Recording
+
+- Region, fullscreen, and fullscreen-with-sound recording via `wf-recorder`
+- Region selection overlay with real-time preview
+
+### Daemon Services
+
+Battery, brightness, clipboard (cliphist), compositor (Hyprland IPC), conflict killer, dark mode, EasyEffects, Game Mode, Hyprland keybinds, Hyprsunset, XKB layout, idle detection, on-screen keyboard, lock screen, network (NM), power saving, resource monitor, session warnings, system info, tablet mode, updates, weather, keyring (gnome-keyring/secret-tool), polkit
+
+## Requirements
+
+### Runtime
+
+- [Quickshell](https://quickshell.outfoxxed.me/) (QML shell host)
+- [Hyprland](https://hyprland.org/) (Wayland compositor)
+- Go 1.26+ (build only)
+
+### Optional
+
+See `PKGBUILD` for the full dependency list. Key packages:
+
+| Category | Packages                                        |
+| -------- | ----------------------------------------------- |
+| Audio    | pipewire, wireplumber, playerctl, cava          |
+| Display  | brightnessctl, ddcutil, hyprsunset              |
+| Capture  | slurp, grim, wf-recorder, swappy, tesseract     |
+| Network  | networkmanager, plasma-nm                       |
+| Desktop  | fuzzel, wlogout, hyprlock, hypridle, hyprpicker |
+| Theming  | matugen, ghostty, kvantum                       |
+| Keyring  | gnome-keyring, libsecret                        |
+
+## Installation
+
+### Arch Linux (AUR)
+
+```sh
+paru -S snry-shell-qs
+snry-daemon setup
+```
+
+### From Source
+
+```sh
+git clone https://github.com/sonroyaalmerol/snry-shell.git
+cd snry-shell
+go build -o snry-daemon ./cmd/snry-daemon
+./snry-daemon setup
+```
+
+## Usage
+
+### CLI
+
+```
+snry-daemon              Start daemon (default)
+snry-daemon daemon       Start daemon explicitly
+snry-daemon setup        Full installation (deps + files + setups)
+snry-daemon deps         Install packages only
+snry-daemon files        Sync config files only
+snry-daemon setups       System setup (groups, systemd, PAM)
+snry-daemon diagnose     Collect system diagnostics
+snry-daemon checkdeps    Check for missing packages
+snry-daemon autoscale    Auto-set monitor scale
+snry-daemon uninstall    Remove installed files and revert changes
+snry-daemon send <cmd>   Send command to running daemon
+```
+
+### Sending Commands
+
+```sh
+# Switch wallpaper and regenerate colors
+snry-daemon send "switch-wallpaper /path/to/image.jpg"
+
+# Start fullscreen recording with audio
+snry-daemon send "record --fullscreen --sound"
+
+# Set brightness
+snry-daemon send "brightness-set 80"
+
+# Toggle game mode
+snry-daemon send "gamemode-toggle"
+
+# Get system resource usage
+snry-daemon send "resources"
+```
+
+### Configuration
+
+User config lives at `~/.config/snry-shell/config.json`. The settings GUI is available via `Super+I` or the sidebar settings button.
+
+## Project Structure
+
+```
+cmd/snry-daemon/         Entrypoint (daemon + CLI)
+configs/                 Dotfiles synced by snry-daemon setup
+  bash/                  Shell configuration
+  ghostty/               Terminal config
+  hypr/                  Hyprland, hyprlock, hypridle configs
+  matugen/               Material You color templates
+  starship.toml          Prompt theme
+  ...
+data/                    OS-specific package lists (arch, fedora)
+frontend/ii/
+  assets/                Icons and images
+  modules/
+    common/              Shared widgets, config, utilities
+    ii/                  Main UI panels (bar, dock, lock, etc.)
+    settings/            Settings panels
+  panelFamilies/         Panel loading logic
+  scripts/               Static data (cava config, terminal scheme base)
+  services/              QML service singletons (DaemonSocket, Audio, etc.)
+  translations/          i18n JSON files (14 languages)
+internal/
+  daemon/
+    app/                 Command dispatcher, daemon lifecycle
+    socket/              Unix domain socket server with JSON events
+    brightness/          Backlight control (brightnessctl, ddcutil)
+    cliphist/            Clipboard history
+    compositor/          Hyprland IPC
+    conflict/            Tray/notification conflict killer
+    darkmode/            Dark mode toggle (gsettings)
+    easyeffects/         EasyEffects D-Bus control
+    gamemode/            Feral GameMode D-Bus
+    hyprland/            Monitor/workspace/window management
+    hyprkeybinds/        Keybind parser
+    hyprsunset/          Night light gamma control
+    hyprxkb/             XKB layout tracking
+    idle/                Idle inhibition (ext-idle-notify-v1)
+    inputmethod/         On-screen keyboard (virtual-keyboard-v1)
+    lock/                Screen locking
+    lockscreen/          Lock state monitoring
+    network/             NetworkManager D-Bus
+    powersave/           Power profile control (UPower)
+    quickshell/          Quickshell IPC integration
+    resources/           CPU/memory monitoring
+    session/             Loginctl session tracking
+    sysinfo/             System information collection
+    tabletmode/          Tablet mode detection
+    updates/             Package update checking
+    weather/             Weather data via wttr.in + geoclue
+  image/                 Pure Go image processing (no CGo)
+    image.go             Decoding, resizing, cropping
+    regions.go           Contour-based region detection (Sobel + flood fill)
+    leastbusy.go         Least-busy region detection (integral image variance)
+    textcolor.go         Text color detection (corner sampling)
+  wallpaper/             Color science & wallpaper management
+    hct.go               HCT color space (CAM16 + HctSolver)
+    scheme.go            Light/dark scheme detection
+    terminal.go          Ghostty theme + terminal sequence generation
+    wallpaper.go         Static/video wallpaper management
+  manager/               Setup, deps, file sync, diagnostics
+  syncengine/            Hyprland config parser (Lua-like)
+  xdg/                   XDG directory helpers
+  lualint/               Config validation
+  platform/              OS detection
+```
+
+## License
+
+[GPLv3](LICENSE)
