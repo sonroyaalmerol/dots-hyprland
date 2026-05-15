@@ -247,7 +247,7 @@ func GenerateAndApplyColors(cfg Config, termCfg TerminalConfig) error {
 
 // FindTerminalScheme locates the terminal scheme-base.json file.
 func FindTerminalScheme(cfg Config) string {
-	// Try installed path first
+	// Try installed path relative to executable
 	exe, err := os.Executable()
 	if err == nil {
 		shareDir := filepath.Join(filepath.Dir(exe), "..", "share", "snry-shell", "frontend", "ii", "scripts", "colors", "terminal", "scheme-base.json")
@@ -260,15 +260,14 @@ func FindTerminalScheme(cfg Config) string {
 	if _, err := os.Stat(systemPath); err == nil {
 		return systemPath
 	}
-	// Try repo path
+	// Try repo path (dev mode)
 	if cfg.RepoRoot != "" {
 		repoPath := filepath.Join(cfg.RepoRoot, "frontend", "ii", "scripts", "colors", "terminal", "scheme-base.json")
 		if _, err := os.Stat(repoPath); err == nil {
 			return repoPath
 		}
 	}
-	// Fallback to user config dir
-	return filepath.Join(cfg.ConfigHome, "quickshell", "ii", "scripts", "colors", "terminal", "scheme-base.json")
+	return ""
 }
 
 // FullWallpaperSwitch performs a complete wallpaper switch operation.

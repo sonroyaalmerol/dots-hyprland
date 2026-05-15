@@ -236,19 +236,12 @@ func syncQuickshell(cfg Config) error {
 		return fmt.Errorf("extract embedded frontend: %w", err)
 	}
 
-	// Deploy to /usr/share/snry-shell/frontend instead of user config.
-	deployDir := "/usr/share/snry-shell/frontend"
-
-	// Ensure the target directory exists (may need sudo for /usr/share).
-	if err := os.MkdirAll(deployDir+"/ii", 0o755); err != nil {
-		// Fall back to user config if we can't write to /usr/share
-		deployDir = cfg.XDG.ConfigHome + "/quickshell"
-		if err := os.MkdirAll(deployDir+"/ii", 0o755); err != nil {
-			return fmt.Errorf("create deploy dir: %w", err)
-		}
+	deployDir := "/usr/share/snry-shell/frontend/ii"
+	if err := os.MkdirAll(deployDir, 0o755); err != nil {
+		return fmt.Errorf("create deploy dir %s: %w", deployDir, err)
 	}
 
-	steps, err := smartSyncSteps(cfg, src+"/ii", deployDir+"/ii", "quickshell")
+	steps, err := smartSyncSteps(cfg, src+"/ii", deployDir, "quickshell")
 	if err != nil {
 		return fmt.Errorf("scan %s: %w", src, err)
 	}

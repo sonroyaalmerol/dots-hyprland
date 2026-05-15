@@ -21,8 +21,7 @@ type Config struct {
 }
 
 // ResolveConfigPath returns the quickshell config path, preferring the
-// system-installed frontend under /usr/share, falling back to the
-// embedded frontend cache, then the user config dir.
+// system-installed frontend under /usr/share, then the embedded frontend cache.
 func ResolveConfigPath() string {
 	// 1. System package install
 	systemPath := "/usr/share/snry-shell/frontend/ii"
@@ -35,17 +34,7 @@ func ResolveConfigPath() string {
 	if cacheDir == "" {
 		cacheDir = filepath.Join(os.Getenv("HOME"), ".cache")
 	}
-	cachedPath := cacheDir + "/snry-shell/embedded-frontend/ii"
-	if _, err := os.Stat(cachedPath + "/shell.qml"); err == nil {
-		return cachedPath
-	}
-
-	// 3. User config dir fallback
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
-	return configDir + "/quickshell/ii"
+	return cacheDir + "/snry-shell/embedded-frontend/ii"
 }
 
 func DefaultConfig() Config {
