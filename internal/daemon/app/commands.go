@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/wallpaper"
 )
 
 const maxKey = 248
@@ -478,6 +479,8 @@ func dispatchCommand(a *App, line string) {
 		go a.handleApplyKvantumTheme()
 	case "apply-terminal-colors":
 		go a.handleApplyTerminalColors()
+	case "switch-wallpaper":
+		go a.handleSwitchWallpaper(fields[1:])
 	case "hyprconfig-edit":
 		if len(fields) < 3 {
 			return
@@ -1313,41 +1316,25 @@ func (a *App) handleKeyringUnlock(password string) {
 func (a *App) handleNvimApplyColors() {
 	stateDir := os.Getenv("XDG_STATE_HOME")
 	if stateDir == "" {
-		stateDir = filepath.Join(os.Getenv("HOME"), ".local/state")
+		stateDir = filepath.Join(os.Getenv("HOME"), ".local", "state")
 	}
-	scssFile := filepath.Join(stateDir, "quickshell", "user", "generated", "material_colors.scss")
 	nvimFile := filepath.Join(stateDir, "quickshell", "user", "generated", "nvim_colors.json")
 
-	data, err := os.ReadFile(scssFile)
+	// Read colors.json (populated by matugen + MaterialThemeLoader)
+	genDir := filepath.Join(stateDir, "quickshell", "user", "generated")
+	colors, err := wallpaper.LoadColorMapFromJSON(filepath.Join(genDir, "colors.json"))
 	if err != nil {
+		log.Printf("[wallpaper] nvim colors: no colors.json: %v", err)
 		return
 	}
 
-	colors := make(map[string]any)
-	for line := range strings.SplitSeq(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		line = strings.TrimSuffix(line, ";")
-		if !strings.HasPrefix(line, "$") {
-			continue
-		}
-		line = line[1:]
-		before, after, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		key := strings.TrimSpace(before)
-		val := strings.TrimSpace(after)
-		switch val {
-		case "True":
-			colors[key] = true
-		case "False":
-			colors[key] = false
-		default:
-			colors[key] = val
-		}
+	// Convert to map[string]any for JSON output
+	colorsAny := make(map[string]any, len(colors))
+	for k, v := range colors {
+		colorsAny[k] = v
 	}
 
-	jsonOut, err := json.MarshalIndent(colors, "", "  ")
+	jsonOut, err := json.MarshalIndent(colorsAny, "", "  ")
 	if err != nil {
 		return
 	}
@@ -1470,7 +1457,27 @@ func (a *App) handleApplyKvantumTheme() {
 	if err != nil {
 		return
 	}
-	colors := parseSCSSColors(string(scssData))
+	// Read colors from colors.json (now authoritative source)
+	genDir := filepath.Join(filepath.Dir(scssFile), "")
+	_ = genDir
+	// Fallback: try SCSS first, then colors.json
+	colorMap := make(map[string]string)
+	if len(scssData) > 0 {
+		colorMap = parseSCSSColors(string(scssData))
+	}
+	if len(colorMap) == 0 {
+		// SCSS empty or missing - read from colors.json
+		colorsJSON := filepath.Join(filepath.Dir(scssFile), "colors.json")
+		if jsonData, err := os.ReadFile(colorsJSON); err == nil {
+			var jsonColors map[string]string
+			if json.Unmarshal(jsonData, &jsonColors) == nil {
+				// Map snake_case JSON keys to camelCase SCSS keys
+				for k, v := range jsonColors {
+					colorMap[snakeToCamel(k)] = v
+				}
+			}
+		}
+	}
 
 	// Apply color mappings to kvconfig
 	content := string(data)
@@ -1501,12 +1508,22 @@ func (a *App) handleApplyKvantumTheme() {
 		"text.disabled.color":           "surfaceDim",
 	}
 	for kvKey, scssName := range mappings {
-		if hexVal, ok := colors[scssName]; ok {
+		if hexVal, ok := colorMap[scssName]; ok {
 			re := regexp.MustCompile(regexp.QuoteMeta(kvKey) + `=\s*#[0-9a-fA-F]+`)
 			content = re.ReplaceAllString(content, kvKey+"="+hexVal)
 		}
 	}
 	os.WriteFile(dstConfig, []byte(content), 0644)
+}
+
+func snakeToCamel(s string) string {
+	parts := strings.Split(s, "_")
+	for i := 1; i < len(parts); i++ {
+		if len(parts[i]) > 0 {
+			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+		}
+	}
+	return strings.Join(parts, "")
 }
 
 func parseSCSSColors(scss string) map[string]string {
@@ -1529,6 +1546,60 @@ func parseSCSSColors(scss string) map[string]string {
 	return colors
 }
 
+func (a *App) handleSwitchWallpaper(args []string) {
+	var imgPath, mode, schemeTypeStr, color string
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--image":
+			if i+1 < len(args) {
+				imgPath = args[i+1]
+				i++
+			}
+		case "--mode":
+			if i+1 < len(args) {
+				mode = args[i+1]
+				i++
+			}
+		case "--type":
+			if i+1 < len(args) {
+				schemeTypeStr = args[i+1]
+				i++
+			}
+		case "--color":
+			if i+1 < len(args) {
+				color = args[i+1]
+				i++
+			}
+		}
+	}
+
+	if imgPath == "" && color == "" {
+		log.Printf("[wallpaper] switch-wallpaper: no image or color specified")
+		return
+	}
+
+	schemeType := wallpaper.ParseSchemeType(schemeTypeStr)
+	if schemeTypeStr == "" || schemeType == wallpaper.SchemeAuto {
+		schemeType = wallpaper.SchemeAuto
+	}
+
+	if mode == "" {
+		if wallpaper.IsDarkMode() {
+			mode = "dark"
+		} else {
+			mode = "light"
+		}
+	}
+
+	cfg := wallpaper.DefaultConfig()
+	cfg.RepoRoot = a.repoRoot()
+
+	if err := wallpaper.FullWallpaperSwitch(cfg, imgPath, mode, schemeType, color); err != nil {
+		log.Printf("[wallpaper] switch failed: %v", err)
+	}
+}
+
 func (a *App) findScriptsDir(configDir string) string {
 	// Try installed path first
 	exe, err := os.Executable()
@@ -1543,92 +1614,62 @@ func (a *App) findScriptsDir(configDir string) string {
 }
 
 func (a *App) handleApplyTerminalColors() {
-	stateDir := os.Getenv("XDG_STATE_HOME")
-	if stateDir == "" {
-		stateDir = filepath.Join(os.Getenv("HOME"), ".local", "state")
-	}
 	configDir := os.Getenv("XDG_CONFIG_HOME")
 	if configDir == "" {
 		configDir = filepath.Join(os.Getenv("HOME"), ".config")
 	}
 
-	genDir := filepath.Join(stateDir, "quickshell", "user", "generated")
-	scssFile := filepath.Join(genDir, "material_colors.scss")
-	scssData, err := os.ReadFile(scssFile)
+	wpCfg := wallpaper.DefaultConfig()
+	wpCfg.ConfigHome = configDir
+	wpCfg.RepoRoot = a.repoRoot()
+
+	genDir := wpCfg.GenDir()
+
+	// Read colors.json (populated by matugen + MaterialThemeLoader)
+	colors, err := wallpaper.LoadColorMapFromJSON(filepath.Join(genDir, "colors.json"))
 	if err != nil {
-		return
-	}
-	colors := parseSCSSColors(string(scssData))
-
-	// Check if terminal theming is enabled
-	configFile := filepath.Join(configDir, "snry-shell", "config.json")
-	enableTerminal := true // default
-	if cfgData, err := os.ReadFile(configFile); err == nil {
-		var cfg map[string]any
-		if json.Unmarshal(cfgData, &cfg) == nil {
-			if appear, ok := cfg["appearance"].(map[string]any); ok {
-				if wt, ok := appear["wallpaperTheming"].(map[string]any); ok {
-					if et, ok := wt["enableTerminal"].(bool); ok {
-						enableTerminal = et
-					}
-				}
-			}
-		}
-	}
-
-	if !enableTerminal {
+		log.Printf("[wallpaper] no colors.json: %v", err)
 		return
 	}
 
-	os.MkdirAll(filepath.Join(genDir, "terminal"), 0755)
-	termAlpha := "100"
-
-	// Get the scripts directory
-	scriptDir := a.findScriptsDir(configDir)
-
-	// Apply Ghostty theme
-	ghosttyTemplate := filepath.Join(scriptDir, "colors", "terminal", "ghostty-theme.conf")
-	if data, err := os.ReadFile(ghosttyTemplate); err == nil {
-		content := string(data)
-		for name, hexVal := range colors {
-			content = strings.ReplaceAll(content, "$"+name+" #", strings.TrimPrefix(hexVal, "#"))
-		}
-		os.WriteFile(filepath.Join(genDir, "terminal", "ghostty-theme.conf"), []byte(content), 0644)
-		// Signal ghostty
-		if out, err := exec.Command("pidof", "ghostty").Output(); err == nil {
-			for pidStr := range strings.FieldsSeq(strings.TrimSpace(string(out))) {
-				if pid, err := strconv.Atoi(pidStr); err == nil {
-					syscall.Kill(pid, syscall.SIGUSR1)
-				}
-			}
-		}
+	// Load shell config for terminal settings
+	termCfg := wallpaper.DefaultTerminalConfig()
+	shellCfg, err := wallpaper.LoadShellConfig(wpCfg.ShellConfigFile)
+	if err == nil {
+		termCfg.EnableTerminal = shellCfg.Appearance.WallpaperTheming.EnableTerminal
+		termCfg.ForceDarkMode = shellCfg.Appearance.WallpaperTheming.TerminalGenerationProps.ForceDarkMode
+		termCfg.Harmony = shellCfg.Appearance.WallpaperTheming.TerminalGenerationProps.Harmony
+		termCfg.HarmonizeThreshold = shellCfg.Appearance.WallpaperTheming.TerminalGenerationProps.HarmonizeThreshold
+		termCfg.TermFgBoost = shellCfg.Appearance.WallpaperTheming.TerminalGenerationProps.TermFgBoost
 	}
 
-	// Apply generic terminal escape sequences
-	seqTemplate := filepath.Join(scriptDir, "colors", "terminal", "sequences.txt")
-	if data, err := os.ReadFile(seqTemplate); err == nil {
-		content := string(data)
-		for name, hexVal := range colors {
-			content = strings.ReplaceAll(content, "$"+name+" #", strings.TrimPrefix(hexVal, "#"))
-		}
-		content = strings.ReplaceAll(content, "$alpha", termAlpha)
-		os.WriteFile(filepath.Join(genDir, "terminal", "sequences.txt"), []byte(content), 0644)
+	if !termCfg.EnableTerminal {
+		return
+	}
 
-		// Send to /dev/pts
-		seqPath := filepath.Join(genDir, "terminal", "sequences.txt")
-		seqData, _ := os.ReadFile(seqPath)
-		entries, _ := os.ReadDir("/dev/pts")
-		digitPattern := regexp.MustCompile(`^\d+$`)
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				if digitPattern.MatchString(entry.Name()) {
-					if f, err := os.OpenFile(filepath.Join("/dev/pts", entry.Name()), os.O_WRONLY, 0); err == nil {
-						f.Write(seqData)
-						f.Close()
-					}
-				}
-			}
-		}
+	// Determine dark mode
+	isDark := true
+	if termCfg.ForceDarkMode {
+		isDark = true
+	} else {
+		isDark = wallpaper.IsDarkMode()
+	}
+
+	// Load terminal base scheme
+	schemePath := wallpaper.FindTerminalScheme(wpCfg)
+	scheme, err := wallpaper.LoadTerminalScheme(schemePath)
+	if err != nil {
+		log.Printf("[wallpaper] terminal scheme: %v", err)
+		return
+	}
+
+	// Generate harmonized terminal colors
+	termColors := wallpaper.GenerateTerminalColors(colors, scheme, isDark,
+		termCfg.Harmony, termCfg.HarmonizeThreshold, termCfg.TermFgBoost)
+
+	// Apply terminal theme files
+	if err := wallpaper.ApplyTerminalTheme(colors, termColors, isDark, genDir); err != nil {
+		log.Printf("[wallpaper] apply terminal theme: %v", err)
 	}
 
 	// Also apply nvim and vscode colors

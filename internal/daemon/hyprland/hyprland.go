@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"maps"
 	"net"
 	"os"
 	"strings"
@@ -31,8 +30,10 @@ type Service struct {
 	layers          map[string]any
 	activeWorkspace map[string]any
 
-	fetchMu    sync.Mutex
-	debounceCh chan string
+	// Event-driven cache helpers.
+	wsNameToID          map[string]int // workspace name → ID for O(1) lookups
+	needsFullFetch      bool           // set by configreloaded, triggers full re-fetch on next iteration
+	needsMonitorDetails bool           // set by monitoraddedv2, triggers monitor re-fetch for resolution/scale
 }
 
 func New(cfg Config, cb func(map[string]any)) *Service {
@@ -40,7 +41,7 @@ func New(cfg Config, cb func(map[string]any)) *Service {
 		cfg:        cfg,
 		callback:   cb,
 		layers:     make(map[string]any),
-		debounceCh: make(chan string, 64),
+		wsNameToID: make(map[string]int),
 	}
 	s.detectVersion()
 	return s
@@ -191,172 +192,35 @@ func fetchLayers() (map[string]any, error) {
 }
 
 func (s *Service) fetchAll() error {
-	s.fetchMu.Lock()
-	defer s.fetchMu.Unlock()
-
 	s.mu.Lock()
 	s.windows, _ = fetchWindows()
 	s.monitors, _ = fetchMonitors()
 	s.workspaces, _ = fetchWorkspaces()
 	s.layers, _ = fetchLayers()
 	s.activeWorkspace, _ = fetchActiveWorkspace()
+
+	// Rebuild the name→ID map from the fresh workspace list.
+	s.wsNameToID = make(map[string]int, len(s.workspaces))
+	for _, ws := range s.workspaces {
+		if id, ok := ws["id"].(float64); ok {
+			if name, ok := ws["name"].(string); ok {
+				s.wsNameToID[name] = int(id)
+			}
+		}
+	}
+	s.needsFullFetch = false
+	s.needsMonitorDetails = false
 	s.mu.Unlock()
 
 	return nil
 }
 
-func (s *Service) fetchWindowsAndUpdate() {
-	s.fetchMu.Lock()
-	defer s.fetchMu.Unlock()
-
-	if w, err := fetchWindows(); err != nil {
-		log.Printf("[hyprland] fetchWindows error: %v", err)
-	} else {
-		s.mu.Lock()
-		s.windows = w
-		s.mu.Unlock()
-		s.emit()
-	}
-}
-
-func (s *Service) fetchWorkspacesAndUpdate() {
-	s.fetchMu.Lock()
-	defer s.fetchMu.Unlock()
-
-	ws, err := fetchWorkspaces()
-	if err != nil {
-		log.Printf("[hyprland] fetchWorkspaces error: %v", err)
-		return
-	}
-	aw, err := fetchActiveWorkspace()
-	if err != nil {
-		log.Printf("[hyprland] fetchActiveWorkspace error: %v", err)
-	}
-	// Also refresh monitors — each monitor's activeWorkspace changes on workspace switch.
-	m, err := fetchMonitors()
-	if err != nil {
-		log.Printf("[hyprland] fetchMonitors error: %v", err)
-	}
-	s.mu.Lock()
-	s.workspaces = ws
-	if m != nil {
-		s.monitors = m
-	}
-	if aw != nil {
-		s.activeWorkspace = aw
-	}
-	s.mu.Unlock()
-	s.emit()
-}
-
-func (s *Service) fetchMonitorsAndUpdate() {
-	s.fetchMu.Lock()
-	defer s.fetchMu.Unlock()
-
-	m, err := fetchMonitors()
-	if err != nil {
-		log.Printf("[hyprland] fetchMonitors error: %v", err)
-		return
-	}
-	aw, err := fetchActiveWorkspace()
-	if err != nil {
-		log.Printf("[hyprland] fetchActiveWorkspace error: %v", err)
-	}
-	s.mu.Lock()
-	s.monitors = m
-	if aw != nil {
-		s.activeWorkspace = aw
-	}
-	s.mu.Unlock()
-	s.emit()
-}
-
-func (s *Service) fetchLayersAndUpdate() {
-	s.fetchMu.Lock()
-	defer s.fetchMu.Unlock()
-
-	if l, err := fetchLayers(); err != nil {
-		log.Printf("[hyprland] fetchLayers error: %v", err)
-	} else {
-		s.mu.Lock()
-		s.layers = l
-		s.mu.Unlock()
-		s.emit()
-	}
-}
-
-func (s *Service) fetchAllAndUpdate() {
-	s.fetchMu.Lock()
-	defer s.fetchMu.Unlock()
-
-	var errs []string
-	w, err := fetchWindows()
-	if err != nil {
-		errs = append(errs, fmt.Sprintf("windows: %v", err))
-	}
-	m, err := fetchMonitors()
-	if err != nil {
-		errs = append(errs, fmt.Sprintf("monitors: %v", err))
-	}
-	ws, err := fetchWorkspaces()
-	if err != nil {
-		errs = append(errs, fmt.Sprintf("workspaces: %v", err))
-	}
-	l, err := fetchLayers()
-	if err != nil {
-		errs = append(errs, fmt.Sprintf("layers: %v", err))
-	}
-	aw, err := fetchActiveWorkspace()
-	if err != nil {
-		errs = append(errs, fmt.Sprintf("activeWorkspace: %v", err))
-	}
-	if len(errs) > 0 {
-		log.Printf("[hyprland] fetchAll errors: %s", strings.Join(errs, "; "))
-	}
-	s.mu.Lock()
-	if w != nil {
-		s.windows = w
-	}
-	if m != nil {
-		s.monitors = m
-	}
-	if ws != nil {
-		s.workspaces = ws
-	}
-	if l != nil {
-		s.layers = l
-	}
-	if aw != nil {
-		s.activeWorkspace = aw
-	}
-	s.mu.Unlock()
-	s.emit()
-}
-
-// categorizeEvent maps an event name to a data category.
-func categorizeEvent(eventName string) string {
-	switch eventName {
-	case "openwindow", "closewindow", "movewindow", "activewindow", "activewindowv2",
-		"fullscreen", "changefloatingmode", "windowtitle", "windowtitlev2",
-		"movewindowv2", "pin", "minimized", "urgent", "toggleGroup":
-		return "windows"
-
-	case "workspace", "workspacev2", "createworkspace", "createworkspacev2",
-		"destroyworkspace", "destroyworkspacev2", "renameworkspace":
-		return "workspaces"
-
-	case "focusedmon", "focusedmonv2", "monitoradded", "monitorremoved":
-		return "monitors"
-
-	case "openlayer", "closelayer":
-		return "layers"
-
-	case "configreloaded":
-		return "all"
-	}
-	return ""
-}
-
+// subscribeEvents connects to socket2 and processes Hyprland events in real time.
+// Each event is parsed inline and the cache is mutated directly — no debouncing,
+// no socket1 round-trips. The only exceptions are:
+//   - configreloaded → triggers a full re-fetch on the next iteration
+//   - monitoraddedv2 → after the event is handled, monitors are re-fetched for full detail
+//   - On reconnect, the caller re-runs fetchAll()+emit before re-subscribing.
 func (s *Service) subscribeEvents(ctx context.Context) error {
 	sockPath := eventSocketPath()
 	conn, err := net.Dial("unix", sockPath)
@@ -365,11 +229,9 @@ func (s *Service) subscribeEvents(ctx context.Context) error {
 	}
 	defer conn.Close()
 
-	// Channel for events read by scanner goroutine.
-	eventCh := make(chan string, 64)
+	eventCh := make(chan string, 128)
 	doneCh := make(chan error, 1)
 
-	// Read events in a goroutine, send to channel.
 	go func() {
 		scanner := bufio.NewScanner(conn)
 		for scanner.Scan() {
@@ -388,49 +250,12 @@ func (s *Service) subscribeEvents(ctx context.Context) error {
 		}
 	}()
 
-	// Main loop: select on events, debounce timer, context, and done.
-	debounce := time.NewTimer(0)
-	if !debounce.Stop() {
-		<-debounce.C
-	}
-
-	pending := make(map[string]bool)
-
-	flush := func() {
-		cats := make(map[string]bool, len(pending))
-		maps.Copy(cats, pending)
-		pending = make(map[string]bool)
-
-		if cats["all"] {
-			s.fetchAllAndUpdate()
-			return
-		}
-		if cats["windows"] {
-			s.fetchWindowsAndUpdate()
-		}
-		if cats["workspaces"] {
-			s.fetchWorkspacesAndUpdate()
-		}
-		if cats["monitors"] {
-			s.fetchMonitorsAndUpdate()
-		}
-		if cats["layers"] {
-			s.fetchLayersAndUpdate()
-		}
-	}
-
 	for {
 		select {
 		case <-ctx.Done():
-			debounce.Stop()
 			return ctx.Err()
 
 		case err := <-doneCh:
-			debounce.Stop()
-			// Flush any pending events before reconnecting.
-			if len(pending) > 0 {
-				flush()
-			}
 			return err
 
 		case line := <-eventCh:
@@ -438,19 +263,39 @@ func (s *Service) subscribeEvents(ctx context.Context) error {
 			if len(parts) != 2 {
 				continue
 			}
-			category := categorizeEvent(strings.TrimSpace(parts[0]))
-			if category == "" {
-				continue
-			}
-			pending[category] = true
-			debounce.Reset(150 * time.Millisecond)
+			eventName := strings.TrimSpace(parts[0])
+			s.handleSocket2Event(eventName, parts[1])
 
-		case <-debounce.C:
-			if len(pending) > 0 {
-				flush()
+			// Handle events that require a supplementary socket1 fetch.
+			if s.needsFullFetch {
+				s.needsFullFetch = false
+				if err := s.fetchAll(); err != nil {
+					log.Printf("[hyprland] full re-fetch after configreloaded: %v", err)
+				} else {
+					s.emit()
+				}
+			}
+			if s.needsMonitorDetails {
+				s.needsMonitorDetails = false
+				s.fetchMonitorDetails()
 			}
 		}
 	}
+}
+
+// fetchMonitorDetails is a targeted fetch to fill in monitor resolution/scale/position
+// that aren't available from the monitoraddedv2 event. Called inline from the
+// event loop after handling monitoraddedv2.
+func (s *Service) fetchMonitorDetails() {
+	m, err := fetchMonitors()
+	if err != nil {
+		log.Printf("[hyprland] fetchMonitorDetails error: %v", err)
+		return
+	}
+	s.mu.Lock()
+	s.monitors = m
+	s.mu.Unlock()
+	s.emit()
 }
 
 func (s *Service) Run(ctx context.Context) error {
@@ -489,6 +334,14 @@ func (s *Service) Run(ctx context.Context) error {
 		backoff *= 2
 		if backoff > maxBackoff {
 			backoff = maxBackoff
+		}
+
+		// Re-fetch full state after reconnect to catch any changes during the gap.
+		log.Println("[hyprland] re-fetching state after reconnect...")
+		if err := s.fetchAll(); err != nil {
+			log.Printf("[hyprland] re-fetch after reconnect: %v", err)
+		} else {
+			s.emit()
 		}
 	}
 }
