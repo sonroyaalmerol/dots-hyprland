@@ -23,6 +23,11 @@ import (
 // reachable, Launch is a no-op and returns the existing signature immediately.
 // If the signature is stale (socket unreachable), it is cleared and Hyprland
 // is relaunched.
+//
+// If the env var is NOT set, Launch scans for any live Hyprland instance before
+// trying to start a new one. This prevents accidentally launching a second
+// compositor on top of an already-running session (e.g. if the systemd
+// environment hasn't received import-environment yet at daemon restart).
 func Launch(ctx context.Context) (string, error) {
 	// If Hyprland is already running and reachable, just return its instance signature.
 	if sig := os.Getenv("HYPRLAND_INSTANCE_SIGNATURE"); sig != "" {
@@ -31,6 +36,20 @@ func Launch(ctx context.Context) (string, error) {
 		}
 		log.Printf("[compositor] stale HYPRLAND_INSTANCE_SIGNATURE=%q (socket unreachable), clearing", sig)
 		os.Unsetenv("HYPRLAND_INSTANCE_SIGNATURE")
+	}
+
+	// Scan for an existing live instance before launching.
+	// The env var may be missing if systemd hasn't propagated import-environment
+	// yet on daemon restart, but Hyprland is still running in the session.
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
+	}
+	if existing := findLiveInstance(runtimeDir); existing != "" {
+		log.Printf("[compositor] found running Hyprland instance (signature=%s) via socket scan", existing)
+		os.Setenv("HYPRLAND_INSTANCE_SIGNATURE", existing)
+		ImportEnvironment(runtimeDir)
+		return existing, nil
 	}
 
 	// Launch start-hyprland as a subprocess.
@@ -55,10 +74,6 @@ func Launch(ctx context.Context) (string, error) {
 
 	// Wait for the Hyprland socket to appear.
 	// start-hyprland creates $XDG_RUNTIME_DIR/hypr/<signature>/.socket.sock
-	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-	if runtimeDir == "" {
-		runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
-	}
 
 	sig, err := waitForSocket(ctx, runtimeDir)
 	if err != nil {
@@ -131,12 +146,36 @@ func IsAlive(sig string) bool {
 		runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
 	}
 	sockPath := filepath.Join(runtimeDir, "hypr", sig, ".socket.sock")
-	conn, err := net.Dial("unix", sockPath)
+	conn, err := net.DialTimeout("unix", sockPath, time.Second)
 	if err != nil {
 		return false
 	}
 	conn.Close()
 	return true
+}
+
+// findLiveInstance scans the hypr directory for a running Hyprland instance
+// by testing each instance directory's IPC socket. Returns the signature of
+// the first live instance found, or empty string if none.
+func findLiveInstance(runtimeDir string) string {
+	hyprDir := filepath.Join(runtimeDir, "hypr")
+	entries, err := os.ReadDir(hyprDir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		sockPath := filepath.Join(hyprDir, e.Name(), ".socket.sock")
+		conn, err := net.DialTimeout("unix", sockPath, 100*time.Millisecond)
+		if err != nil {
+			continue
+		}
+		conn.Close()
+		return e.Name()
+	}
+	return ""
 }
 
 // importEnvironment detects the WAYLAND_DISPLAY socket created by the compositor,
