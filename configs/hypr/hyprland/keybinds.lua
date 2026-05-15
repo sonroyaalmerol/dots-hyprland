@@ -115,27 +115,27 @@ hl.bind("SUPER + ALT + S", hl.dsp.window.move({ workspace = "special", follow = 
 hl.bind("CTRL + SUPER + S", hl.dsp.workspace.toggle_special()) -- [hidden]
 
 -- Focus workspace (Super+num)
-hl.bind("SUPER + code:10", hl.dsp.exec_cmd(snry send workspace-action workspace 1")) -- [hidden]
-hl.bind("SUPER + code:11", hl.dsp.exec_cmd(snry send workspace-action workspace 2")) -- [hidden]
-hl.bind("SUPER + code:12", hl.dsp.exec_cmd(snry send workspace-action workspace 3")) -- [hidden]
-hl.bind("SUPER + code:13", hl.dsp.exec_cmd(snry send workspace-action workspace 4")) -- [hidden]
-hl.bind("SUPER + code:14", hl.dsp.exec_cmd(snry send workspace-action workspace 5")) -- [hidden]
-hl.bind("SUPER + code:15", hl.dsp.exec_cmd(snry send workspace-action workspace 6")) -- [hidden]
-hl.bind("SUPER + code:16", hl.dsp.exec_cmd(snry send workspace-action workspace 7")) -- [hidden]
-hl.bind("SUPER + code:17", hl.dsp.exec_cmd(snry send workspace-action workspace 8")) -- [hidden]
-hl.bind("SUPER + code:18", hl.dsp.exec_cmd(snry send workspace-action workspace 9")) -- [hidden]
-hl.bind("SUPER + code:19", hl.dsp.exec_cmd(snry send workspace-action workspace 10")) -- [hidden]
+hl.bind("SUPER + code:10", hl.dsp.exec_cmd("snry send workspace-action workspace 1")) -- [hidden]
+hl.bind("SUPER + code:11", hl.dsp.exec_cmd("snry send workspace-action workspace 2")) -- [hidden]
+hl.bind("SUPER + code:12", hl.dsp.exec_cmd("snry send workspace-action workspace 3")) -- [hidden]
+hl.bind("SUPER + code:13", hl.dsp.exec_cmd("snry send workspace-action workspace 4")) -- [hidden]
+hl.bind("SUPER + code:14", hl.dsp.exec_cmd("snry send workspace-action workspace 5")) -- [hidden]
+hl.bind("SUPER + code:15", hl.dsp.exec_cmd("snry send workspace-action workspace 6")) -- [hidden]
+hl.bind("SUPER + code:16", hl.dsp.exec_cmd("snry send workspace-action workspace 7")) -- [hidden]
+hl.bind("SUPER + code:17", hl.dsp.exec_cmd("snry send workspace-action workspace 8")) -- [hidden]
+hl.bind("SUPER + code:18", hl.dsp.exec_cmd("snry send workspace-action workspace 9")) -- [hidden]
+hl.bind("SUPER + code:19", hl.dsp.exec_cmd("snry send workspace-action workspace 10")) -- [hidden]
 -- keypad
-hl.bind("SUPER + code:87", hl.dsp.exec_cmd(snry send workspace-action workspace 1"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:88", hl.dsp.exec_cmd(snry send workspace-action workspace 2"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:89", hl.dsp.exec_cmd(snry send workspace-action workspace 3"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:83", hl.dsp.exec_cmd(snry send workspace-action workspace 4"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:84", hl.dsp.exec_cmd(snry send workspace-action workspace 5"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:85", hl.dsp.exec_cmd(snry send workspace-action workspace 6"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:79", hl.dsp.exec_cmd(snry send workspace-action workspace 7"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:80", hl.dsp.exec_cmd(snry send workspace-action workspace 8"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:81", hl.dsp.exec_cmd(snry send workspace-action workspace 9"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:90", hl.dsp.exec_cmd(snry send workspace-action workspace 10"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:87", hl.dsp.exec_cmd("snry send workspace-action workspace 1"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:88", hl.dsp.exec_cmd("snry send workspace-action workspace 2"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:89", hl.dsp.exec_cmd("snry send workspace-action workspace 3"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:83", hl.dsp.exec_cmd("snry send workspace-action workspace 4"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:84", hl.dsp.exec_cmd("snry send workspace-action workspace 5"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:85", hl.dsp.exec_cmd("snry send workspace-action workspace 6"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:79", hl.dsp.exec_cmd("snry send workspace-action workspace 7"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:80", hl.dsp.exec_cmd("snry send workspace-action workspace 8"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:81", hl.dsp.exec_cmd("snry send workspace-action workspace 9"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:90", hl.dsp.exec_cmd("snry send workspace-action workspace 10"), { repeating = true }) -- [hidden]
 
 -- Focus left/right
 hl.bind("CTRL + SUPER + Right", hl.dsp.focus({ workspace = "r+1" })) -- [hidden]
@@ -159,15 +159,15 @@ hl.bind("CTRL + SUPER + Up", hl.dsp.focus({ workspace = "r-5" })) -- [hidden]
 hl.bind("CTRL + SUPER + Down", hl.dsp.focus({ workspace = "r+5" })) -- [hidden]
 
 -- Session
-hl.bind("SUPER + L", hl.dsp.exec_cmd(snry send lock"), { description = "Lock" })
+hl.bind("SUPER + L", hl.dsp.exec_cmd("snry send lock"), { description = "Lock" })
 hl.bind("SUPER + SHIFT + L", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"), { description = "Suspend system", locked = true })
-hl.bind("XF86PowerOff", hl.dsp.exec_cmd(snry send power-button"), { locked = true }) -- [hidden]
-hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd(snry send lid-close"), { locked = true }) -- [hidden]
+hl.bind("XF86PowerOff", hl.dsp.exec_cmd("snry send power-button"), { locked = true }) -- [hidden]
+hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("snry send lid-close"), { locked = true }) -- [hidden]
 hl.bind("CTRL + SHIFT + ALT + SUPER + Delete", hl.dsp.exec_cmd("systemctl poweroff || loginctl poweroff"), { description = "Shutdown" }) -- [hidden]
 
 -- Screen zoom
-hl.bind("SUPER + Minus", hl.dsp.exec_cmd(snry send zoom decrease 0.3"), { repeating = true }) -- Zoom out
-hl.bind("SUPER + Equal", hl.dsp.exec_cmd(snry send zoom increase 0.3"), { repeating = true }) -- Zoom in
+hl.bind("SUPER + Minus", hl.dsp.exec_cmd("snry send zoom decrease 0.3"), { repeating = true }) -- Zoom out
+hl.bind("SUPER + Equal", hl.dsp.exec_cmd("snry send zoom increase 0.3"), { repeating = true }) -- Zoom in
 
 -- Media
 hl.bind("SUPER + SHIFT + N", hl.dsp.exec_cmd("playerctl next || playerctl position `bc <<< \"100 * $(playerctl metadata mpris:length) / 1000000 / 100\"`"), { locked = true }) -- Next track
