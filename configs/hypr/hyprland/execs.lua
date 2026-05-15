@@ -13,8 +13,8 @@ hl.on("hyprland.start", function()
 	-- Display
 	hl.exec_cmd("xrandr --output DP-1 --primary")
 
-	-- Plugins
-	hl.exec_cmd("hyprpm reload -n")
+	-- Plugins (update headers first, then reload)
+	hl.exec_cmd("hyprpm update && hyprpm reload -n")
 	hl.exec_cmd("dbus-update-activation-environment --all")
 	hl.exec_cmd("sleep 1 && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
 
