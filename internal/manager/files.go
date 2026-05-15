@@ -124,25 +124,10 @@ func FilesSteps(cfg Config) []Step {
 			},
 		},
 		{
-			Name: "reload-hyprland",
-			Fn: func(ctx context.Context) error {
-				_ = hyprland.ReloadConfig()
-				return nil
-			},
-			Optional: true,
-		},
-		{
 			Name: "deploy-systemd-user-unit",
 			Fn: func(ctx context.Context) error {
 				return deploySystemdUnit(cfg)
 			},
-		},
-		{
-			Name: "start-quickshell",
-			Fn: func(ctx context.Context) error {
-				return startQuickshell()
-			},
-			Optional: true,
 		},
 	}
 }
@@ -624,17 +609,6 @@ func installPythonVenv(cfg Config) error {
 func markFirstrun(cfg Config) error {
 	_ = touchFile(cfg.FirstrunFile())
 	return LineInFile(cfg.InstalledListfile(), cfg.FirstrunFile())
-}
-
-func startQuickshell() error {
-	if err := exec.Command("pidof", "qs").Run(); err != nil {
-		fmt.Println("  Starting quickshell...")
-		cmd := exec.Command("qs", "-c", "ii")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Start()
-	}
-	return nil
 }
 
 func deploySystemdUnit(cfg Config) error {
