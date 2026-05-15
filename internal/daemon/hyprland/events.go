@@ -86,6 +86,26 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 				}
 			}
 		}
+		// Update monitor field on all windows on this workspace
+		// (the old debounced re-fetch handled this implicitly).
+		newMonID := 0
+		for _, m := range s.monitors {
+			if mn, _ := m["name"].(string); mn == monName {
+				if mid, ok := m["id"].(float64); ok {
+					newMonID = int(mid)
+				}
+				break
+			}
+		}
+		if newMonID > 0 {
+			for _, w := range s.windows {
+				if ws, ok := w["workspace"].(map[string]any); ok {
+					if wid, _ := ws["id"].(float64); int(wid) == wsID {
+						w["monitor"] = newMonID
+					}
+				}
+			}
+		}
 		s.mu.Unlock()
 		s.emit()
 
@@ -168,6 +188,19 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		wsID, _ := strconv.Atoi(wsIDStr)
 		s.mu.Lock()
 		s.putWindowWorkspace(addr, wsID, wsName)
+		// Also update the window's monitor field based on which monitor
+		// has the target workspace active (movewindowv2 doesn't carry
+		// monitor info; the old debounced re-fetch compensated for this).
+		for _, m := range s.monitors {
+			if aw, ok := m["activeWorkspace"].(map[string]any); ok {
+				if awid, _ := aw["id"].(float64); int(awid) == wsID {
+					if mid, ok := m["id"].(float64); ok {
+						s.putWindowField(addr, "monitor", int(mid))
+					}
+					break
+				}
+			}
+		}
 		s.mu.Unlock()
 		s.emit()
 
