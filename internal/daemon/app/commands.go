@@ -1573,9 +1573,31 @@ func (a *App) handleSwitchWallpaper(args []string) {
 		}
 	}
 
-	if imgPath == "" && color == "" {
-		log.Printf("[wallpaper] switch-wallpaper: no image or color specified")
-		return
+	if imgPath == "" && color == "" && !noswitch {
+		// No image specified — open a file picker dialog
+		picturesDir := os.Getenv("XDG_PICTURES_DIR")
+		if picturesDir == "" {
+			homeDir, _ := os.UserHomeDir()
+			picturesDir = filepath.Join(homeDir, "Pictures")
+		}
+		wallpaperDir := filepath.Join(picturesDir, "Wallpapers")
+		if _, err := os.Stat(wallpaperDir); err != nil {
+			wallpaperDir = picturesDir
+		}
+
+		pickerCmd := exec.Command("kdialog", "--getopenfilename", wallpaperDir,
+			"--title", "Choose wallpaper",
+			"--filter", "*.jpg *.jpeg *.png *.webp *.avif *.bmp *.svg *.mp4 *.webm *.mkv")
+		out, err := pickerCmd.Output()
+		if err != nil {
+			return // User cancelled or error
+		}
+		imgPath = strings.TrimSpace(string(out))
+		if imgPath == "" {
+			return
+		}
+		// Strip file:// prefix if present
+		imgPath = strings.TrimPrefix(imgPath, "file://")
 	}
 
 	schemeType := wallpaper.ParseSchemeType(schemeTypeStr)

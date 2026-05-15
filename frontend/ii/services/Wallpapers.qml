@@ -10,8 +10,8 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 /**
- * Provides a list of wallpapers and an "apply" action that calls the existing
- * switch-wallpaper daemon command for applying themes. Pretty much a limited file browsing service.
+ * Provides a list of wallpapers and an "apply" action that sends
+ * switch-wallpaper daemon commands for applying themes. Pretty much a limited file browsing service.
  */
 Singleton {
     id: root
