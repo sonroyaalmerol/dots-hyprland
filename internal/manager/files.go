@@ -311,6 +311,21 @@ func syncHyprland(cfg Config, hl hyprland.API) error {
 		}
 	}
 
+	// 1b. Hyprlock sub-configs (colors, scripts)
+	hyprlockSubs := []string{"hyprlock/colors.conf"}
+	for _, f := range hyprlockSubs {
+		srcFile := cfg.ConfigsDir() + "/hypr/" + f
+		if _, err := os.Stat(srcFile); err != nil {
+			srcFile = cfg.RepoRoot + "/configs/hypr/" + f
+		}
+		if _, err := os.Stat(srcFile); err != nil {
+			continue
+		}
+		if err := copyFile(srcFile, deployDir+"/"+f, 0o644); err != nil {
+			return fmt.Errorf("copy %s: %w", f, err)
+		}
+	}
+
 	// 2. Seed empty snry-override.lua if it doesn't exist
 	overridePath := deployDir + "/snry-override.lua"
 	if _, err := os.Stat(overridePath); os.IsNotExist(err) {

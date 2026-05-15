@@ -1,6 +1,0 @@
--- Add your custom exec-once apps here
--- Example:
--- hl.on("hyprland.start", function()
---     hl.exec_cmd("your-app")
--- end)
--- They will never be overwritten by snry-shell updates

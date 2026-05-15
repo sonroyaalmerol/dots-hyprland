@@ -1,4 +1,0 @@
--- Add your custom keybinds here
--- Example:
--- hl.bind("SUPER + Y", hl.dsp.exec_cmd("your-app"))
--- They will never be overwritten by snry-shell updates

@@ -1,2 +1,0 @@
--- Add your custom env vars here
--- They will never be overwritten by snry-shell updates
