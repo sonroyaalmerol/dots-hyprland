@@ -24,6 +24,8 @@ type Config struct {
 	LockDelay             time.Duration // delay after display off before locking (when unlocked)
 	LockDisplayOffTimeout time.Duration // idle time before display off when already locked
 	SuspendTimeout        time.Duration
+
+	QsConfigPath string // quickshell config path for IPC calls (e.g. /usr/share/snry-shell/frontend/ii)
 }
 
 // DefaultConfig returns the factory defaults matching snry-idle requirements.
@@ -486,7 +488,11 @@ func (s *Service) doLock() {
 	// Dispatch to Quickshell via IPC for reliable lock screen display.
 	// This bypasses the potentially unreliable socket connection.
 	go func() {
-		if err := exec.Command("qs", "-c", "ii", "ipc", "call", "lock", "activate").Run(); err != nil {
+		qsPath := s.cfg.QsConfigPath
+		if qsPath == "" {
+			qsPath = "/usr/share/snry-shell/frontend/ii"
+		}
+		if err := exec.Command("qs", "-p", qsPath, "ipc", "call", "lock", "activate").Run(); err != nil {
 			log.Printf("[idle] qs ipc lock failed: %v", err)
 			// Fallback: activate global shortcut via IPC
 			if err := s.hl.ActivateGlobalShortcut("quickshell:lock"); err != nil {

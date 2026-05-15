@@ -19,7 +19,6 @@ import (
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/darkmode"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/easyeffects"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/gamemode"
-	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/guard"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprkeybinds"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprsunset"
@@ -69,10 +68,14 @@ type Config struct {
 
 func DefaultConfig() Config {
 	return Config{
-		SocketPath:       os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.sock",
-		LockPath:         os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.lock",
-		QuickshellCfg:    quickshell.DefaultConfig(),
-		IdleCfg:          idle.DefaultConfig(),
+		SocketPath:    os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.sock",
+		LockPath:      os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.lock",
+		QuickshellCfg: quickshell.DefaultConfig(),
+		IdleCfg: func() idle.Config {
+			cfg := idle.DefaultConfig()
+			cfg.QsConfigPath = quickshell.ResolveConfigPath()
+			return cfg
+		}(),
 		LockscreenCfg:    lockscreen.DefaultConfig(),
 		PowersaveTimeout: 30 * time.Second,
 		ResourcesCfg:     resources.DefaultConfig(),
@@ -129,7 +132,6 @@ type App struct {
 	inputMethodW    *inputmethod.Watcher
 	networkSvc      *network.Service
 	gamemodeSvc     *gamemode.Service
-	guardSvc        *guard.Service
 	darkmodeSvc     *darkmode.Service
 	conflictSvc     *conflict.Service
 
@@ -319,13 +321,6 @@ func (a *App) Run(ctx context.Context) error {
 	a.darkmodeSvc = darkmode.New(a.cfg.DarkmodeCfg, a.socketServer.Emitter().Emit)
 	a.conflictSvc = conflict.New()
 
-	// Guard: protect deployed quickshell config from tampering.
-	configDir := a.configDir()
-	guardCfg := guard.Config{
-		WatchDir: filepath.Join(configDir, "quickshell", "ii"),
-	}
-	a.guardSvc = guard.New(guardCfg)
-
 	// Generate terminal theme files on startup if colors are available.
 	go a.handleApplyTerminalColors()
 
@@ -353,7 +348,6 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runService(ctx, "network", a.networkSvc) })
 	wg.Go(func() { a.runService(ctx, "gamemode", a.gamemodeSvc) })
 	wg.Go(func() { a.runService(ctx, "darkmode", a.darkmodeSvc) })
-	wg.Go(func() { a.runService(ctx, "guard", a.guardSvc) })
 
 	// Initial setup: bind keys, generate config files.
 	go func() {

@@ -174,7 +174,7 @@ func backupConfigs(cfg Config) error {
 	backupDir := cfg.BackupDir()
 	_ = os.MkdirAll(backupDir+"/.config", 0o755)
 
-	for _, dir := range []string{"quickshell", "bash", "fontconfig", "hypr"} {
+	for _, dir := range []string{"bash", "fontconfig", "hypr"} {
 		src := cfg.XDG.ConfigHome + "/" + dir
 		if _, err := os.Stat(src); err != nil {
 			continue
@@ -235,7 +235,20 @@ func syncQuickshell(cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("extract embedded frontend: %w", err)
 	}
-	steps, err := smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/quickshell", "quickshell")
+
+	// Deploy to /usr/share/snry-shell/frontend instead of user config.
+	deployDir := "/usr/share/snry-shell/frontend"
+
+	// Ensure the target directory exists (may need sudo for /usr/share).
+	if err := os.MkdirAll(deployDir+"/ii", 0o755); err != nil {
+		// Fall back to user config if we can't write to /usr/share
+		deployDir = cfg.XDG.ConfigHome + "/quickshell"
+		if err := os.MkdirAll(deployDir+"/ii", 0o755); err != nil {
+			return fmt.Errorf("create deploy dir: %w", err)
+		}
+	}
+
+	steps, err := smartSyncSteps(cfg, src+"/ii", deployDir+"/ii", "quickshell")
 	if err != nil {
 		return fmt.Errorf("scan %s: %w", src, err)
 	}
@@ -246,7 +259,7 @@ func syncQuickshell(cfg Config) error {
 // the compiled-in embed.FS to a cache directory and returns the path.
 // The embedded FS has paths like "ii/shell.qml"; this function preserves
 // that prefix so the extracted tree matches the destination layout
-// expected under ~/.config/quickshell/ii/.
+// expected under /usr/share/snry-shell/frontend/ii/.
 func extractEmbeddedFrontend(cfg Config) (string, error) {
 	cacheDir := cfg.XDG.CacheHome + "/snry-shell/embedded-frontend"
 

@@ -250,10 +250,15 @@ func FindTerminalScheme(cfg Config) string {
 	// Try installed path first
 	exe, err := os.Executable()
 	if err == nil {
-		shareDir := filepath.Join(filepath.Dir(exe), "..", "share", "snry-shell", "configs", "quickshell", "ii", "scripts", "colors", "terminal", "scheme-base.json")
+		shareDir := filepath.Join(filepath.Dir(exe), "..", "share", "snry-shell", "frontend", "ii", "scripts", "colors", "terminal", "scheme-base.json")
 		if _, err := os.Stat(shareDir); err == nil {
 			return shareDir
 		}
+	}
+	// Try system path directly
+	systemPath := "/usr/share/snry-shell/frontend/ii/scripts/colors/terminal/scheme-base.json"
+	if _, err := os.Stat(systemPath); err == nil {
+		return systemPath
 	}
 	// Try repo path
 	if cfg.RepoRoot != "" {
@@ -262,7 +267,7 @@ func FindTerminalScheme(cfg Config) string {
 			return repoPath
 		}
 	}
-	// Fallback to config dir
+	// Fallback to user config dir
 	return filepath.Join(cfg.ConfigHome, "quickshell", "ii", "scripts", "colors", "terminal", "scheme-base.json")
 }
 

@@ -493,8 +493,8 @@ func dispatchCommand(a *App, line string) {
 // the QML lock screen.
 func (a *App) dispatchQsLock() {
 	binary := a.cfg.QuickshellCfg.Binary
-	configDir := a.cfg.QuickshellCfg.ConfigDir
-	if err := exec.Command(binary, "-c", configDir, "ipc", "call", "lock", "activate").Run(); err != nil {
+	configPath := a.cfg.QuickshellCfg.ConfigPath
+	if err := exec.Command(binary, "-p", configPath, "ipc", "call", "lock", "activate").Run(); err != nil {
 		log.Printf("[app] qs ipc lock failed: %v", err)
 	}
 }

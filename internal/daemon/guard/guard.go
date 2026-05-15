@@ -15,7 +15,7 @@ import (
 )
 
 type Config struct {
-	WatchDir  string // directory to watch (e.g. ~/.config/quickshell/ii/)
+	WatchDir  string // directory to watch (e.g. /usr/share/snry-shell/frontend/ii/)
 	SourceDir string // source directory to restore from (filesystem); empty = use embedded FS
 
 	// Excludes lists relative paths (forward-slash, e.g. "monitors.lua") that

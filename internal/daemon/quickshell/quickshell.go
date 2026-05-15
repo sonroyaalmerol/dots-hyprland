@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -13,16 +14,44 @@ import (
 
 type Config struct {
 	Binary       string        // path to qs binary (default: "qs")
-	ConfigDir    string        // -c flag value (default: "ii")
+	ConfigPath   string        // -p flag value: absolute path to shell root dir
 	StartDelay   time.Duration // delay before first start (default: 0)
 	RestartDelay time.Duration // delay between restarts (default: 1s)
 	MaxRestarts  int           // max consecutive restarts before giving up (default: 10, 0 = unlimited)
 }
 
+// ResolveConfigPath returns the quickshell config path, preferring the
+// system-installed frontend under /usr/share, falling back to the
+// embedded frontend cache, then the user config dir.
+func ResolveConfigPath() string {
+	// 1. System package install
+	systemPath := "/usr/share/snry-shell/frontend/ii"
+	if _, err := os.Stat(systemPath + "/shell.qml"); err == nil {
+		return systemPath
+	}
+
+	// 2. Embedded frontend cache
+	cacheDir := os.Getenv("XDG_CACHE_HOME")
+	if cacheDir == "" {
+		cacheDir = filepath.Join(os.Getenv("HOME"), ".cache")
+	}
+	cachedPath := cacheDir + "/snry-shell/embedded-frontend/ii"
+	if _, err := os.Stat(cachedPath + "/shell.qml"); err == nil {
+		return cachedPath
+	}
+
+	// 3. User config dir fallback
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	return configDir + "/quickshell/ii"
+}
+
 func DefaultConfig() Config {
 	return Config{
 		Binary:       "qs",
-		ConfigDir:    "ii",
+		ConfigPath:   ResolveConfigPath(),
 		StartDelay:   2 * time.Second,
 		RestartDelay: 1 * time.Second,
 		MaxRestarts:  10,
@@ -95,7 +124,7 @@ func (s *Service) Run(ctx context.Context) error {
 
 func (s *Service) runOnce(ctx context.Context) error {
 	s.mu.Lock()
-	s.cmd = exec.CommandContext(ctx, s.cfg.Binary, "-c", s.cfg.ConfigDir)
+	s.cmd = exec.CommandContext(ctx, s.cfg.Binary, "-p", s.cfg.ConfigPath)
 	s.cmd.Env = os.Environ()
 	s.cmd.Stdout = os.Stdout
 	s.cmd.Stderr = os.Stderr
@@ -103,12 +132,12 @@ func (s *Service) runOnce(ctx context.Context) error {
 	s.mu.Unlock()
 
 	// Kill any pre-existing qs instances to prevent duplicate bars.
-	if existing := exec.Command("pkill", "-f", fmt.Sprintf("%s -c %s", s.cfg.Binary, s.cfg.ConfigDir)); existing.Run() == nil {
-		log.Printf("quickshell: killed pre-existing %s -c %s", s.cfg.Binary, s.cfg.ConfigDir)
+	if existing := exec.Command("pkill", "-f", fmt.Sprintf("%s -p %s", s.cfg.Binary, s.cfg.ConfigPath)); existing.Run() == nil {
+		log.Printf("quickshell: killed pre-existing %s -p %s", s.cfg.Binary, s.cfg.ConfigPath)
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	log.Printf("quickshell: starting %s -c %s", s.cfg.Binary, s.cfg.ConfigDir)
+	log.Printf("quickshell: starting %s -p %s", s.cfg.Binary, s.cfg.ConfigPath)
 	err := s.cmd.Run()
 	log.Printf("quickshell: process exited: %v", err)
 	return err
