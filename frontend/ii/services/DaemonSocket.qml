@@ -137,14 +137,9 @@ Singleton {
 	signal conflictResult(var trays, var notifications)
 	signal hyprconfigValue(string key, string value)
 
-	// Greeter status from daemon.
-	property bool _greeterMode: false
-	property bool _sessionFromGreeter: false
-	signal greeterStatusUpdated()
-
 	property bool connected: daemonSocket.connected
 
-	readonly property string socketPath: Quickshell.env("XDG_RUNTIME_DIR") + "/snry-daemon.sock"
+	readonly property string socketPath: Quickshell.env("SNRY_DAEMON_SOCK") || (Quickshell.env("XDG_RUNTIME_DIR") + "/snry-daemon.sock")
 
 	function authenticate(password) { sendCommand("auth " + password) }
 	function lock() { sendCommand("lock") }
@@ -418,10 +413,6 @@ Singleton {
 			fprintdResult(root.fprintdAvailable, root.fprintdEnrolled)
 		} else if (obj.event === "hyprconfig_value" && obj.data) {
 			hyprconfigValue(obj.data.key ?? "", obj.data.value ?? "")
-		} else if (obj.event === "greeter_status" && obj.data) {
-			root._greeterMode = obj.data.greeterMode ?? false
-			root._sessionFromGreeter = obj.data.sessionReady ?? false
-			greeterStatusUpdated()
 		}
 	}
 }

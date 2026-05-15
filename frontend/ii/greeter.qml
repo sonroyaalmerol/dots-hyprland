@@ -7,8 +7,8 @@
 ////@ pragma Env QT_SCALE_FACTOR=1
 
 // Greeter shell — minimal Quickshell config for the display manager lock screen.
-// Loads only: background, lock screen, theme, and essential services.
-// On auth success, the daemon swaps to the full shell config (shell.qml).
+// Loaded by snry-dm (system service) on VT1 as the graphical greeter.
+// On auth success, the DM kills this and starts the user's session.
 
 import "modules/common"
 import "services"
@@ -28,8 +28,8 @@ ShellRoot {
         Wallpapers.load()
     }
 
-    // Auto-lock when services are ready.
-    // In greeter mode, the lock screen IS the UI.
+    // Auto-lock immediately when services are ready.
+    // In DM mode, the lock screen IS the entire UI.
     Connections {
         target: Config
         function onReadyChanged() {
@@ -47,6 +47,8 @@ ShellRoot {
         if (lockTriggered) return
         if (!Config.ready || !Persistent.ready) return
         lockTriggered = true
+        // In DM mode, send lock-startup so the lock screen activates.
+        // The DM socket handles this by acknowledging (no auto-unlock).
         DaemonSocket.lockStartup()
     }
 

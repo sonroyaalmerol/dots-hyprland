@@ -1,0 +1,23 @@
+[Unit]
+Description=Snry Shell Display Manager
+Documentation=https://github.com/sonroyaalmerol/snry-shell
+After=systemd-user-sessions.service systemd-logind.service
+Conflicts=getty@tty1.service
+Before=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/snry-dm
+Restart=on-failure
+RestartSec=3
+KillMode=process
+
+# Security hardening
+ProtectSystem=strict
+ReadWritePaths=/run /var/lib/snry-dm /tmp
+ProtectHome=false
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+Alias=display-manager.service

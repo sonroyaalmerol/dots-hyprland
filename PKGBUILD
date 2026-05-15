@@ -124,9 +124,13 @@ package() {
 
 	# Build snry-daemon binary
 	go build -o snry-daemon ./cmd/snry-daemon
+	go build -o snry-dm ./cmd/snry-dm
 
 	# Install snry-daemon binary
 	install -Dm755 snry-daemon "$pkgdir/usr/bin/snry-daemon"
+
+	# Install snry-dm binary (display manager)
+	install -Dm755 snry-dm "$pkgdir/usr/bin/snry-dm"
 
 	# Install snry-shell wrapper (convenience alias)
 	install -Dm755 /dev/stdin "$pkgdir/usr/bin/snry-shell" <<'SCRIPT'
@@ -138,7 +142,10 @@ SCRIPT
 	install -dm755 "$pkgdir/usr/share/snry-shell"
 	cp -a configs data frontend "$pkgdir/usr/share/snry-shell/"
 
-	# Install systemd user units
+	# Install systemd units
 	install -Dm644 configs/systemd/user/snry-daemon.service "$pkgdir/usr/lib/systemd/user/snry-daemon.service"
-	install -Dm644 configs/systemd/user/snry-greeter.service "$pkgdir/usr/lib/systemd/user/snry-greeter.service"
+	install -Dm644 configs/systemd/system/snry-dm.service "$pkgdir/usr/lib/systemd/system/snry-dm.service"
+
+	# Install PAM config
+	install -Dm644 configs/pam/snry-dm "$pkgdir/etc/pam.d/snry-dm"
 }

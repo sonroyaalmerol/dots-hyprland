@@ -83,13 +83,7 @@ func dispatchCommand(a *App, line string) {
 		}
 	case "lock-startup":
 		if a.lockscreenSvc != nil {
-			if a.greeterMode {
-				// In greeter mode, always lock (no auto-unlock).
-				// The greeter IS the lock screen.
-				a.lockscreenSvc.Lock()
-			} else {
-				a.lockscreenSvc.LockWithAutoUnlock()
-			}
+			a.lockscreenSvc.LockWithAutoUnlock()
 		} else if a.idleSvc != nil {
 			a.idleSvc.Lock()
 		}
@@ -105,16 +99,6 @@ func dispatchCommand(a *App, line string) {
 		} else if a.idleSvc != nil {
 			a.idleSvc.Unlock()
 		}
-	case "greeter-status":
-		// Report current greeter mode status.
-		a.socketServer.Emitter().Emit(map[string]any{
-			"event": "greeter_status",
-			"data": map[string]any{
-				"greeterMode":  a.greeterMode,
-				"sessionReady": a.sessionReady,
-				"phase":        a.qsSvc.GetPhase().String(),
-			},
-		})
 	case "power-button", "lid-close":
 		if a.idleSvc != nil {
 			a.idleSvc.SuppressDisplayOn(true)

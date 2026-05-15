@@ -57,7 +57,6 @@ func printUsage() {
 Usage:
   snry-daemon              Start daemon (default)
   snry-daemon daemon       Start daemon explicitly
-  snry-daemon daemon --greeter  Start as display manager (greeter mode)
   snry-daemon setup        Full installation (deps + files + setups)
   snry-daemon deps         Install packages only
   snry-daemon files        Sync config files only
@@ -103,16 +102,7 @@ func runDaemon() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	cfg := app.DefaultConfig()
-
-	// Check for --greeter flag in remaining args.
-	for _, arg := range os.Args[2:] {
-		if arg == "--greeter" {
-			cfg.GreeterMode = true
-		}
-	}
-
-	if err := app.New(cfg).Run(ctx); err != nil {
+	if err := app.New(app.DefaultConfig()).Run(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
 		os.Exit(1)
 	}
