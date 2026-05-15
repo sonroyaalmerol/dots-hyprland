@@ -296,37 +296,7 @@ func extractEmbeddedFrontend(cfg Config) (string, error) {
 func syncHyprland(cfg Config, hl hyprland.API) error {
 	deployDir := cfg.XDG.ConfigHome + "/hypr"
 
-	// 1. Top-level user config files (hyprlock, hypridle)
-	confFiles := []string{"hyprlock.conf", "hypridle.conf"}
-	for _, f := range confFiles {
-		srcFile := cfg.ConfigsDir() + "/hypr/" + f
-		if _, err := os.Stat(srcFile); err != nil {
-			srcFile = cfg.RepoRoot + "/configs/hypr/" + f
-		}
-		if _, err := os.Stat(srcFile); err != nil {
-			continue
-		}
-		if err := copyFile(srcFile, deployDir+"/"+f, 0o644); err != nil {
-			return fmt.Errorf("copy %s: %w", f, err)
-		}
-	}
-
-	// 1b. Hyprlock sub-configs (colors, scripts)
-	hyprlockSubs := []string{"hyprlock/colors.conf"}
-	for _, f := range hyprlockSubs {
-		srcFile := cfg.ConfigsDir() + "/hypr/" + f
-		if _, err := os.Stat(srcFile); err != nil {
-			srcFile = cfg.RepoRoot + "/configs/hypr/" + f
-		}
-		if _, err := os.Stat(srcFile); err != nil {
-			continue
-		}
-		if err := copyFile(srcFile, deployDir+"/"+f, 0o644); err != nil {
-			return fmt.Errorf("copy %s: %w", f, err)
-		}
-	}
-
-	// 2. Seed empty snry-override.lua if it doesn't exist
+	// 1. Seed empty snry-override.lua if it doesn't exist
 	overridePath := deployDir + "/snry-override.lua"
 	if _, err := os.Stat(overridePath); os.IsNotExist(err) {
 		_ = os.WriteFile(overridePath, []byte("-- Place your Hyprland overrides here.\n-- This file is loaded after all system defaults.\n"), 0o644)

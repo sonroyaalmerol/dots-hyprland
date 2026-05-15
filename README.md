@@ -23,7 +23,7 @@ A desktop shell for [Hyprland](https://hyprland.org/) built on [Quickshell](http
 - **Bar** — workspaces, system tray, media controls, quick toggles, volume mixer, clock, weather
 - **Dock** — optional dock with pinned/running apps
 - **Launcher** — app search, web search, calculator, cliphist history, action commands
-- **Lock screen** — Hyprlock integration with Material You theming
+- **Lock screen** — built-in lock screen with Material You theming
 - **Session screen** — suspend, hibernate, poweroff, reboot, firmware setup
 - **Notifications** — notification daemon with popup history
 - **Screen corners** — rounded corner overlays for Hyprland
@@ -66,14 +66,14 @@ Battery, brightness, clipboard (cliphist), compositor (Hyprland IPC), conflict k
 
 `snry sync` (formerly `snry-daemon files`) deploys config files from the embedded source to XDG directories. The sync engine handles updates intelligently. Strategies are defined in [`internal/syncengine/categorize.go`](internal/syncengine/categorize.go):
 
-| Strategy         | For files                                                                 | Behavior                                          |
-| ---------------- | ------------------------------------------------------------------------- | ------------------------------------------------- |
-| `overwrite`      | SVGs, PNGs, fonts, QML, Lua, fontconfig, Kvantum                          | Always replace with upstream                      |
-| `merge-hyprland` | `hypr/hyprland/*.conf`                                                    | Section-aware merge (key-values + binds)          |
-| `merge-kv`       | `hyprlock.conf`, `hypridle.conf`, `fuzzel/*.ini`, `**/*.conf`, `**/*.ini` | Key-value level three-way merge                   |
-| `merge-section`  | `bash/bashrc`, `bash/bash_profile`, `bash/zprofile`                       | Merge only between `# >>> snry-shell >>>` markers |
-| `skip-if-exists` | `hypr/monitors.lua`, `hypr/workspaces.lua`, `hypr/snry-override.lua`      | Only deploy on first install                      |
-| `template`       | `matugen/templates/*`                                                     | Render `{{.User}}`, `{{.Home}}`, etc., then merge |
+| Strategy         | For files                                                            | Behavior                                          |
+| ---------------- | -------------------------------------------------------------------- | ------------------------------------------------- |
+| `overwrite`      | SVGs, PNGs, fonts, QML, Lua, fontconfig, Kvantum                     | Always replace with upstream                      |
+| `merge-hyprland` | `hypr/hyprland/*.conf`                                               | Section-aware merge (key-values + binds)          |
+| `merge-kv`       | `fuzzel/*.ini`, `**/*.conf`, `**/*.ini`                              | Key-value level three-way merge                   |
+| `merge-section`  | `bash/bashrc`, `bash/bash_profile`, `bash/zprofile`                  | Merge only between `# >>> snry-shell >>>` markers |
+| `skip-if-exists` | `hypr/monitors.lua`, `hypr/workspaces.lua`, `hypr/snry-override.lua` | Only deploy on first install                      |
+| `template`       | `matugen/templates/*`                                                | Render `{{.User}}`, `{{.Home}}`, etc., then merge |
 
 Template variables: `{{.User}}`, `{{.Home}}`, `{{.ConfigDir}}`, `{{.DataDir}}`, `{{.StateDir}}`, `{{.BinDir}}`, `{{.CacheDir}}`, `{{.RuntimeDir}}`, `{{.VenvPath}}`, `{{.Fontset}}`
 
@@ -153,15 +153,15 @@ Full keybind list is available in-app via `Super + /`.
 
 See `PKGBUILD` for the full dependency list. Key packages:
 
-| Category | Packages                                        |
-| -------- | ----------------------------------------------- |
-| Audio    | pipewire, wireplumber, playerctl, cava          |
-| Display  | brightnessctl, ddcutil, hyprsunset              |
-| Capture  | slurp, grim, wf-recorder, swappy, tesseract     |
-| Network  | networkmanager, plasma-nm                       |
-| Desktop  | fuzzel, wlogout, hyprlock, hypridle, hyprpicker |
-| Theming  | matugen, ghostty, kvantum                       |
-| Keyring  | gnome-keyring, libsecret                        |
+| Category | Packages                                    |
+| -------- | ------------------------------------------- |
+| Audio    | pipewire, wireplumber, playerctl, cava      |
+| Display  | brightnessctl, ddcutil, hyprsunset          |
+| Capture  | slurp, grim, wf-recorder, swappy, tesseract |
+| Network  | networkmanager, plasma-nm                   |
+| Desktop  | fuzzel, wlogout, hyprpicker                 |
+| Theming  | matugen, ghostty, kvantum                   |
+| Keyring  | gnome-keyring, libsecret                    |
 
 ## Installation
 
@@ -228,7 +228,7 @@ cmd/snry-daemon/         Entrypoint (daemon + CLI)
 configs/                 Dotfiles synced by `snry sync`
   bash/                  Shell configuration
   ghostty/               Terminal config
-  hypr/                  Hyprland, hyprlock, hypridle configs
+  hypr/                  Hyprland configs
   matugen/               Material You color templates
   starship.toml          Prompt theme
   ...

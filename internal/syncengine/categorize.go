@@ -31,8 +31,7 @@ func DefaultCategorizer() *Categorizer {
 		{Pattern: "hypr/hyprland.conf", Strategy: StrategyMergeHyprland},
 		{Pattern: "hypr/hyprland/*.lua", Strategy: StrategyOverwrite},
 		{Pattern: "hypr/hyprland.lua", Strategy: StrategyOverwrite},
-		{Pattern: "hypr/hyprlock.conf", Strategy: StrategyMergeKV},
-		{Pattern: "hypr/hypridle.conf", Strategy: StrategyMergeKV},
+
 		{Pattern: "fuzzel/*.ini", Strategy: StrategyMergeKV},
 		{Pattern: "bash/bashrc", Strategy: StrategyMergeSection},
 		{Pattern: "bash/bash_profile", Strategy: StrategyMergeSection},

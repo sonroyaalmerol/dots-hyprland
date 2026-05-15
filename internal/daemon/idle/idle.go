@@ -1,6 +1,5 @@
 // Package idle monitors user inactivity via Wayland ext_idle_notifier_v1
 // and triggers screen locking, display power management, and optional suspend.
-// It replaces hypridle as a built-in idle manager for snry-shell.
 package idle
 
 import (
@@ -491,9 +490,7 @@ func (s *Service) doLock() {
 			log.Printf("[idle] qs ipc lock failed: %v", err)
 			// Fallback: activate global shortcut via IPC
 			if err := s.hl.ActivateGlobalShortcut("quickshell:lock"); err != nil {
-				log.Printf("[idle] global shortcut fallback failed, falling back to hyprlock")
-				// Last resort: hyprlock
-				exec.Command("hyprlock").Run()
+				log.Printf("[idle] global shortcut fallback failed, no more fallbacks")
 			}
 		}
 	}()

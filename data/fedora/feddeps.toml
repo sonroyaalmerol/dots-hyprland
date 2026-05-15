@@ -187,8 +187,6 @@ packages = [
   "fuzzel",
   "glib2",
   "ImageMagick",
-  "hypridle",
-  "hyprlock",
   "hyprpicker",
   "songrec",
   "translate-shell",

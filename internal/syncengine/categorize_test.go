@@ -10,22 +10,6 @@ func TestCategorizeHyprlandConf(t *testing.T) {
 	}
 }
 
-func TestCategorizeHyprlockConf(t *testing.T) {
-	c := DefaultCategorizer()
-	s := c.Categorize("hypr/hyprlock.conf")
-	if s != StrategyMergeKV {
-		t.Errorf("expected %q, got %q", StrategyMergeKV, s)
-	}
-}
-
-func TestCategorizeHypridleConf(t *testing.T) {
-	c := DefaultCategorizer()
-	s := c.Categorize("hypr/hypridle.conf")
-	if s != StrategyMergeKV {
-		t.Errorf("expected %q, got %q", StrategyMergeKV, s)
-	}
-}
-
 func TestCategorizeFuzzelIni(t *testing.T) {
 	c := DefaultCategorizer()
 	s := c.Categorize("fuzzel/fuzzel.ini")

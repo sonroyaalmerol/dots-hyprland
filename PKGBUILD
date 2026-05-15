@@ -100,8 +100,6 @@ depends=(
 	fuzzel
 	glib2
 	imagemagick
-	hypridle
-	hyprlock
 	hyprpicker
 	songrec
 	translate-shell
