@@ -162,6 +162,7 @@ Singleton {
 	signal leastBusyRegionResult(var data)
 	signal textColorResult(var data)
 	signal thumbnailGenerated(var data)
+	signal randomWallpaperReady(var data)
 
 	function sendCommand(cmd) {
 		if (!daemonSocket.connected) {
@@ -417,6 +418,8 @@ Singleton {
 			root.fprintdAvailable = obj.data.available ?? false
 			root.fprintdEnrolled = obj.data.enrolled ?? false
 			fprintdResult(root.fprintdAvailable, root.fprintdEnrolled)
+		} else if (obj.event === "random_wallpaper_ready" && obj.data) {
+			randomWallpaperReady(obj.data)
 		} else if (obj.event === "thumbnail_generated" && obj.data) {
 			thumbnailGenerated(obj.data)
 		} else if (obj.event === "find-regions" && obj.data) {

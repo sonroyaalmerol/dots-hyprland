@@ -41,15 +41,12 @@ ApplicationWindow {
     height: 650
     color: Appearance.m3colors.m3background
 
-    Process {
-        id: konachanWallProc
-        property string status: ""
-        command: ["bash", "-c", Quickshell.shellPath("scripts/colors/random/random_konachan_wall.sh")]
-        stdout: SplitParser {
-            onRead: data => {
-                console.log(`Konachan wall proc output: ${data}`);
-                konachanWallProc.status = data.trim();
-            }
+    property bool randomWallLoading: false
+
+    Connections {
+        target: DaemonSocket
+        function onRandom_wallpaper_ready(data) {
+            randomWallLoading = false
         }
     }
 
@@ -286,10 +283,10 @@ ApplicationWindow {
                             Layout.alignment: Qt.AlignHCenter
                             buttonRadius: Appearance.rounding.small
                             materialIcon: "ifl"
-                            mainText: konachanWallProc.running ? Translation.tr("Be patient...") : Translation.tr("Random: Konachan")
+                            mainText: randomWallLoading ? Translation.tr("Be patient...") : Translation.tr("Random: Konachan")
                             onClicked: {
-                                console.log(konachanWallProc.command.join(" "));
-                                konachanWallProc.running = true;
+                                randomWallLoading = true;
+                                DaemonSocket.sendCommand("random-wallpaper");
                             }
                             StyledToolTip {
                                 text: Translation.tr("Random SFW Anime wallpaper from Konachan\nImage is saved to ~/Pictures/Wallpapers")

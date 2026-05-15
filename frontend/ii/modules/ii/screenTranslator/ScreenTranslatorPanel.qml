@@ -153,65 +153,6 @@ PanelWindow {
                     root.dismiss();
                 }
             }
-            spacing: 0
-
-            IconToolbarButton {
-                id: sleepButton
-                onClicked: {
-                    toggled = !toggled
-                    if (toggled) keyInput.forceActiveFocus()
-                }
-                text: "key"
-
-                StyledToolTip {
-                    z: 9999
-                    text: Translation.tr("Key input")
-                }
-            }
-
-            Revealer {
-                reveal: sleepButton.toggled
-                Layout.fillHeight: true
-
-                RowLayout {
-                    anchors.left: parent.left
-                    spacing: 6
-                    Item {} // extra padding
-                    ToolbarTextField {
-                        id: keyInput
-                        implicitWidth: 400
-                        placeholderText: Translation.tr("Paste service account key JSON here")
-                        inputMethodHints: Qt.ImhSensitiveData
-                        onAccepted: submit()
-
-                        function submit() {
-                            const success = GoogleCloud.setKeyJson(text);
-                            if (!success) {
-                                invalidJsonAnimation.restart();
-                            } else {
-                                text = "";
-                                sleepButton.toggled = false;
-                            }
-                        }
-
-                        ErrorShakeAnimation {
-                            id: invalidJsonAnimation
-                            target: keyInput
-                        }
-                    }
-                    IconToolbarButton {
-                        id: submitButton
-                        onClicked: keyInput.submit()
-                        text: "check"
-                        toggled: keyInput.text.length > 0
-
-                        StyledToolTip {
-                            z: 9999
-                            text: Translation.tr("Confirm")
-                        }
-                    }
-                }
-            }
         }
 
         ToolbarPairedFab {
