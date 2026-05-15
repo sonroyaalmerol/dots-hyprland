@@ -296,7 +296,7 @@ func syncHyprland(cfg Config, hl hyprland.API) error {
 	if _, err := os.Stat(srcDir); err != nil {
 		srcDir = cfg.RepoRoot + "/configs/hypr/hyprland"
 	}
-	if err := copyDir(srcDir, deployDir+"/hyprland"); err != nil {
+	if err := copyDirRecursive(srcDir, deployDir+"/hyprland", false); err != nil {
 		return fmt.Errorf("copy hyprland: %w", err)
 	}
 
@@ -320,7 +320,7 @@ func syncHyprland(cfg Config, hl hyprland.API) error {
 	if _, err := os.Stat(customSrc); err != nil {
 		customSrc = cfg.RepoRoot + "/configs/hypr/custom"
 	}
-	if err := copyDirIfMissing(customSrc, deployDir+"/custom"); err != nil {
+	if err := copyDirRecursive(customSrc, deployDir+"/custom", true); err != nil {
 		return fmt.Errorf("copy custom: %w", err)
 	}
 
@@ -331,7 +331,7 @@ func syncHyprland(cfg Config, hl hyprland.API) error {
 	return GenerateWorkspacesLua(cfg, hl)
 }
 
-func copyDir(src, dst string) error {
+func copyDirRecursive(src, dst string, skipExisting bool) error {
 	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return err
 	}
@@ -343,36 +343,14 @@ func copyDir(src, dst string) error {
 		srcPath := filepath.Join(src, e.Name())
 		dstPath := filepath.Join(dst, e.Name())
 		if e.IsDir() {
-			if err := copyDir(srcPath, dstPath); err != nil {
+			if err := copyDirRecursive(srcPath, dstPath, skipExisting); err != nil {
 				return err
 			}
 		} else {
-			if err := copyFile(srcPath, dstPath, 0o644); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func copyDirIfMissing(src, dst string) error {
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		return err
-	}
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		srcPath := filepath.Join(src, e.Name())
-		dstPath := filepath.Join(dst, e.Name())
-		if e.IsDir() {
-			if err := copyDirIfMissing(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			if _, err := os.Stat(dstPath); err == nil {
-				continue // already exists, skip
+			if skipExisting {
+				if _, err := os.Stat(dstPath); err == nil {
+					continue
+				}
 			}
 			if err := copyFile(srcPath, dstPath, 0o644); err != nil {
 				return err
