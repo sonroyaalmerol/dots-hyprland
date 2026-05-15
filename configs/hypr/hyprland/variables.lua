@@ -9,11 +9,11 @@ codeEditor = "snry send launch antigravity code codium cursor zed zedit zeditor 
 officeSoftware = "snry send launch wps onlyoffice-desktopeditors libreoffice"
 textEditor = "snry send launch kate gnome-text-editor emacs"
 volumeMixer = "snry send launch pavucontrol-qt pavucontrol"
-settingsApp = "snry send launch 'XDG_CURRENT_DESKTOP=gnome qs -p ~/.config/quickshell/ii/settings.qml' 'XDG_CURRENT_DESKTOP=gnome systemsettings' 'XDG_CURRENT_DESKTOP=gnome gnome-control-center' 'XDG_CURRENT_DESKTOP=gnome better-control'"
+settingsApp = "snry send launch 'XDG_CURRENT_DESKTOP=gnome qs -p /usr/share/snry-shell/frontend/ii/settings.qml' 'XDG_CURRENT_DESKTOP=gnome systemsettings' 'XDG_CURRENT_DESKTOP=gnome gnome-control-center' 'XDG_CURRENT_DESKTOP=gnome better-control'"
 taskManager = "snry send launch gnome-system-monitor 'plasma-systemmonitor --page-name Processes' 'command -v btop && ghostty -e btop'"
 
--- The folder within ~/.config/quickshell containing the config
-qsConfig = "ii"
+-- Quickshell config path for IPC and script references
+qsConfig = "/usr/share/snry-shell/frontend/ii"
 
 -- Leave blank/false to load default config. Set to true to skip.
 dontLoadDefaultExecs = false

@@ -14,10 +14,10 @@ hl.bind("SUPER + M", hl.dsp.global("quickshell:mediaControlsToggle"), { descript
 hl.bind("SUPER + G", hl.dsp.global("quickshell:overlayToggle"), { description = "Toggle overlay" })
 hl.bind("CTRL + ALT + Delete", hl.dsp.global("quickshell:sessionToggle"), { description = "Toggle session menu" })
 hl.bind("SUPER + J", hl.dsp.global("quickshell:barToggle"), { description = "Toggle bar" })
-hl.bind("SHIFT + SUPER + ALT + Slash", hl.dsp.exec_cmd("qs -p ~/.config/quickshell/" .. qsConfig .. "/welcome.qml")) -- [hidden] Launch welcome app
+hl.bind("SHIFT + SUPER + ALT + Slash", hl.dsp.exec_cmd("qs -p " .. qsConfig .. "/welcome.qml")) -- [hidden] Launch welcome app
 
-hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("qs -c " .. qsConfig .. " ipc call brightness increment || brightnessctl s 5%+"), { repeating = true }) -- [hidden]
-hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("qs -c " .. qsConfig .. " ipc call brightness decrement || brightnessctl s 5%-"), { repeating = true }) -- [hidden]
+hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("qs -p " .. qsConfig .. " ipc call brightness increment || brightnessctl s 5%+"), { repeating = true }) -- [hidden]
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("qs -p " .. qsConfig .. " ipc call brightness decrement || brightnessctl s 5%-"), { repeating = true }) -- [hidden]
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%+ -l 1.5"), { repeating = true }) -- [hidden]
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%-"), { repeating = true }) -- [hidden]
 
@@ -28,7 +28,7 @@ hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_SOURCE@ tog
 hl.bind("SUPER + ALT + M", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_SOURCE@ toggle"), { description = "Toggle mic", locked = true }) -- [hidden]
 hl.bind("CTRL + SUPER + T", hl.dsp.global("quickshell:wallpaperSelectorToggle"), { description = "Toggle wallpaper selector" })
 hl.bind("CTRL + SUPER + ALT + T", hl.dsp.global("quickshell:wallpaperSelectorRandom"), { description = "Select random wallpaper" })
-hl.bind("CTRL + SUPER + R", hl.dsp.exec_cmd("killall qs quickshell; qs -c " .. qsConfig .. " &")) -- Restart widgets
+hl.bind("CTRL + SUPER + R", hl.dsp.exec_cmd("killall qs quickshell; qs -p " .. qsConfig .. " &")) -- Restart widgets
 hl.bind("CTRL + SUPER + P", hl.dsp.global("quickshell:panelFamilyCycle"), { description = "Cycle panel family" })
 
 -- Utilities
@@ -42,8 +42,8 @@ hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("hyprpicker -a"), { description = "
 -- Recording
 hl.bind("SUPER + SHIFT + R", hl.dsp.global("quickshell:regionRecord"), { locked = true }) -- Record region (no sound)
 hl.bind("SUPER + ALT + R", hl.dsp.global("quickshell:regionRecord"), { locked = true }) -- [hidden] Record region (no sound)
-hl.bind("CTRL + ALT + R", hl.dsp.exec_cmd("~/.config/quickshell/" .. qsConfig .. "/scripts/videos/record.sh --fullscreen"), { locked = true }) -- [hidden] Record screen (no sound)
-hl.bind("SUPER + SHIFT + ALT + R", hl.dsp.exec_cmd("~/.config/quickshell/" .. qsConfig .. "/scripts/videos/record.sh --fullscreen --sound"), { locked = true }) -- Record screen (with sound)
+hl.bind("CTRL + ALT + R", hl.dsp.exec_cmd(qsConfig .. "/scripts/videos/record.sh --fullscreen"), { locked = true }) -- [hidden] Record screen (no sound)
+hl.bind("SUPER + SHIFT + ALT + R", hl.dsp.exec_cmd(qsConfig .. "/scripts/videos/record.sh --fullscreen --sound"), { locked = true }) -- Record screen (with sound)
 -- Fullscreen screenshot
 hl.bind("Print", hl.dsp.exec_cmd('grim -o "$(hyprctl activeworkspace -j | jq -r \'.monitor\')" - | wl-copy')) -- Screenshot >> clipboard
 hl.bind("CTRL + Print", hl.dsp.exec_cmd('mkdir -p $(xdg-user-dir PICTURES)/Screenshots && grim -o "$(hyprctl activeworkspace -j | jq -r \'.monitor\')" $(xdg-user-dir PICTURES)/Screenshots/Screenshot_"$(date \'+%Y-%m-%d_%H.%M.%S\')".png')) -- Screenshot >> clipboard & file
