@@ -181,6 +181,18 @@ func (a *App) configDir() string {
 	return d
 }
 
+func (a *App) genDir() string {
+	return filepath.Join(a.stateDir(), "quickshell", "user", "generated")
+}
+
+func (a *App) colorFilePath() string {
+	return filepath.Join(a.genDir(), "color.txt")
+}
+
+func (a *App) colorsJSONPath() string {
+	return filepath.Join(a.genDir(), "colors.json")
+}
+
 // ── Run ───────────────────────────────────────────────────────────────────────
 
 func (a *App) Run(ctx context.Context) error {

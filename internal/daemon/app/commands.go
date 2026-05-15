@@ -1242,12 +1242,9 @@ func (a *App) handleKeyringUnlock(password string) {
 }
 
 func (a *App) handleNvimApplyColors() {
-	stateDir := a.stateDir()
-	nvimFile := filepath.Join(stateDir, "quickshell", "user", "generated", "nvim_colors.json")
+	nvimFile := filepath.Join(a.genDir(), "nvim_colors.json")
 
-	// Read colors.json (populated by matugen + MaterialThemeLoader)
-	genDir := filepath.Join(stateDir, "quickshell", "user", "generated")
-	colors, err := wallpaper.LoadColorMapFromJSON(filepath.Join(genDir, "colors.json"))
+	colors, err := wallpaper.LoadColorMapFromJSON(a.colorsJSONPath())
 	if err != nil {
 		log.Printf("[wallpaper] nvim colors: no colors.json: %v", err)
 		return
@@ -1285,17 +1282,14 @@ func (a *App) handleNvimApplyColors() {
 }
 
 func (a *App) handleApplyVscodeColor() {
-	stateDir := a.stateDir()
-	colorFile := filepath.Join(stateDir, "quickshell", "user", "generated", "color.txt")
+	colorFile := a.colorFilePath()
 	newColor, err := os.ReadFile(colorFile)
 	if err != nil {
 		return
 	}
 	newColorStr := strings.TrimSpace(string(newColor))
 	if newColorStr == "" {
-		// Fallback: read primary color from colors.json
-		genDir := filepath.Join(stateDir, "quickshell", "user", "generated")
-		if colors, err := wallpaper.LoadColorMapFromJSON(filepath.Join(genDir, "colors.json")); err == nil {
+		if colors, err := wallpaper.LoadColorMapFromJSON(a.colorsJSONPath()); err == nil {
 			if primary, ok := colors["primary"]; ok {
 				newColorStr = strings.TrimSpace(primary)
 			}
@@ -1372,11 +1366,8 @@ func (a *App) handleApplyKvantumTheme() {
 	}
 	os.WriteFile(dstConfig, data, 0644)
 
-	// Read colors from colors.json (authoritative source)
-	stateDir := a.stateDir()
-	genDir := filepath.Join(stateDir, "quickshell", "user", "generated")
 	colorMap := make(map[string]string)
-	if colors, err := wallpaper.LoadColorMapFromJSON(filepath.Join(genDir, "colors.json")); err == nil {
+	if colors, err := wallpaper.LoadColorMapFromJSON(a.colorsJSONPath()); err == nil {
 		for k, v := range colors {
 			colorMap[snakeToCamel(k)] = v
 		}
@@ -1572,7 +1563,7 @@ func (a *App) handleApplyTerminalColors() {
 	genDir := wpCfg.GenDir()
 
 	// Read colors.json (populated by matugen + MaterialThemeLoader)
-	colors, err := wallpaper.LoadColorMapFromJSON(filepath.Join(genDir, "colors.json"))
+	colors, err := wallpaper.LoadColorMapFromJSON(a.colorsJSONPath())
 	if err != nil {
 		log.Printf("[wallpaper] no colors.json: %v", err)
 		return
