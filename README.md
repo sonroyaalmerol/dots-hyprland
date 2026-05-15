@@ -184,19 +184,17 @@ go build -o snry-daemon ./cmd/snry-daemon
 
 ### CLI
 
-| Command                  | Purpose                                         |
-| ------------------------ | ----------------------------------------------- |
-| `snry-daemon`            | Start daemon (default)                          |
-| `snry-daemon daemon`     | Start daemon explicitly                         |
-| `snry-daemon setup`      | Full install: deps + config sync + system setup |
-| `snry-daemon deps`       | Install packages only                           |
-| `snry-daemon files`      | Smart-sync config files (three-way merge)       |
-| `snry-daemon setups`     | System setup (groups, systemd, PAM)             |
-| `snry-daemon diagnose`   | Run diagnostics                                 |
-| `snry-daemon checkdeps`  | Check dependency status                         |
-| `snry-daemon autoscale`  | Auto-set monitor scale                          |
-| `snry-daemon uninstall`  | Remove shell configuration                      |
-| `snry-daemon send <cmd>` | Send command to running daemon                  |
+| Command                    | Purpose                                         |
+| -------------------------- | ----------------------------------------------- |
+| `snry-daemon`              | Start daemon (default)                          |
+| `snry-daemon setup`        | Full install: deps + config sync + system setup |
+| `snry-daemon deps`         | Install packages                                |
+| `snry-daemon deps --check` | Check for missing packages                      |
+| `snry-daemon files`        | Smart-sync config files                         |
+| `snry-daemon diagnose`     | Run diagnostics                                 |
+| `snry-daemon autoscale`    | Auto-set monitor scale                          |
+| `snry-daemon uninstall`    | Remove shell configuration                      |
+| `snry-daemon send <cmd>`   | Send command to running daemon                  |
 
 ### Sending Commands
 

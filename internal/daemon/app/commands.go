@@ -34,6 +34,7 @@ func dispatchCommand(a *App, line string) {
 		return
 	}
 	switch fields[0] {
+	// ── Input ──────────────────────────────────────────────
 	case "press":
 		if len(fields) != 2 {
 			return
@@ -73,19 +74,21 @@ func dispatchCommand(a *App, line string) {
 		}
 		password := strings.Join(fields[1:], " ")
 		go a.lockscreenSvc.Authenticate(password)
+
 	case "lock":
+		if len(fields) >= 2 && fields[1] == "startup" {
+			if a.lockscreenSvc != nil {
+				a.lockscreenSvc.LockWithAutoUnlock()
+			} else if a.idleSvc != nil {
+				a.idleSvc.Lock()
+			}
+			return
+		}
 		if a.lockscreenSvc != nil {
 			if !a.lockscreenSvc.IsLocked() {
 				a.lockscreenSvc.Lock()
-				// Dispatch to QS via IPC for reliable lock screen display
 				go a.dispatchQsLock()
 			}
-		} else if a.idleSvc != nil {
-			a.idleSvc.Lock()
-		}
-	case "lock-startup":
-		if a.lockscreenSvc != nil {
-			a.lockscreenSvc.LockWithAutoUnlock()
 		} else if a.idleSvc != nil {
 			a.idleSvc.Lock()
 		}
@@ -115,21 +118,21 @@ func dispatchCommand(a *App, line string) {
 		if a.resourcesSvc != nil {
 			a.resourcesSvc.EmitSnapshot(a.socketServer.Emitter().Emit)
 		}
-	case "weather-refresh":
-		if a.weatherSvc != nil {
+	case "weather":
+		if len(fields) >= 2 && fields[1] == "refresh" && a.weatherSvc != nil {
 			go a.weatherSvc.RefreshNow(context.Background())
 		}
-	case "cliphist-list":
-		if a.cliphistSvc != nil {
+	case "cliphist":
+		if len(fields) < 2 || a.cliphistSvc == nil {
+			return
+		}
+		switch fields[1] {
+		case "list":
 			go a.cliphistSvc.EmitList(context.Background())
-		}
-	case "cliphist-delete":
-		if a.cliphistSvc != nil {
-			entry := strings.TrimPrefix(line, "cliphist-delete ")
+		case "delete":
+			entry := strings.TrimPrefix(line, "cliphist delete ")
 			go a.cliphistSvc.DeleteEntry(context.Background(), entry)
-		}
-	case "cliphist-wipe":
-		if a.cliphistSvc != nil {
+		case "wipe":
 			go a.cliphistSvc.Wipe(context.Background())
 		}
 	case "autoscale":
@@ -218,170 +221,164 @@ func dispatchCommand(a *App, line string) {
 		}
 	case "cycle-mode":
 		a.stateCh <- stateEvent{kind: "command", cmd: "cycle-mode"}
-	case "osk-dismiss":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-dismiss"}
-	case "osk-undismiss":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-undismiss"}
-	case "osk-toggle":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-toggle"}
-	case "osk-show":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-show"}
-	case "osk-hide":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-hide"}
-	case "osk-pin":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-pin"}
-	case "osk-unpin":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-unpin"}
+	case "osk":
+		if len(fields) < 2 {
+			return
+		}
+		a.stateCh <- stateEvent{kind: "command", cmd: "osk-" + fields[1]}
 
 	// New daemon service commands
-	case "reload-keybinds":
-		if a.hyprKeybindsSvc != nil {
+	case "keybinds":
+		if len(fields) >= 2 && fields[1] == "reload" && a.hyprKeybindsSvc != nil {
 			a.hyprKeybindsSvc.Reload()
 		}
-	case "easyeffects-toggle":
-		if a.easyEffectsSvc != nil {
+	case "easyeffects":
+		if len(fields) < 2 || a.easyEffectsSvc == nil {
+			return
+		}
+		switch fields[1] {
+		case "toggle":
 			if a.easyEffectsSvc.IsActive() {
 				a.easyEffectsSvc.Disable()
 			} else {
 				a.easyEffectsSvc.Enable()
 			}
-		}
-	case "easyeffects-enable":
-		if a.easyEffectsSvc != nil {
+		case "enable":
 			a.easyEffectsSvc.Enable()
-		}
-	case "easyeffects-disable":
-		if a.easyEffectsSvc != nil {
+		case "disable":
 			a.easyEffectsSvc.Disable()
 		}
-	case "hyprsunset-gamma":
-		if a.hyprsunsetSvc != nil && len(fields) >= 2 {
-			if gamma, err := strconv.Atoi(fields[1]); err == nil {
-				a.hyprsunsetSvc.SetGamma(gamma)
+	case "hyprsunset":
+		if len(fields) < 2 || a.hyprsunsetSvc == nil {
+			return
+		}
+		switch fields[1] {
+		case "gamma":
+			if len(fields) >= 3 {
+				if gamma, err := strconv.Atoi(fields[2]); err == nil {
+					a.hyprsunsetSvc.SetGamma(gamma)
+				}
 			}
-		}
-	case "hyprsunset-enable":
-		if a.hyprsunsetSvc != nil {
+		case "enable":
 			a.hyprsunsetSvc.EnableTemperature()
-		}
-	case "hyprsunset-disable":
-		if a.hyprsunsetSvc != nil {
+		case "disable":
 			a.hyprsunsetSvc.DisableTemperature()
-		}
-	case "hyprsunset-toggle":
-		if a.hyprsunsetSvc != nil {
+		case "toggle":
 			active := true
-			if len(fields) >= 2 {
-				active = fields[1] != "false" && fields[1] != "0"
+			if len(fields) >= 3 {
+				active = fields[2] != "false" && fields[2] != "0"
 			}
 			a.hyprsunsetSvc.ToggleTemperature(active)
 		}
-	case "wifi-enable":
-		if a.networkSvc != nil {
+	case "wifi":
+		if len(fields) < 2 || a.networkSvc == nil {
+			return
+		}
+		switch fields[1] {
+		case "enable":
 			a.networkSvc.EnableWifi(context.Background(), true)
-		}
-	case "wifi-disable":
-		if a.networkSvc != nil {
+		case "disable":
 			a.networkSvc.EnableWifi(context.Background(), false)
-		}
-	case "wifi-toggle":
-		if a.networkSvc != nil {
+		case "toggle":
 			a.networkSvc.ToggleWifi(context.Background())
-		}
-	case "wifi-rescan":
-		if a.networkSvc != nil {
+		case "rescan":
 			go a.networkSvc.RescanWifi(context.Background())
+		case "connect":
+			if len(fields) >= 3 {
+				ssid := strings.Join(fields[2:], " ")
+				go func() {
+					err := a.networkSvc.ConnectWifi(context.Background(), ssid)
+					if err != nil {
+						log.Printf("[app] wifi connect: %v", err)
+						a.socketServer.Emitter().Emit(map[string]any{
+							"event": "network_connect_result",
+							"data": map[string]any{
+								"success":        false,
+								"askingPassword": true,
+								"ssid":           ssid,
+							},
+						})
+					}
+				}()
+			}
+		case "disconnect":
+			if len(fields) >= 3 {
+				go a.networkSvc.DisconnectWifi(context.Background(), strings.Join(fields[2:], " "))
+			}
+		case "change-password":
+			if len(fields) >= 4 {
+				go a.networkSvc.ChangePassword(context.Background(), fields[2], fields[3])
+			}
 		}
-	case "wifi-connect":
-		if a.networkSvc != nil && len(fields) >= 2 {
-			go func() {
-				err := a.networkSvc.ConnectWifi(context.Background(), strings.Join(fields[1:], " "))
-				if err != nil {
-					log.Printf("[app] wifi-connect: %v", err)
-					a.socketServer.Emitter().Emit(map[string]any{
-						"event": "network_connect_result",
-						"data": map[string]any{
-							"success":        false,
-							"askingPassword": true,
-							"ssid":           strings.Join(fields[1:], " "),
-						},
-					})
+	case "brightness":
+		if len(fields) < 3 || a.brightnessSvc == nil {
+			return
+		}
+		switch fields[1] {
+		case "set":
+			if len(fields) >= 4 {
+				value, err := strconv.ParseFloat(fields[3], 64)
+				if err == nil {
+					a.brightnessSvc.SetBrightness(fields[2], value)
 				}
-			}()
-		}
-	case "wifi-disconnect":
-		if a.networkSvc != nil && len(fields) >= 2 {
-			go a.networkSvc.DisconnectWifi(context.Background(), strings.Join(fields[1:], " "))
-		}
-	case "wifi-change-password":
-		if a.networkSvc != nil && len(fields) >= 3 {
-			go a.networkSvc.ChangePassword(context.Background(), fields[1], fields[2])
-		}
-	case "brightness-set":
-		if a.brightnessSvc != nil && len(fields) >= 3 {
-			screen := fields[1]
-			value, err := strconv.ParseFloat(fields[2], 64)
-			if err == nil {
-				a.brightnessSvc.SetBrightness(screen, value)
 			}
-		}
-	case "brightness-increment":
-		if a.brightnessSvc != nil && len(fields) >= 3 {
-			screen := fields[1]
-			delta, err := strconv.ParseFloat(fields[2], 64)
-			if err == nil {
-				a.brightnessSvc.IncrementBrightness(screen, delta)
+		case "increment":
+			if len(fields) >= 4 {
+				delta, err := strconv.ParseFloat(fields[3], 64)
+				if err == nil {
+					a.brightnessSvc.IncrementBrightness(fields[2], delta)
+				}
 			}
-		}
-	case "brightness-get":
-		if a.brightnessSvc != nil && len(fields) >= 2 {
-			value := a.brightnessSvc.GetBrightness(fields[1])
+		case "get":
+			value := a.brightnessSvc.GetBrightness(fields[2])
 			a.socketServer.Emitter().Emit(map[string]any{
 				"event": "brightness_value",
 				"data": map[string]any{
-					"screen":     fields[1],
+					"screen":     fields[2],
 					"brightness": value,
 				},
 			})
 		}
-	case "gamemode-enable":
-		if a.gamemodeSvc != nil {
-			go a.gamemodeSvc.Enable()
-		}
-	case "gamemode-disable":
-		if a.gamemodeSvc != nil {
-			go a.gamemodeSvc.Disable()
-		}
-	case "gamemode-toggle":
-		if a.gamemodeSvc != nil {
-			go a.gamemodeSvc.Toggle()
-		}
-	case "conflict-check":
-		if a.conflictSvc != nil {
-			go a.handleConflictCheck()
-		}
-	case "fprintd-check":
-		user := os.Getenv("USER")
-		if user == "" {
-			user = "root"
-		}
-		out, err := exec.Command("fprintd-list", user).Output()
-		if err != nil {
-			a.socketServer.Emitter().Emit(map[string]any{
-				"event": "fprintd_result",
-				"data":  map[string]any{"available": false, "enrolled": false},
-			})
+	case "gamemode":
+		if len(fields) < 2 || a.gamemodeSvc == nil {
 			return
 		}
-		output := string(out)
-		enrolled := strings.Contains(output, "Finger") || strings.Contains(output, "finger")
-		a.socketServer.Emitter().Emit(map[string]any{
-			"event": "fprintd_result",
-			"data":  map[string]any{"available": true, "enrolled": enrolled},
-		})
-	case "fps-set":
-		if len(fields) >= 2 {
-			fpsValue := fields[1]
+		switch fields[1] {
+		case "enable":
+			go a.gamemodeSvc.Enable()
+		case "disable":
+			go a.gamemodeSvc.Disable()
+		case "toggle":
+			go a.gamemodeSvc.Toggle()
+		}
+	case "conflict":
+		if len(fields) >= 2 && fields[1] == "check" && a.conflictSvc != nil {
+			go a.handleConflictCheck()
+		}
+	case "fprintd":
+		if len(fields) >= 2 && fields[1] == "check" {
+			user := os.Getenv("USER")
+			if user == "" {
+				user = "root"
+			}
+			out, err := exec.Command("fprintd-list", user).Output()
+			if err != nil {
+				a.socketServer.Emitter().Emit(map[string]any{
+					"event": "fprintd_result",
+					"data":  map[string]any{"available": false, "enrolled": false},
+				})
+				return
+			}
+			output := string(out)
+			enrolled := strings.Contains(output, "Finger") || strings.Contains(output, "finger")
+			a.socketServer.Emitter().Emit(map[string]any{
+				"event": "fprintd_result",
+				"data":  map[string]any{"available": true, "enrolled": enrolled},
+			})
+		}
+	case "fps":
+		if len(fields) >= 3 && fields[1] == "set" {
+			fpsValue := fields[2]
 			if _, err := strconv.Atoi(fpsValue); err != nil {
 				return
 			}
@@ -410,9 +407,13 @@ func dispatchCommand(a *App, line string) {
 			}
 			exec.Command("pkill", "-SIGUSR2", "mangohud").Run()
 		}
-	case "hyprconfig-get":
-		if len(fields) >= 2 {
-			key := strings.Join(fields[1:], " ")
+	case "hyprconfig":
+		if len(fields) < 3 {
+			return
+		}
+		switch fields[1] {
+		case "get":
+			key := strings.Join(fields[2:], " ")
 			out, err := a.hyprlandSvc.GetOption(key)
 			if err != nil {
 				return
@@ -424,46 +425,56 @@ func dispatchCommand(a *App, line string) {
 					"value": strings.TrimSpace(string(out)),
 				},
 			})
-		}
-	case "hyprconfig-set":
-		if len(fields) >= 3 {
-			key := fields[1]
-			value := strings.Join(fields[2:], " ")
-			a.hyprlandSvc.SetOption(key, value)
-		}
-	case "hyprconfig-reset":
-		if len(fields) >= 2 {
-			key := strings.Join(fields[1:], " ")
-			a.hyprlandSvc.ResetOption(key)
+		case "set":
+			if len(fields) >= 4 {
+				a.hyprlandSvc.SetOption(fields[2], strings.Join(fields[3:], " "))
+			}
+		case "reset":
+			a.hyprlandSvc.ResetOption(strings.Join(fields[2:], " "))
+		case "edit":
+			if len(fields) >= 3 {
+				go a.handleHyprconfigEdit(fields[1:])
+			}
 		}
 	case "record":
 		go a.handleRecord(fields[1:])
-	case "recognize-music":
-		go a.handleRecognizeMusic(fields[1:])
-	case "keyring-check":
-		go a.handleKeyringCheck()
-	case "keyring-lookup":
-		go a.handleKeyringLookup()
-	case "keyring-unlock":
-		if len(fields) >= 2 {
-			go a.handleKeyringUnlock(fields[1])
+	case "keyring":
+		if len(fields) < 2 {
+			return
 		}
-	case "capslock-check":
-		if a.hyprlandSvc != nil {
+		switch fields[1] {
+		case "check":
+			go a.handleKeyringCheck()
+		case "lookup":
+			go a.handleKeyringLookup()
+		case "unlock":
+			if len(fields) >= 3 {
+				go a.handleKeyringUnlock(fields[2])
+			}
+		}
+	case "capslock":
+		if len(fields) >= 2 && fields[1] == "check" && a.hyprlandSvc != nil {
 			go a.handleCapslockCheck()
 		}
-	case "battery-status":
-		go a.handleBatteryStatus()
+	case "battery":
+		if len(fields) >= 2 && fields[1] == "status" {
+			go a.handleBatteryStatus()
+		}
 	case "restore-video-wallpaper":
 		go a.handleRestoreVideoWallpaper()
-	case "nvim-apply-colors":
-		go a.handleNvimApplyColors()
-	case "apply-vscode-color":
-		go a.handleApplyVscodeColor()
-	case "apply-kvantum-theme":
-		go a.handleApplyKvantumTheme()
-	case "apply-terminal-colors":
-		go a.handleApplyTerminalColors()
+	case "apply-colors":
+		if len(fields) >= 2 {
+			switch fields[1] {
+			case "terminal":
+				go a.handleApplyTerminalColors()
+			case "vscode":
+				go a.handleApplyVscodeColor()
+			case "kvantum":
+				go a.handleApplyKvantumTheme()
+			case "nvim":
+				go a.handleNvimApplyColors()
+			}
+		}
 	case "switch-wallpaper":
 		go a.handleSwitchWallpaper(fields[1:])
 	case "find-regions":
@@ -472,11 +483,6 @@ func dispatchCommand(a *App, line string) {
 		go a.handleLeastBusyRegion(fields[1:])
 	case "text-color":
 		go a.handleTextColor(fields[1:])
-	case "hyprconfig-edit":
-		if len(fields) < 3 {
-			return
-		}
-		go a.handleHyprconfigEdit(fields[1:])
 	case "restart":
 		a.softReload()
 	}

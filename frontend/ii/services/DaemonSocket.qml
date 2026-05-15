@@ -140,18 +140,18 @@ Singleton {
 	function authenticate(password) { sendCommand("auth " + password) }
 	function lock() { sendCommand("lock") }
 	function unlock() { sendCommand("unlock") }
-	function lockStartup() { sendCommand("lock-startup") }
+	function lockStartup() { sendCommand("lock startup") }
 
 	// State commands.
 	function setMode(mode) { sendCommand("set-mode " + mode) }
 	function cycleMode() { sendCommand("cycle-mode") }
-	function oskDismiss() { sendCommand("osk-dismiss") }
-	function oskUndismiss() { sendCommand("osk-undismiss") }
-	function oskToggle() { sendCommand("osk-toggle") }
-	function oskShow() { sendCommand("osk-show") }
-	function oskHide() { sendCommand("osk-hide") }
-	function oskPin() { sendCommand("osk-pin") }
-	function oskUnpin() { sendCommand("osk-unpin") }
+	function oskDismiss() { sendCommand("osk dismiss") }
+	function oskUndismiss() { sendCommand("osk undismiss") }
+	function oskToggle() { sendCommand("osk toggle") }
+	function oskShow() { sendCommand("osk show") }
+	function oskHide() { sendCommand("osk hide") }
+	function oskPin() { sendCommand("osk pin") }
+	function oskUnpin() { sendCommand("osk unpin") }
 
 	// Image analysis signals.
 	signal findRegionsResult(var data)
@@ -171,36 +171,36 @@ Singleton {
 		daemonSocket.flush()
 	}
 
-	function easyEffectsToggle() { sendCommand("easyeffects-toggle") }
-	function easyEffectsEnable() { sendCommand("easyeffects-enable") }
-	function easyEffectsDisable() { sendCommand("easyeffects-disable") }
-	function hyprsunsetSetGamma(gamma) { sendCommand("hyprsunset-gamma " + gamma) }
-	function hyprsunsetEnableTemperature() { sendCommand("hyprsunset-enable") }
-	function hyprsunsetDisableTemperature() { sendCommand("hyprsunset-disable") }
-	function hyprsunsetToggleTemperature(active) { sendCommand("hyprsunset-toggle " + (active !== undefined ? active : "")) }
-	function brightnessSet(screen, value) { sendCommand("brightness-set " + screen + " " + value) }
-	function brightnessIncrement(screen, delta) { sendCommand("brightness-increment " + screen + " " + delta) }
-	function brightnessGet(screen) { sendCommand("brightness-get " + screen) }
-	function wifiEnable() { sendCommand("wifi-enable") }
-	function wifiDisable() { sendCommand("wifi-disable") }
-	function wifiToggle() { sendCommand("wifi-toggle") }
-	function wifiRescan() { sendCommand("wifi-rescan") }
-	function wifiConnect(ssid) { sendCommand("wifi-connect " + ssid) }
-	function wifiDisconnect(ssid) { sendCommand("wifi-disconnect " + ssid) }
-	function wifiChangePassword(ssid, password) { sendCommand("wifi-change-password " + ssid + " " + password) }
-	function cliphistRefresh() { sendCommand("cliphist-list") }
-	function cliphistDelete(entry) { sendCommand("cliphist-delete " + entry) }
-	function cliphistWipe() { sendCommand("cliphist-wipe") }
+	function easyEffectsToggle() { sendCommand("easyeffects toggle") }
+	function easyEffectsEnable() { sendCommand("easyeffects enable") }
+	function easyEffectsDisable() { sendCommand("easyeffects disable") }
+	function hyprsunsetSetGamma(gamma) { sendCommand("hyprsunset gamma " + gamma) }
+	function hyprsunsetEnableTemperature() { sendCommand("hyprsunset enable") }
+	function hyprsunsetDisableTemperature() { sendCommand("hyprsunset disable") }
+	function hyprsunsetToggleTemperature(active) { sendCommand("hyprsunset toggle " + (active !== undefined ? active : "")) }
+	function brightnessSet(screen, value) { sendCommand("brightness set " + screen + " " + value) }
+	function brightnessIncrement(screen, delta) { sendCommand("brightness increment " + screen + " " + delta) }
+	function brightnessGet(screen) { sendCommand("brightness get " + screen) }
+	function wifiEnable() { sendCommand("wifi enable") }
+	function wifiDisable() { sendCommand("wifi disable") }
+	function wifiToggle() { sendCommand("wifi toggle") }
+	function wifiRescan() { sendCommand("wifi rescan") }
+	function wifiConnect(ssid) { sendCommand("wifi connect " + ssid) }
+	function wifiDisconnect(ssid) { sendCommand("wifi disconnect " + ssid) }
+	function wifiChangePassword(ssid, password) { sendCommand("wifi change-password " + ssid + " " + password) }
+	function cliphistRefresh() { sendCommand("cliphist list") }
+	function cliphistDelete(entry) { sendCommand("cliphist delete " + entry) }
+	function cliphistWipe() { sendCommand("cliphist wipe") }
 
-	function gameModeEnable() { sendCommand("gamemode-enable") }
-	function gameModeDisable() { sendCommand("gamemode-disable") }
-	function gameModeToggle() { sendCommand("gamemode-toggle") }
-	function fprintdCheck() { sendCommand("fprintd-check") }
-	function conflictCheck() { sendCommand("conflict-check") }
-	function fpsSet(value) { sendCommand("fps-set " + value) }
-	function hyprconfigGet(key) { sendCommand("hyprconfig-get " + key) }
-	function hyprconfigSet(key, value) { sendCommand("hyprconfig-set " + key + " " + value) }
-	function hyprconfigReset(key) { sendCommand("hyprconfig-reset " + key) }
+	function gameModeEnable() { sendCommand("gamemode enable") }
+	function gameModeDisable() { sendCommand("gamemode disable") }
+	function gameModeToggle() { sendCommand("gamemode toggle") }
+	function fprintdCheck() { sendCommand("fprintd check") }
+	function conflictCheck() { sendCommand("conflict check") }
+	function fpsSet(value) { sendCommand("fps set " + value) }
+	function hyprconfigGet(key) { sendCommand("hyprconfig get " + key) }
+	function hyprconfigSet(key, value) { sendCommand("hyprconfig set " + key + " " + value) }
+	function hyprconfigReset(key) { sendCommand("hyprconfig reset " + key) }
 
 	// ── Hyprland compositor API (REST-like) ──
 	// All Hyprland operations go through these semantic methods.

@@ -64,7 +64,7 @@ Singleton {
     }
 
     function fetchKeyringData() {
-        DaemonSocket.sendCommand("keyring-lookup");
+        DaemonSocket.sendCommand("keyring lookup");
     }
 
     function saveKeyringData() {

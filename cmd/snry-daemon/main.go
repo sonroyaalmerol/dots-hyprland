@@ -27,15 +27,15 @@ func main() {
 	case "setup":
 		runSetup()
 	case "deps":
-		runDeps()
+		if len(os.Args) >= 3 && os.Args[2] == "--check" {
+			runCheckDeps()
+		} else {
+			runDeps()
+		}
 	case "files":
 		runFiles()
-	case "setups":
-		runSetups()
 	case "diagnose":
 		runDiagnose()
-	case "checkdeps":
-		runCheckDeps()
 	case "autoscale":
 		runAutoscale()
 	case "uninstall":
@@ -57,12 +57,11 @@ func printUsage() {
 Usage:
   snry-daemon              Start daemon (default)
   snry-daemon daemon       Start daemon explicitly
-  snry-daemon setup        Full installation (deps + files + setups)
-  snry-daemon deps         Install packages only
+  snry-daemon setup        Full installation (deps + files + system setup)
+  snry-daemon deps         Install packages
+  snry-daemon deps --check Check for missing packages
   snry-daemon files        Sync config files only
-  snry-daemon setups       System setup only (groups, systemd, PAM)
   snry-daemon diagnose     Collect system diagnostics
-  snry-daemon checkdeps    Check for missing packages
   snry-daemon autoscale    Auto-set monitor scale
   snry-daemon uninstall    Remove installed files and revert changes
   snry-daemon send <cmd>   Send command to running daemon
@@ -121,7 +120,6 @@ func runManagerCommand(name string, fn func(context.Context, manager.Config) err
 func runSetup()     { runManagerCommand("setup", manager.Setup) }
 func runDeps()      { runManagerCommand("deps", manager.Deps) }
 func runFiles()     { runManagerCommand("files", manager.Files) }
-func runSetups()    { runManagerCommand("setups", manager.Setups) }
 func runDiagnose()  { runManagerCommand("diagnose", manager.Diagnose) }
 func runCheckDeps() { runManagerCommand("checkdeps", manager.CheckDeps) }
 func runUninstall() { runManagerCommand("uninstall", manager.Uninstall) }
