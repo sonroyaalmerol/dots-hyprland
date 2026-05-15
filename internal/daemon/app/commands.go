@@ -1561,8 +1561,36 @@ func (a *App) handleSwitchWallpaper(args []string) {
 	}
 
 	schemeType := wallpaper.ParseSchemeType(schemeTypeStr)
-	if schemeTypeStr == "" || schemeType == wallpaper.SchemeAuto {
+
+	// If no scheme type specified, read from config
+	if schemeTypeStr == "" {
+		shellCfg, err := wallpaper.LoadShellConfig(wallpaper.DefaultConfig().ShellConfigFile)
+		if err == nil && shellCfg.Appearance.Palette.Type != "" {
+			schemeType = wallpaper.ParseSchemeType(shellCfg.Appearance.Palette.Type)
+		}
+	}
+	if schemeType == "" {
 		schemeType = wallpaper.SchemeAuto
+	}
+
+	// Handle accent color from config if not explicitly set
+	if color == "" {
+		shellCfg, err := wallpaper.LoadShellConfig(wallpaper.DefaultConfig().ShellConfigFile)
+		if err == nil && shellCfg.Appearance.Palette.AccentColor != "" {
+			color = shellCfg.Appearance.Palette.AccentColor
+		}
+	}
+
+	// When using an image (not noswitch), clear accent color
+	if imgPath != "" && !noswitch {
+		wallpaper.ClearAccentColor(wallpaper.DefaultConfig().ShellConfigFile)
+		color = ""
+	}
+
+	// Handle color=clear explicitly
+	if color == "clear" {
+		wallpaper.ClearAccentColor(wallpaper.DefaultConfig().ShellConfigFile)
+		color = ""
 	}
 
 	if mode == "" {
