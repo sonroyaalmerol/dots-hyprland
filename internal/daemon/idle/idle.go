@@ -62,6 +62,10 @@ type Service struct {
 	lockCancel       context.CancelFunc // cancels pending lock-after-display-off goroutine
 	displayOffForced bool               // suppress setDisplay(true) when true
 	onDisplayChange  func(on bool)
+
+	// test hooks
+	onRecreateTimers   func() // called at the end of recreateTimers for testing
+	testResumedHandler func() // latest resumed handler set by recreateTimers
 }
 
 // New creates the idle service.
@@ -112,11 +116,25 @@ func (s *Service) SetOnLogindUnlock(fn func()) {
 	s.mu.Unlock()
 }
 
+// SetOnRecreateTimers registers a test hook called at the end of every recreateTimers call.
+func (s *Service) SetOnRecreateTimers(fn func()) {
+	s.mu.Lock()
+	s.onRecreateTimers = fn
+	s.mu.Unlock()
+}
+
 func (s *Service) isLocked() bool {
 	if s.lockedProvider != nil {
 		return s.lockedProvider()
 	}
 	return false
+}
+
+func (s *Service) setDPMS(action string) {
+	if s.hl == nil {
+		return
+	}
+	s.hl.SetDPMS(action)
 }
 
 // SetDisplay is the exported wrapper around setDisplay.
@@ -125,6 +143,19 @@ func (s *Service) SetDisplay(on bool) {
 }
 
 func (s *Service) recreateTimers() {
+	s.waylandMu.Lock()
+	defer s.waylandMu.Unlock()
+
+	defer func() {
+		if s.onRecreateTimers != nil {
+			s.onRecreateTimers()
+		}
+	}()
+
+	if s.manager == nil {
+		return
+	}
+
 	if s.displayOffNotif != nil {
 		s.displayOffNotif.Destroy()
 		s.displayOffNotif = nil
@@ -150,8 +181,13 @@ func (s *Service) recreateTimers() {
 					}
 					s.setDisplay(false)
 				})
-				notif.SetResumedHandler(func(protocol.ExtIdleNotificationV1ResumedEvent) {
+				resumed := func() {
 					s.setDisplay(true)
+					s.recreateTimers()
+				}
+				s.testResumedHandler = resumed
+				notif.SetResumedHandler(func(protocol.ExtIdleNotificationV1ResumedEvent) {
+					resumed()
 				})
 				s.displayOffNotif = notif
 			}
@@ -184,8 +220,13 @@ func (s *Service) recreateTimers() {
 						}
 					}()
 				})
-				notif.SetResumedHandler(func(protocol.ExtIdleNotificationV1ResumedEvent) {
+				resumed := func() {
 					s.setDisplay(true)
+					s.recreateTimers()
+				}
+				s.testResumedHandler = resumed
+				notif.SetResumedHandler(func(protocol.ExtIdleNotificationV1ResumedEvent) {
+					resumed()
 				})
 				s.displayOffNotif = notif
 			}
@@ -209,10 +250,10 @@ func (s *Service) setDisplay(on bool) {
 
 	if on {
 		log.Printf("[idle] turning display ON")
-		s.hl.SetDPMS("on")
+		s.setDPMS("on")
 	} else {
 		log.Printf("[idle] turning display OFF")
-		s.hl.SetDPMS("off")
+		s.setDPMS("off")
 	}
 
 	s.mu.Lock()
@@ -260,11 +301,7 @@ func (s *Service) Run(ctx context.Context) error {
 		// If inhibition became active while we already idled, the display
 		// is off — turn it back on. If inhibition dropped while idled,
 		// restart the timers so the lock delay runs again.
-		s.waylandMu.Lock()
-		if s.manager != nil {
-			s.recreateTimers()
-		}
-		s.waylandMu.Unlock()
+		s.recreateTimers()
 	})
 
 	go s.waylandLoop(ctx)
@@ -308,11 +345,7 @@ func (s *Service) NotifyLockChanged() {
 	}
 	if changed {
 		log.Printf("[idle] lock state: %v", locked)
-		s.waylandMu.Lock()
-		if s.manager != nil {
-			s.recreateTimers()
-		}
-		s.waylandMu.Unlock()
+		s.recreateTimers()
 	}
 }
 
@@ -419,9 +452,7 @@ func (s *Service) initAndDispatch(ctx context.Context) error {
 		return err
 	}
 
-	s.waylandMu.Lock()
 	s.recreateTimers()
-	s.waylandMu.Unlock()
 
 	for {
 		s.waylandMu.Lock()
