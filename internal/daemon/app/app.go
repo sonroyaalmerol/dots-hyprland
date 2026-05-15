@@ -39,7 +39,6 @@ import (
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/tabletmode"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/uinput"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/updates"
-	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/warp"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/weather"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/manager"
 )
@@ -64,7 +63,6 @@ type Config struct {
 	HyprsunsetCfg    hyprsunset.Config
 	HyprXkbCfg       hyprxkb.Config
 	NetworkCfg       network.Config
-	WarpCfg          warp.Config
 	GamemodeCfg      gamemode.Config
 	DarkmodeCfg      darkmode.Config
 }
@@ -88,7 +86,6 @@ func DefaultConfig() Config {
 		HyprsunsetCfg:    hyprsunset.DefaultConfig(),
 		HyprXkbCfg:       hyprxkb.DefaultConfig(),
 		NetworkCfg:       network.DefaultConfig(),
-		WarpCfg:          warp.DefaultConfig(),
 		GamemodeCfg:      gamemode.DefaultConfig(),
 		DarkmodeCfg:      darkmode.DefaultConfig(),
 	}
@@ -131,7 +128,6 @@ type App struct {
 	tabletModeMon   *tabletmode.Monitor
 	inputMethodW    *inputmethod.Watcher
 	networkSvc      *network.Service
-	warpSvc         *warp.Service
 	gamemodeSvc     *gamemode.Service
 	guardSvc        *guard.Service
 	hlGuardSvc      *guard.Service
@@ -292,7 +288,6 @@ func (a *App) Run(ctx context.Context) error {
 
 	a.networkSvc = network.New(a.cfg.NetworkCfg, a.socketServer.Emitter().Emit)
 
-	a.warpSvc = warp.New(a.cfg.WarpCfg, a.socketServer.Emitter().Emit)
 	a.gamemodeSvc = gamemode.New(a.cfg.GamemodeCfg, a.hyprlandSvc, a.socketServer.Emitter().Emit)
 	a.darkmodeSvc = darkmode.New(a.cfg.DarkmodeCfg, a.socketServer.Emitter().Emit)
 	a.conflictSvc = conflict.New()
@@ -348,7 +343,6 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runService(ctx, "hyprxkb", a.hyprXkbSvc) })
 	wg.Go(func() { a.runService(ctx, "hyprsunset", a.hyprsunsetSvc) })
 	wg.Go(func() { a.runService(ctx, "network", a.networkSvc) })
-	wg.Go(func() { a.runService(ctx, "warp", a.warpSvc) })
 	wg.Go(func() { a.runService(ctx, "gamemode", a.gamemodeSvc) })
 	wg.Go(func() { a.runService(ctx, "darkmode", a.darkmodeSvc) })
 	wg.Go(func() { a.runService(ctx, "guard", a.guardSvc) })
@@ -670,7 +664,6 @@ func (a *App) socketSnapshots() []socket.SnapshotProvider {
 	snap(a.hyprXkbSvc)
 	snap(a.hyprsunsetSvc)
 	snap(a.networkSvc)
-	snap(a.warpSvc)
 	snap(a.gamemodeSvc)
 	snap(a.darkmodeSvc)
 	return snaps

@@ -344,22 +344,6 @@ func dispatchCommand(a *App, line string) {
 				},
 			})
 		}
-	case "warp-connect":
-		if a.warpSvc != nil {
-			go a.warpSvc.Connect()
-		}
-	case "warp-disconnect":
-		if a.warpSvc != nil {
-			go a.warpSvc.Disconnect()
-		}
-	case "warp-toggle":
-		if a.warpSvc != nil {
-			go a.warpSvc.Toggle()
-		}
-	case "warp-register":
-		if a.warpSvc != nil {
-			go a.warpSvc.Register()
-		}
 	case "gamemode-enable":
 		if a.gamemodeSvc != nil {
 			go a.gamemodeSvc.Enable()

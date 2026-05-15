@@ -86,10 +86,7 @@ Singleton {
 	// Brightness from daemon.
 	property var brightnessMonitors: ({})
 
-	// Warp and GameMode from daemon.
-	property bool warpInstalled: false
-	property bool warpConnected: false
-	property string warpStatus: ""
+	// GameMode from daemon.
 	property bool gameModeEnabled: false
 
 	// Dark mode and fprintd from daemon.
@@ -129,8 +126,7 @@ Singleton {
 	signal networkUpdated()
 	signal networkConnectResult(var data)
 
-	// Warp and GameMode signals.
-	signal warpStatusUpdated()
+	// GameMode signal.
 	signal gameModeUpdated()
 	signal darkModeUpdated()
 	signal fprintdResult(bool available, bool enrolled)
@@ -193,10 +189,6 @@ Singleton {
 	function cliphistDelete(entry) { sendCommand("cliphist-delete " + entry) }
 	function cliphistWipe() { sendCommand("cliphist-wipe") }
 
-	function warpConnect() { sendCommand("warp-connect") }
-	function warpDisconnect() { sendCommand("warp-disconnect") }
-	function warpToggle() { sendCommand("warp-toggle") }
-	function warpRegister() { sendCommand("warp-register") }
 	function gameModeEnable() { sendCommand("gamemode-enable") }
 	function gameModeDisable() { sendCommand("gamemode-disable") }
 	function gameModeToggle() { sendCommand("gamemode-toggle") }
@@ -401,11 +393,6 @@ Singleton {
 			cliphistUpdated()
 		} else if (obj.event === "network_connect_result" && obj.data) {
 			networkConnectResult(obj.data)
-		} else if (obj.event === "warp_status" && obj.data) {
-			root.warpInstalled = obj.data.installed ?? false
-			root.warpConnected = obj.data.connected ?? false
-			root.warpStatus = obj.data.status ?? ""
-			warpStatusUpdated()
 		} else if (obj.event === "game_mode" && obj.data) {
 			root.gameModeEnabled = obj.data.enabled ?? false
 			gameModeUpdated()
