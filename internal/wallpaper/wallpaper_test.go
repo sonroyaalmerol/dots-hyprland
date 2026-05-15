@@ -283,3 +283,26 @@ func containsAny(s string, substrs ...string) bool {
 	}
 	return false
 }
+
+func TestIsVideoFile(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"video.mp4", true},
+		{"video.webm", true},
+		{"video.mkv", true},
+		{"video.avi", true},
+		{"video.mov", true},
+		{"image.png", false},
+		{"image.jpg", false},
+		{"doc.pdf", false},
+		{"VIDEO.MP4", true},
+	}
+	for _, tc := range tests {
+		got := IsVideoFile(tc.path)
+		if got != tc.want {
+			t.Errorf("IsVideoFile(%q) = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}
