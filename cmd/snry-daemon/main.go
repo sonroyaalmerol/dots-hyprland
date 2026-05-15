@@ -59,7 +59,7 @@ func printUsage() {
 Usage:
   snry-daemon              Start daemon (default)
   snry-daemon daemon       Start daemon explicitly
-  snry-daemon setup        Full installation (deps + files + system setup)
+  snry-daemon setup        Full installation (deps + install + sync + system setup)
   snry-daemon deps         Install packages
   snry-daemon deps --check Check for missing packages
   snry-daemon sync         Sync config files to XDG directories
