@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -137,7 +138,8 @@ func (s *Socket) dispatch(conn net.Conn, line string) {
 			return
 		}
 		password := strings.Join(fields[1:], " ")
-		s.authCh <- &Credentials{Username: "", Password: password}
+		username := resolveDefaultUser()
+		s.authCh <- &Credentials{Username: username, Password: password}
 	case "lock-startup":
 		s.emit(conn, map[string]any{
 			"event": "lock_state",
@@ -167,6 +169,32 @@ func (s *Socket) SendAuthResult(success bool, message string) {
 func (s *Socket) emit(conn net.Conn, m map[string]any) {
 	data, _ := json.Marshal(m)
 	conn.Write(append(data, '\n'))
+}
+
+// resolveDefaultUser finds the primary user on the system.
+// Returns the first regular user (UID >= 1000) from /etc/passwd,
+// or "root" as a fallback.
+func resolveDefaultUser() string {
+	data, err := os.ReadFile("/etc/passwd")
+	if err != nil {
+		return "root"
+	}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		fields := strings.Split(line, ":")
+		if len(fields) < 7 {
+			continue
+		}
+		uid, err := strconv.Atoi(fields[2])
+		if err != nil || uid < 1000 {
+			continue
+		}
+		shell := fields[6]
+		if strings.Contains(shell, "nologin") || strings.Contains(shell, "false") {
+			continue
+		}
+		return fields[0]
+	}
+	return "root"
 }
 
 func (s *Socket) emitAll(m map[string]any) {

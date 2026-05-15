@@ -83,6 +83,8 @@ func (g *Greeter) startHyprland(uid, gid int, runtimeDir string) error {
 		"WAYLAND_DISPLAY=wayland-greeter",
 		"PATH=/usr/local/bin:/usr/bin:/bin",
 		fmt.Sprintf("XDG_VTNR=%d", g.vt.Num()),
+		// Use the dedicated greeter Hyprland config.
+		"HYPRLAND_CONFIG=/usr/share/snry-shell/configs/hyprland/hyprland-greeter/hyprland.conf",
 	}
 	g.hyprland.Stdout = os.Stdout
 	g.hyprland.Stderr = os.Stderr

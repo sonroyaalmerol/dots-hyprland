@@ -1,4 +1,16 @@
 post_install() {
+	# Create snry-dm system user for the display manager greeter.
+	if ! id -u snry-dm &>/dev/null; then
+		useradd -r -M -d /var/lib/snry-dm -s /bin/false snry-dm
+		mkdir -p /var/lib/snry-dm/.config
+		chown -R snry-dm:snry-dm /var/lib/snry-dm
+	fi
+
+	# Install PAM config.
+	if [ ! -f /etc/pam.d/snry-dm ]; then
+		cp /usr/share/snry-shell/configs/pam/snry-dm /etc/pam.d/snry-dm
+	fi
+
 	# Detect the installing user (not root)
 	local user
 	user=$(logname 2>/dev/null || awk -F: '$3>=1000 && $3<65534 {print $1; exit}' /etc/passwd)
@@ -27,6 +39,10 @@ post_install() {
 	echo ""
 	echo ">>> Snry Shell installed and configured!"
 	echo ">>> Log out and log back in (or reboot) to start."
+	echo ""
+	echo ">>> To enable the display manager (replaces your login screen):"
+	echo ">>>   sudo systemctl enable snry-dm.service"
+	echo ">>>   sudo systemctl start snry-dm.service"
 }
 
 post_upgrade() {
@@ -77,5 +93,13 @@ post_remove() {
 	echo ">>> Config files in ~/.config/ were NOT deleted."
 	echo ">>> To fully clean up, run (before removing this package):"
 	echo ">>>   snry-daemon uninstall"
+
+	# Remove the DM user and PAM config.
+	if id -u snry-dm &>/dev/null; then
+		userdel snry-dm 2>/dev/null || true
+	fi
+	rm -f /etc/pam.d/snry-dm
+	rm -rf /var/lib/snry-dm
+
 	echo ""
 }

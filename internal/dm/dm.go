@@ -113,9 +113,10 @@ func (dm *DM) runGreeterCycle(ctx context.Context) error {
 	sockCtx, sockCancel := context.WithCancel(ctx)
 	defer sockCancel()
 
-	sockDone := make(chan error, 1)
 	go func() {
-		sockDone <- sock.Run(sockCtx)
+		if err := sock.Run(sockCtx); err != nil {
+			log.Printf("[dm/socket] error: %v", err)
+		}
 	}()
 
 	// Wait for successful authentication.
