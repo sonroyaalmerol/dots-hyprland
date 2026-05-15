@@ -165,6 +165,22 @@ func New(cfg Config) *App {
 func (a *App) HyprlandSvc() *hyprland.Service   { return a.hyprlandSvc }
 func (a *App) ResourcesSvc() *resources.Service { return a.resourcesSvc }
 
+func (a *App) stateDir() string {
+	d := os.Getenv("XDG_STATE_HOME")
+	if d == "" {
+		d = filepath.Join(os.Getenv("HOME"), ".local/state")
+	}
+	return d
+}
+
+func (a *App) configDir() string {
+	d := os.Getenv("XDG_CONFIG_HOME")
+	if d == "" {
+		d = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	return d
+}
+
 // ── Run ───────────────────────────────────────────────────────────────────────
 
 func (a *App) Run(ctx context.Context) error {
@@ -293,10 +309,7 @@ func (a *App) Run(ctx context.Context) error {
 	a.conflictSvc = conflict.New()
 
 	// Guard: protect deployed quickshell config from tampering.
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 	guardCfg := guard.Config{
 		WatchDir: filepath.Join(configDir, "quickshell", "ii"),
 	}
@@ -607,10 +620,7 @@ func (a *App) EmitSnapshot(emit func(map[string]any)) {
 // ── User mode persistence ─────────────────────────────────────────────────────
 
 func (a *App) userModePath() string {
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 	return filepath.Join(configDir, "snry-shell", "tablet-mode")
 }
 

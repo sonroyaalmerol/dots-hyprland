@@ -910,10 +910,7 @@ func (a *App) handleRandomWallpaper(source string) {
 	downloadPath := filepath.Join(wallpapersDir, filename)
 
 	// Check if same as current wallpaper
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 	configFile := filepath.Join(configDir, "snry-shell", "config.json")
 	if data, err := os.ReadFile(configFile); err == nil {
 		var cfg map[string]any
@@ -1245,10 +1242,7 @@ func (a *App) handleKeyringUnlock(password string) {
 }
 
 func (a *App) handleNvimApplyColors() {
-	stateDir := os.Getenv("XDG_STATE_HOME")
-	if stateDir == "" {
-		stateDir = filepath.Join(os.Getenv("HOME"), ".local", "state")
-	}
+	stateDir := a.stateDir()
 	nvimFile := filepath.Join(stateDir, "quickshell", "user", "generated", "nvim_colors.json")
 
 	// Read colors.json (populated by matugen + MaterialThemeLoader)
@@ -1291,10 +1285,7 @@ func (a *App) handleNvimApplyColors() {
 }
 
 func (a *App) handleApplyVscodeColor() {
-	stateDir := os.Getenv("XDG_STATE_HOME")
-	if stateDir == "" {
-		stateDir = filepath.Join(os.Getenv("HOME"), ".local/state")
-	}
+	stateDir := a.stateDir()
 	colorFile := filepath.Join(stateDir, "quickshell", "user", "generated", "color.txt")
 	newColor, err := os.ReadFile(colorFile)
 	if err != nil {
@@ -1314,10 +1305,7 @@ func (a *App) handleApplyVscodeColor() {
 		}
 	}
 
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 
 	settingsPaths := []string{
 		filepath.Join(configDir, "Code/User/settings.json"),
@@ -1350,10 +1338,7 @@ func (a *App) handleApplyVscodeColor() {
 }
 
 func (a *App) handleApplyKvantumTheme() {
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 
 	colloidDir := filepath.Join(configDir, "Kvantum", "Colloid")
 	materialAdwDir := filepath.Join(configDir, "Kvantum", "MaterialAdw")
@@ -1388,10 +1373,7 @@ func (a *App) handleApplyKvantumTheme() {
 	os.WriteFile(dstConfig, data, 0644)
 
 	// Read colors from colors.json (authoritative source)
-	stateDir := os.Getenv("XDG_STATE_HOME")
-	if stateDir == "" {
-		stateDir = filepath.Join(os.Getenv("HOME"), ".local", "state")
-	}
+	stateDir := a.stateDir()
 	genDir := filepath.Join(stateDir, "quickshell", "user", "generated")
 	colorMap := make(map[string]string)
 	if colors, err := wallpaper.LoadColorMapFromJSON(filepath.Join(genDir, "colors.json")); err == nil {
@@ -1581,10 +1563,7 @@ func (a *App) handleSwitchWallpaper(args []string) {
 }
 
 func (a *App) handleApplyTerminalColors() {
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 
 	wpCfg := wallpaper.DefaultConfig()
 	wpCfg.ConfigHome = configDir
@@ -1649,10 +1628,7 @@ func (a *App) handleHyprconfigEdit(args []string) {
 	var setArgs [][2]string
 	var resetKeys []string
 
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 	// Prefer hyprland.lua (new format), fall back to hyprland.conf (legacy)
 	defaultLua := filepath.Join(configDir, "hypr", "hyprland.lua")
 	defaultConf := filepath.Join(configDir, "hypr", "hyprland.conf")
