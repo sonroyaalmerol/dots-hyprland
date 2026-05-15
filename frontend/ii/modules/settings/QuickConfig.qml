@@ -125,7 +125,7 @@ ContentPage {
                         text: Translation.tr("Pick wallpaper image on your system")
                     }
                     onClicked: {
-                        Quickshell.execDetached(`${Directories.wallpaperSwitchScriptPath}`);
+                        DaemonSocket.sendCommand("switch-wallpaper --mode " + (Appearance.m3colors.darkmode ? "dark" : "light"));
                     }
                     mainContentComponent: Component {
                         RowLayout {
@@ -176,7 +176,7 @@ ContentPage {
             currentValue: Config.options.appearance.palette.type
             onSelected: newValue => {
                 Config.options.appearance.palette.type = newValue;
-                Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --noswitch`]);
+                DaemonSocket.sendCommand("switch-wallpaper --noswitch");
             }
             options: [
                 {

@@ -1,6 +1,7 @@
 import qs.modules.common
 import qs.modules.common.models
 import qs.modules.common.functions
+import qs.services
 import QtQuick
 import Qt.labs.folderlistmodel
 import Quickshell
@@ -10,7 +11,7 @@ pragma ComponentBehavior: Bound
 
 /**
  * Provides a list of wallpapers and an "apply" action that calls the existing
- * switchwall.sh script. Pretty much a limited file browsing service.
+ * switch-wallpaper daemon command for applying themes. Pretty much a limited file browsing service.
  */
 Singleton {
     id: root
@@ -35,25 +36,14 @@ Singleton {
 
     function load () {} // For forcing initialization
 
-    // Executions
-    Process {
-        id: applyProc
-    }
-    
+
     function openFallbackPicker(darkMode = Appearance.m3colors.darkmode) {
-        applyProc.exec([
-            Directories.wallpaperSwitchScriptPath,
-            "--mode", (darkMode ? "dark" : "light")
-        ])
+        DaemonSocket.sendCommand("switch-wallpaper --mode " + (darkMode ? "dark" : "light"))
     }
 
     function apply(path, darkMode = Appearance.m3colors.darkmode) {
         if (!path || path.length === 0) return
-        applyProc.exec([
-            Directories.wallpaperSwitchScriptPath,
-            "--image", path,
-            "--mode", (darkMode ? "dark" : "light")
-        ])
+        DaemonSocket.sendCommand("switch-wallpaper --image " + path + " --mode " + (darkMode ? "dark" : "light"))
         root.changed()
     }
 

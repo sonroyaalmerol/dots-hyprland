@@ -301,7 +301,7 @@ ApplicationWindow {
                                 text: Translation.tr("Pick wallpaper image on your system")
                             }
                             onClicked: {
-                                Quickshell.execDetached([`${Directories.wallpaperSwitchScriptPath}`]);
+                                DaemonSocket.sendCommand("switch-wallpaper --mode " + (Appearance.m3colors.darkmode ? "dark" : "light"));
                             }
                             mainContentComponent: Component {
                                 RowLayout {

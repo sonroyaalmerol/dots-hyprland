@@ -1523,10 +1523,17 @@ func (a *App) handleSwitchWallpaper(args []string) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--image":
-			if i+1 < len(args) {
-				imgPath = args[i+1]
+			// Consume all following tokens until next flag (handles paths with spaces)
+			i++
+			var parts []string
+			for i < len(args) && !strings.HasPrefix(args[i], "--") {
+				parts = append(parts, args[i])
 				i++
 			}
+			if len(parts) > 0 {
+				imgPath = strings.Join(parts, " ")
+			}
+			i-- // back up one so loop increments correctly
 		case "--mode":
 			if i+1 < len(args) {
 				mode = args[i+1]
@@ -1544,6 +1551,17 @@ func (a *App) handleSwitchWallpaper(args []string) {
 			}
 		case "--noswitch":
 			noswitch = true
+		default:
+			// Positional argument without flag = image path
+			if imgPath == "" && !strings.HasPrefix(args[i], "--") {
+				var parts []string
+				parts = append(parts, args[i])
+				for j := i + 1; j < len(args) && !strings.HasPrefix(args[j], "--"); j++ {
+					parts = append(parts, args[j])
+				}
+				imgPath = strings.Join(parts, " ")
+				i += len(parts) - 1
+			}
 		}
 	}
 
@@ -1607,19 +1625,6 @@ func (a *App) handleSwitchWallpaper(args []string) {
 	if err := wallpaper.FullWallpaperSwitch(cfg, imgPath, mode, schemeType, color); err != nil {
 		log.Printf("[wallpaper] switch failed: %v", err)
 	}
-}
-
-func (a *App) findScriptsDir(configDir string) string {
-	// Try installed path first
-	exe, err := os.Executable()
-	if err == nil {
-		shareDir := filepath.Join(filepath.Dir(exe), "..", "share", "snry-shell", "configs", "quickshell", "ii", "scripts")
-		if _, err := os.Stat(shareDir); err == nil {
-			return shareDir
-		}
-	}
-	// Fallback to source config
-	return filepath.Join(configDir, "quickshell", "ii", "scripts")
 }
 
 func (a *App) handleApplyTerminalColors() {

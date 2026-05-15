@@ -3,6 +3,7 @@ pragma Singleton
 import qs.modules.common
 import qs.modules.common.models
 import qs.modules.common.functions
+import qs.services
 import QtQuick
 import Qt.labs.folderlistmodel
 import Quickshell
@@ -65,7 +66,7 @@ Singleton {
         {
             action: "accentcolor",
             execute: args => {
-                Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--noswitch", "--color", ...(args != '' ? [`${args}`] : [])]);
+                DaemonSocket.sendCommand("switch-wallpaper --noswitch --color " + (args != '' ? args : ""));
             }
         },
         {
