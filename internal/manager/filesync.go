@@ -5,72 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
-
-// SyncOptions configures a directory sync operation.
-type SyncOptions struct {
-	Src      string   // source directory
-	Dst      string   // destination directory
-	Delete   bool     // delete extraneous files in dst
-	Excludes []string // patterns to exclude
-}
-
-// SyncDirectory synchronizes src into dst using rsync if available,
-// falling back to a native Go implementation.
-func SyncDirectory(ctx context.Context, opts SyncOptions) error {
-	if err := os.MkdirAll(opts.Dst, 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", opts.Dst, err)
-	}
-
-	// Prefer rsync for efficiency and --delete support.
-	if _, err := os.Stat("/usr/bin/rsync"); err == nil {
-		return rsyncDir(ctx, opts)
-	}
-	return nativeSyncDir(opts)
-}
-
-func rsyncDir(ctx context.Context, opts SyncOptions) error {
-	args := make([]string, 0, 8+len(opts.Excludes))
-	args = append(args, "-a")
-	if opts.Delete {
-		args = append(args, "--delete")
-	}
-	for _, excl := range opts.Excludes {
-		args = append(args, "--exclude", excl)
-	}
-	args = append(args, opts.Src+"/", opts.Dst+"/")
-
-	return runCtx(ctx, "rsync", args...)
-}
-
-// nativeSyncDir is a fallback when rsync is not installed.
-// It does not support --delete or excludes.
-func nativeSyncDir(opts SyncOptions) error {
-	return filepath.Walk(opts.Src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		rel, err := filepath.Rel(opts.Src, path)
-		if err != nil {
-			return err
-		}
-		if rel == "." {
-			return nil
-		}
-
-		dst := filepath.Join(opts.Dst, rel)
-
-		if info.IsDir() {
-			return os.MkdirAll(dst, info.Mode())
-		}
-
-		return copyFile(path, dst, info.Mode())
-	})
-}
 
 // CopyFile copies a single file from src to dst, preserving mode.
 func CopyFile(ctx context.Context, src, dst string, mode os.FileMode) error {
@@ -152,11 +89,4 @@ func LineInFile(path, line string) error {
 
 	_, err = fmt.Fprintln(f, line)
 	return err
-}
-
-func runCtx(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }

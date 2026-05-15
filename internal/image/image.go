@@ -61,16 +61,6 @@ func rgbToHex(r, g, b uint8) string {
 	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
 }
 
-// IsImageFile returns true if the file extension looks like an image.
-func IsImageFile(path string) bool {
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".jpg", ".jpeg", ".png", ".webp", ".avif", ".bmp", ".svg", ".gif", ".tiff", ".tif":
-		return true
-	}
-	return false
-}
-
 // loadImage loads an image from a file path, supporting JPEG, PNG, WebP,
 // and falling back to imaging.Decode for other formats.
 func loadImage(path string) (stdimage.Image, error) {
@@ -145,26 +135,6 @@ func grayscaleAt(img *stdimage.NRGBA, x, y int) uint8 {
 	c := img.NRGBAAt(x, y)
 	// ITU-R BT.601 luma
 	return uint8((19595*uint32(c.R) + 38470*uint32(c.G) + 7471*uint32(c.B)) >> 16)
-}
-
-// centerCropNRGBA crops the center of an image to targetW x targetH.
-func centerCropNRGBA(img *stdimage.NRGBA, targetW, targetH int) *stdimage.NRGBA {
-	b := img.Bounds()
-	w, h := b.Dx(), b.Dy()
-	if w <= targetW && h <= targetH {
-		return img
-	}
-	x0 := max(0, (w-targetW)/2)
-	y0 := max(0, (h-targetH)/2)
-	x1 := min(w, x0+targetW)
-	y1 := min(h, y0+targetH)
-	cropped := stdimage.NewNRGBA(stdimage.Rect(0, 0, x1-x0, y1-y0))
-	for y := y0; y < y1; y++ {
-		for x := x0; x < x1; x++ {
-			cropped.Set(x-x0, y-y0, img.NRGBAAt(x, y))
-		}
-	}
-	return cropped
 }
 
 // cropImage crops an image to the specified rectangle (x, y, w, h).

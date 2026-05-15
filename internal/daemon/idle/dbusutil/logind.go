@@ -43,22 +43,6 @@ func LogindSuspend(conn *dbus.Conn) error {
 		Call(LogindManager+".Suspend", 0, false).Err
 }
 
-func LogindReboot(conn *dbus.Conn) error {
-	if conn == nil {
-		return fmt.Errorf("no d-bus connection")
-	}
-	return conn.Object(LogindDest, LogindPath).
-		Call(LogindManager+".Reboot", 0, false).Err
-}
-
-func LogindPowerOff(conn *dbus.Conn) error {
-	if conn == nil {
-		return fmt.Errorf("no d-bus connection")
-	}
-	return conn.Object(LogindDest, LogindPath).
-		Call(LogindManager+".PowerOff", 0, false).Err
-}
-
 func LogindInhibit(conn *dbus.Conn, what, who, why, mode string) (dbus.UnixFD, error) {
 	if conn == nil {
 		return 0, fmt.Errorf("no d-bus connection")

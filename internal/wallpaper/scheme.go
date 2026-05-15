@@ -25,15 +25,6 @@ const (
 	SchemeAuto       SchemeType = "auto"
 )
 
-// ValidSchemeTypes returns all valid scheme type strings.
-func ValidSchemeTypes() []string {
-	return []string{
-		string(SchemeContent), string(SchemeExpressive), string(SchemeFidelity),
-		string(SchemeFruitSalad), string(SchemeMonochrome), string(SchemeNeutral),
-		string(SchemeRainbow), string(SchemeTonalSpot), string(SchemeVibrant), string(SchemeAuto),
-	}
-}
-
 // ParseSchemeType parses a scheme type string, returning TonalSpot as default.
 func ParseSchemeType(s string) SchemeType {
 	switch SchemeType(s) {

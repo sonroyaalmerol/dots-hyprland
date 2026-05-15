@@ -1,7 +1,6 @@
 package image
 
 import (
-	"encoding/json"
 	"fmt"
 	stdimage "image"
 	"io"
@@ -184,17 +183,4 @@ func percentile(values []float64, p float64) float64 {
 	}
 	frac := rank - float64(lower)
 	return sorted[lower] + frac*(sorted[upper]-sorted[lower])
-}
-
-// DetectTextColorJSON runs DetectTextColorFromPath and returns JSON.
-func DetectTextColorJSON(imagePath string) (string, error) {
-	result, err := DetectTextColorFromPath(imagePath)
-	if err != nil {
-		return "", err
-	}
-	data, err := json.Marshal(result)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
 }

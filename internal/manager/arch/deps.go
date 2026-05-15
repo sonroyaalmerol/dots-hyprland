@@ -22,8 +22,6 @@ func New() *Manager {
 	}
 }
 
-func (m *Manager) Distro() string { return "arch" }
-
 // UpdateSystem performs a full system upgrade via sudo pacman -Syu.
 func (m *Manager) UpdateSystem(ctx context.Context) error {
 	fmt.Println("  Updating system packages...")
