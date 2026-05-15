@@ -48,7 +48,7 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		// data: "ADDR,WORKSPACENAME,CLASS,TITLE"
 		s.handleOpenWindow(data)
 
-	case "closewindow":
+	case "closewindow", "kill":
 		// data: "ADDR"
 		s.handleCloseWindow(data)
 
@@ -133,8 +133,13 @@ func (s *Service) handleWorkspaceV2(data string) {
 	idn, _ := strconv.Atoi(id)
 
 	s.mu.Lock()
+	// Preserve existing monitor field from current activeWorkspace (workspacev2
+	// fires on same-monitor switches where focusedmonv2 does NOT fire).
+	mon, _ := s.activeWorkspace["monitor"].(string)
 	s.activeWorkspace = map[string]any{"id": idn, "name": name}
-	// Ensure this workspace exists in the list.
+	if mon != "" {
+		s.activeWorkspace["monitor"] = mon
+	}
 	s.upsertWorkspace(idn, name)
 	s.mu.Unlock()
 	s.emit()
@@ -155,9 +160,10 @@ func (s *Service) handleFocusedMonV2(data string) {
 			break
 		}
 	}
-	// Also update the global active workspace.
-	if wsIDStr != "" {
-		s.activeWorkspace = map[string]any{"id": wsID}
+	// Update the global active workspace with the monitor reference.
+	s.activeWorkspace = map[string]any{
+		"id":      wsID,
+		"monitor": monName,
 	}
 	s.mu.Unlock()
 	s.emit()
