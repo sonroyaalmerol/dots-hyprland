@@ -10,23 +10,11 @@ A desktop shell for [Hyprland](https://hyprland.org/) built on [Quickshell](http
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────┐
-│            Quickshell (QML)             │
-│  shell.qml → services/ → modules/ii/    │
-│ DaemonSocket ↔ Unix domain socket (.sock)│
-└──────────────────┬──────────────────────┘
-                   │ JSON commands/events
-┌──────────────────▼──────────────────────┐
-│           snry-daemon (Go)              │
-│  cmd/snry-daemon → internal/daemon/     │
-│  25 service packages + wallpaper + image │
-└─────────────────────────────────────────┘
-```
+**Frontend** (Quickshell/QML) `shell.qml` → `services/DaemonSocket` ↔ Unix socket ↔ **Backend** (`snry-daemon`, Go)
 
-**Frontend** — QML/Qt6 panels (bar, dock, lock screen, notifications, launcher, overlay widgets, settings). Communicates with the daemon through `DaemonSocket`, a singleton that wraps a Unix domain socket connection. All image processing, color generation, recording, keyring access, and system management are routed through the daemon — no shell scripts or Python at runtime.
+- **Frontend** — QML/Qt6 panels (bar, dock, lock screen, notifications, launcher, overlay widgets, settings). Communicates with the daemon through `DaemonSocket`, a singleton that wraps a Unix domain socket connection. All image processing, color generation, recording, keyring access, and system management are routed through the daemon — no shell scripts or Python at runtime.
 
-**Backend** — `snry-daemon` is a long-running Go process listening on `$XDG_RUNTIME_DIR/snry-daemon.sock`. It accepts text commands (`switch-wallpaper <path>`, `record --fullscreen --sound`, `brightness-set 50`, etc.) and emits JSON events back to connected clients. It also doubles as a setup/management CLI (`snry-daemon setup`, `snry-daemon deps`, etc.).
+- **Backend** — `snry-daemon` is a long-running Go process listening on `$XDG_RUNTIME_DIR/snry-daemon.sock`. It accepts text commands (`switch-wallpaper <path>`, `record --fullscreen --sound`, `brightness-set 50`, etc.) and emits JSON events back to connected clients. It also doubles as a setup/management CLI (`snry-daemon setup`, `snry-daemon deps`, etc.).
 
 ## Features
 
