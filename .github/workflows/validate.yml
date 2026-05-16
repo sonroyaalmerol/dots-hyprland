@@ -105,3 +105,41 @@ jobs:
             exit 1
           fi
           echo "All files formatted correctly"
+
+  integration:
+    name: DM Integration (PAM)
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm go pam base-devel git
+
+      - name: Create PAM config for snry-dm
+        run: |
+          cp configs/pam/snry-dm /etc/pam.d/snry-dm
+          # Fallback: create minimal config if the shipped one references
+          # modules not available in the container (e.g. pam_systemd.so).
+          cat > /etc/pam.d/snry-dm <<'PAM'
+          auth        required    pam_unix.so
+          account     required    pam_unix.so
+          session     required    pam_unix.so
+          PAM
+
+      - name: Create test user
+        run: |
+          useradd -m -s /bin/bash dmtest
+          echo 'dmtest:testpass123' | chpasswd
+
+      - name: Build
+        run: go build ./...
+
+      - name: Run unit tests
+        run: go test -race -count=1 ./internal/dm/
+
+      - name: Run integration tests
+        run: go test -tags=integration -count=1 -v ./internal/dm/integration/
