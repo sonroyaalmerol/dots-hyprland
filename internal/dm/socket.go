@@ -4,31 +4,43 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+)
+
+const (
+	maxLineLen    = 4096 // generous for a password; reject anything longer
+	maxConns      = 4    // only the greeter should connect
+	maxAuthPerSec = 3    // rate limit auth attempts
 )
 
 // Socket is the IPC server that the greeter connects to for authentication.
-// It speaks the same JSON protocol as snry-daemon's socket so the greeter's
-// DaemonSocket.qml component works unchanged.
 type Socket struct {
-	path   string
-	ln     net.Listener
-	authCh chan *Credentials
-	mu     sync.Mutex
-	conns  map[net.Conn]struct{}
+	path       string
+	greeterUID uint32
+	greeterGID uint32
+	ln         net.Listener
+	authCh     chan *Credentials
+	mu         sync.Mutex
+	conns      map[net.Conn]struct{}
+	authTimes  []time.Time // for rate limiting
 }
 
-// NewSocket creates a new IPC socket server.
-func NewSocket(path string) *Socket {
+// NewSocket creates a new IPC socket server. The socket is restricted to
+// the greeter user (owner read/write only).
+func NewSocket(path string, greeterUID, greeterGID uint32) *Socket {
 	return &Socket{
-		path:   path,
-		authCh: make(chan *Credentials, 8),
-		conns:  make(map[net.Conn]struct{}),
+		path:       path,
+		greeterUID: greeterUID,
+		greeterGID: greeterGID,
+		authCh:     make(chan *Credentials, 8),
+		conns:      make(map[net.Conn]struct{}),
 	}
 }
 
@@ -39,18 +51,35 @@ func (s *Socket) AuthCh() <-chan *Credentials {
 
 // Run starts listening and accepting connections. Blocks until ctx is cancelled.
 func (s *Socket) Run(ctx context.Context) error {
-	os.Remove(s.path)
+	// Remove stale socket only if it's a socket (not a symlink).
+	if fi, err := os.Lstat(s.path); err == nil {
+		if fi.Mode()&os.ModeType == os.ModeSocket {
+			os.Remove(s.path)
+		} else {
+			return fmt.Errorf("socket path %s exists and is not a socket (mode %s)", s.path, fi.Mode())
+		}
+	}
 
+	// Bind before chown so we know the path is safe.
 	ln, err := net.Listen("unix", s.path)
 	if err != nil {
 		return err
 	}
 	s.ln = ln
 
-	// Set socket permissions: readable by greeter user.
-	os.Chmod(s.path, 0666)
+	// Restrict to greeter user only (0600 → owner = snry-dm).
+	if err := os.Chmod(s.path, 0600); err != nil {
+		ln.Close()
+		os.Remove(s.path)
+		return fmt.Errorf("chmod socket: %w", err)
+	}
+	if err := os.Chown(s.path, int(s.greeterUID), int(s.greeterGID)); err != nil {
+		ln.Close()
+		os.Remove(s.path)
+		return fmt.Errorf("chown socket: %w", err)
+	}
 
-	log.Printf("[dm/socket] listening on %s", s.path)
+	log.Printf("[dm/socket] listening on %s (uid=%d)", s.path, s.greeterUID)
 
 	go func() {
 		<-ctx.Done()
@@ -70,6 +99,12 @@ func (s *Socket) Run(ctx context.Context) error {
 		}
 
 		s.mu.Lock()
+		if len(s.conns) >= maxConns {
+			s.mu.Unlock()
+			conn.Close()
+			log.Printf("[dm/socket] rejected connection: too many clients")
+			continue
+		}
 		s.conns[conn] = struct{}{}
 		s.mu.Unlock()
 
@@ -77,9 +112,6 @@ func (s *Socket) Run(ctx context.Context) error {
 	}
 }
 
-// handleConn reads commands from a greeter connection.
-// The protocol is the same as snry-daemon: line-based text commands.
-// For auth: "auth <password>" or JSON: {"command":"auth","password":"..."}
 func (s *Socket) handleConn(conn net.Conn) {
 	defer func() {
 		conn.Close()
@@ -91,8 +123,14 @@ func (s *Socket) handleConn(conn net.Conn) {
 	log.Printf("[dm/socket] client connected")
 
 	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, maxLineLen), maxLineLen)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		line := scanner.Text()
+		if len(line) > maxLineLen {
+			log.Printf("[dm/socket] oversized line rejected")
+			return
+		}
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
@@ -100,7 +138,6 @@ func (s *Socket) handleConn(conn net.Conn) {
 	}
 }
 
-// dispatch processes a single command from the greeter.
 func (s *Socket) dispatch(conn net.Conn, line string) {
 	// Try JSON first.
 	var cmd struct {
@@ -111,13 +148,36 @@ func (s *Socket) dispatch(conn net.Conn, line string) {
 	if err := json.Unmarshal([]byte(line), &cmd); err == nil && cmd.Command != "" {
 		switch cmd.Command {
 		case "auth":
+			if !s.checkRateLimit() {
+				s.emit(conn, map[string]any{
+					"event": "auth_result",
+					"data": map[string]any{
+						"success":   false,
+						"message":   "Too many attempts. Please wait.",
+						"remaining": 0,
+						"lockedOut": true,
+					},
+				})
+				return
+			}
 			username := cmd.Username
 			if username == "" {
-				username = "current" // TODO: get from system
+				username = resolveDefaultUser()
+			}
+			if username == "" {
+				s.emit(conn, map[string]any{
+					"event": "auth_result",
+					"data": map[string]any{
+						"success":   false,
+						"message":   "Authentication failed.",
+						"remaining": 3,
+						"lockedOut": false,
+					},
+				})
+				return
 			}
 			s.authCh <- &Credentials{Username: username, Password: cmd.Password}
 		case "lock-startup":
-			// In greeter mode, always acknowledge — the lock screen IS the UI.
 			s.emit(conn, map[string]any{
 				"event": "lock_state",
 				"data":  map[string]any{"locked": true},
@@ -137,8 +197,32 @@ func (s *Socket) dispatch(conn net.Conn, line string) {
 		if len(fields) < 2 {
 			return
 		}
+		if !s.checkRateLimit() {
+			s.emit(conn, map[string]any{
+				"event": "auth_result",
+				"data": map[string]any{
+					"success":   false,
+					"message":   "Too many attempts. Please wait.",
+					"remaining": 0,
+					"lockedOut": true,
+				},
+			})
+			return
+		}
 		password := strings.Join(fields[1:], " ")
 		username := resolveDefaultUser()
+		if username == "" {
+			s.emit(conn, map[string]any{
+				"event": "auth_result",
+				"data": map[string]any{
+					"success":   false,
+					"message":   "Authentication failed.",
+					"remaining": 3,
+					"lockedOut": false,
+				},
+			})
+			return
+		}
 		s.authCh <- &Credentials{Username: username, Password: password}
 	case "lock-startup":
 		s.emit(conn, map[string]any{
@@ -153,14 +237,52 @@ func (s *Socket) dispatch(conn net.Conn, line string) {
 	}
 }
 
-// SendAuthResult sends an auth result event to all connected greeters.
-func (s *Socket) SendAuthResult(success bool, message string) {
+// checkRateLimit enforces maxAuthPerSec. Returns false if rate exceeded.
+func (s *Socket) checkRateLimit() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	windowStart := now.Add(-time.Second)
+
+	// Trim old entries.
+	valid := s.authTimes[:0]
+	for _, t := range s.authTimes {
+		if t.After(windowStart) {
+			valid = append(valid, t)
+		}
+	}
+	s.authTimes = valid
+
+	if len(s.authTimes) >= maxAuthPerSec {
+		return false
+	}
+	s.authTimes = append(s.authTimes, now)
+	return true
+}
+
+// SendAuthResult sends an auth result event to the requesting connection only.
+func (s *Socket) SendAuthResult(conn net.Conn, success bool, message string) {
+	s.emit(conn, map[string]any{
+		"event": "auth_result",
+		"data": map[string]any{
+			"success":   success,
+			"message":   message,
+			"remaining": 3,
+			"lockedOut": false,
+		},
+	})
+}
+
+// SendAuthResultAll sends an auth result to all connected clients.
+// Used for backwards compatibility when we don't know which conn asked.
+func (s *Socket) SendAuthResultAll(success bool, message string) {
 	s.emitAll(map[string]any{
 		"event": "auth_result",
 		"data": map[string]any{
 			"success":   success,
 			"message":   message,
-			"remaining": 3, // default attempts remaining
+			"remaining": 3,
 			"lockedOut": false,
 		},
 	})
@@ -169,32 +291,6 @@ func (s *Socket) SendAuthResult(success bool, message string) {
 func (s *Socket) emit(conn net.Conn, m map[string]any) {
 	data, _ := json.Marshal(m)
 	conn.Write(append(data, '\n'))
-}
-
-// resolveDefaultUser finds the primary user on the system.
-// Returns the first regular user (UID >= 1000) from /etc/passwd,
-// or "root" as a fallback.
-func resolveDefaultUser() string {
-	data, err := os.ReadFile("/etc/passwd")
-	if err != nil {
-		return "root"
-	}
-	for line := range strings.SplitSeq(string(data), "\n") {
-		fields := strings.Split(line, ":")
-		if len(fields) < 7 {
-			continue
-		}
-		uid, err := strconv.Atoi(fields[2])
-		if err != nil || uid < 1000 {
-			continue
-		}
-		shell := fields[6]
-		if strings.Contains(shell, "nologin") || strings.Contains(shell, "false") {
-			continue
-		}
-		return fields[0]
-	}
-	return "root"
 }
 
 func (s *Socket) emitAll(m map[string]any) {
@@ -209,4 +305,30 @@ func (s *Socket) emitAll(m map[string]any) {
 	for conn := range s.conns {
 		conn.Write(data)
 	}
+}
+
+// resolveDefaultUser finds the primary user on the system.
+// Returns the first regular user (UID >= 1000) from /etc/passwd,
+// or empty string if none found (never returns "root").
+func resolveDefaultUser() string {
+	data, err := os.ReadFile("/etc/passwd")
+	if err != nil {
+		return ""
+	}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		fields := strings.Split(line, ":")
+		if len(fields) < 7 {
+			continue
+		}
+		uid, err := strconv.Atoi(fields[2])
+		if err != nil || uid < 1000 || uid >= 65534 {
+			continue
+		}
+		shell := fields[6]
+		if strings.Contains(shell, "nologin") || strings.Contains(shell, "false") {
+			continue
+		}
+		return fields[0]
+	}
+	return ""
 }

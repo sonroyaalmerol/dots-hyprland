@@ -10,13 +10,30 @@ Type=simple
 ExecStart=/usr/bin/snry-dm
 Restart=on-failure
 RestartSec=3
-KillMode=process
+KillMode=control-group
+
+# Run as root (required for PAM, VT management, process switching).
+User=root
 
 # Security hardening
 ProtectSystem=strict
+ProtectHome=read-only
 ReadWritePaths=/run /var/lib/snry-dm /tmp
-ProtectHome=false
 PrivateTmp=true
+NoNewPrivileges=false
+
+# Device access for VT and DRM
+DeviceAllow=/dev/tty0 rw
+DeviceAllow=/dev/tty1 rw
+DeviceAllow=/dev/dri rw
+DeviceAllow=/dev/input rw
+
+# Restrict namespace access
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
 
 [Install]
 WantedBy=multi-user.target

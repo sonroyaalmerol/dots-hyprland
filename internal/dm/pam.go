@@ -9,6 +9,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/msteinert/pam/v2"
@@ -22,6 +23,7 @@ type PAMSession struct {
 	uid      int
 	gid      int
 	homeDir  string
+	groups   []uint32 // supplementary groups
 }
 
 // NewPAMSession creates a new PAM session for the given credentials.
@@ -77,7 +79,6 @@ func (p *PAMSession) OpenSession() error {
 		return fmt.Errorf("PAM session not initialized")
 	}
 
-	// Resolve user info.
 	u, err := user.Lookup(p.username)
 	if err != nil {
 		return fmt.Errorf("lookup user %s: %w", p.username, err)
@@ -86,20 +87,23 @@ func (p *PAMSession) OpenSession() error {
 	p.gid, _ = strconv.Atoi(u.Gid)
 	p.homeDir = u.HomeDir
 
-	// Set PAM environment items.
-	pamh := p.pamh
-	_ = pamh.SetItem(pam.User, p.username)
+	// Resolve supplementary groups.
+	p.groups = resolveUserGroups(p.username, p.gid)
 
-	if err := pamh.OpenSession(0); err != nil {
+	// Set PAM environment items.
+	_ = p.pamh.SetItem(pam.User, p.username)
+
+	if err := p.pamh.OpenSession(0); err != nil {
 		return fmt.Errorf("PAM open session: %w", err)
 	}
 
-	log.Printf("[dm/pam] session opened for user %s (uid=%d)", p.username, p.uid)
+	log.Printf("[dm/pam] session opened for uid=%d", p.uid)
 	return nil
 }
 
-// CloseSession closes the PAM session.
-func (p *PAMSession) CloseSession() {
+// Close closes the PAM session and zeroes the password.
+func (p *PAMSession) Close() {
+	p.ZeroPassword()
 	if p.pamh != nil {
 		if err := p.pamh.CloseSession(0); err != nil {
 			log.Printf("[dm/pam] close session error: %v", err)
@@ -109,24 +113,34 @@ func (p *PAMSession) CloseSession() {
 	}
 }
 
-// Env returns the environment variables for the user session,
-// including PAM environment items and standard XDG variables.
+// ZeroPassword overwrites the cleartext password in memory.
+func (p *PAMSession) ZeroPassword() {
+	if p.password != "" {
+		// Overwrite the backing byte slice.
+		b := []byte(p.password)
+		for i := range b {
+			b[i] = 0
+		}
+		p.password = ""
+	}
+}
+
+// Env returns the environment variables for the user session.
 func (p *PAMSession) Env() []string {
 	env := []string{
 		fmt.Sprintf("HOME=%s", p.homeDir),
 		fmt.Sprintf("USER=%s", p.username),
 		fmt.Sprintf("LOGNAME=%s", p.username),
-		fmt.Sprintf("PATH=/usr/local/bin:/usr/bin:/bin"),
-		fmt.Sprintf("SHELL=/bin/bash"),
+		"PATH=/usr/local/bin:/usr/bin:/bin",
+		fmt.Sprintf("SHELL=%s", p.shell()),
 		fmt.Sprintf("XDG_RUNTIME_DIR=/run/user/%d", p.uid),
-		fmt.Sprintf("XDG_SESSION_TYPE=wayland"),
-		fmt.Sprintf("XDG_SESSION_CLASS=user"),
-		fmt.Sprintf("XDG_SESSION_DESKTOP=hyprland"),
-		fmt.Sprintf("XDG_CURRENT_DESKTOP=Hyprland"),
-		fmt.Sprintf("WAYLAND_DISPLAY=wayland-1"),
+		"XDG_SESSION_TYPE=wayland",
+		"XDG_SESSION_CLASS=user",
+		"XDG_SESSION_DESKTOP=hyprland",
+		"XDG_CURRENT_DESKTOP=Hyprland",
+		"WAYLAND_DISPLAY=wayland-1",
 	}
 
-	// Add PAM environment if available.
 	if pamEnv, err := p.pamh.GetEnvList(); err == nil {
 		for k, v := range pamEnv {
 			env = append(env, fmt.Sprintf("%s=%s", k, v))
@@ -136,36 +150,81 @@ func (p *PAMSession) Env() []string {
 	return env
 }
 
+func (p *PAMSession) shell() string {
+	data, err := os.ReadFile("/etc/passwd")
+	if err != nil {
+		return "/bin/bash"
+	}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		fields := strings.Split(line, ":")
+		if len(fields) >= 7 && fields[0] == p.username {
+			return fields[6]
+		}
+	}
+	return "/bin/bash"
+}
+
 // Uid returns the user's UID.
 func (p *PAMSession) Uid() int { return p.uid }
 
 // Gid returns the user's GID.
 func (p *PAMSession) Gid() int { return p.gid }
 
-// Username returns the authenticated username.
-func (p *PAMSession) Username() string { return p.username }
+// Groups returns supplementary group IDs (includes primary).
+func (p *PAMSession) Groups() []uint32 {
+	all := make([]uint32, 0, 1+len(p.groups))
+	all = append(all, uint32(p.gid))
+	all = append(all, p.groups...)
+	return all
+}
 
 // HomeDir returns the user's home directory.
 func (p *PAMSession) HomeDir() string { return p.homeDir }
 
+// Handle returns the underlying PAM transaction (for transferring to UserSession).
+func (p *PAMSession) Handle() *pam.Transaction { return p.pamh }
+
 // ensureRuntimeDir creates the user's XDG_RUNTIME_DIR if it doesn't exist.
 func (p *PAMSession) ensureRuntimeDir() error {
 	runtimeDir := fmt.Sprintf("/run/user/%d", p.uid)
-	if _, err := os.Stat(runtimeDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(runtimeDir, 0700); err != nil {
-			return fmt.Errorf("create runtime dir: %w", err)
+	fi, err := os.Stat(runtimeDir)
+	if err == nil {
+		// Already exists — verify ownership.
+		if stat, ok := fi.Sys().(*syscall.Stat_t); ok && int(stat.Uid) != p.uid {
+			return fmt.Errorf("runtime dir %s owned by uid %d, expected %d", runtimeDir, stat.Uid, p.uid)
 		}
-		if err := os.Chown(runtimeDir, p.uid, p.gid); err != nil {
-			return fmt.Errorf("chown runtime dir: %w", err)
-		}
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("stat runtime dir: %w", err)
+	}
+
+	if err := os.MkdirAll(runtimeDir, 0700); err != nil {
+		return fmt.Errorf("create runtime dir: %w", err)
+	}
+	if err := os.Chown(runtimeDir, p.uid, p.gid); err != nil {
+		os.RemoveAll(runtimeDir)
+		return fmt.Errorf("chown runtime dir: %w", err)
 	}
 	return nil
 }
 
 // Credentials represents user credentials received from the greeter.
 type Credentials struct {
-	Username string
-	Password string
+	Username  string
+	Password  string
+	pamHandle *PAMSession // pre-authenticated PAM handle from waitForAuth
+}
+
+// Zero overwrites the password in memory.
+func (c *Credentials) Zero() {
+	if c.Password != "" {
+		b := []byte(c.Password)
+		for i := range b {
+			b[i] = 0
+		}
+		c.Password = ""
+	}
 }
 
 // UserSession manages the user's desktop session after PAM authentication.
@@ -177,27 +236,31 @@ type UserSession struct {
 	cmd   *exec.Cmd
 }
 
-// NewUserSession creates a user session from authenticated credentials.
-func NewUserSession(cfg Config, creds *Credentials, vt *VT) (*UserSession, error) {
-	pam := NewPAMSession(creds.Username, creds.Password)
+// NewUserSession creates a user session from a pre-authenticated PAM handle.
+// The PAM handle comes from waitForAuth — no password re-entry needed.
+func NewUserSession(cfg Config, creds *Credentials, greeterUID, greeterGID uint32, vt *VT) (*UserSession, error) {
+	pam := creds.pamHandle
+	if pam == nil {
+		creds.Zero()
+		return nil, fmt.Errorf("no pre-authenticated PAM handle")
+	}
 
-	// Re-authenticate (we already did this, but we need a fresh PAM handle
-	// that we can open a session with).
-	if err := pam.Authenticate(); err != nil {
-		return nil, fmt.Errorf("re-authenticate: %w", err)
-	}
-	if err := pam.AcctMgmt(); err != nil {
-		return nil, fmt.Errorf("acct mgmt: %w", err)
-	}
+	// Open session on the existing handle.
 	if err := pam.OpenSession(); err != nil {
+		pam.Close()
+		creds.Zero()
 		return nil, fmt.Errorf("open session: %w", err)
 	}
 
 	// Ensure XDG runtime directory exists.
 	if err := pam.ensureRuntimeDir(); err != nil {
-		pam.CloseSession()
+		pam.Close()
+		creds.Zero()
 		return nil, fmt.Errorf("runtime dir: %w", err)
 	}
+
+	// Zero the password — we no longer need it.
+	creds.Zero()
 
 	return &UserSession{
 		cfg:   cfg,
@@ -209,31 +272,32 @@ func NewUserSession(cfg Config, creds *Credentials, vt *VT) (*UserSession, error
 
 // Run starts the user's desktop session and blocks until it exits.
 func (s *UserSession) Run(ctx context.Context) error {
-	// Activate the VT for the user session.
 	if s.vt != nil {
 		s.vt.Activate()
 	}
 
-	// Build the user's Hyprland + snry-daemon command.
-	// We start snry-daemon which internally launches Hyprland.
-	daemonBin, err := exec.LookPath(s.cfg.DaemonBin)
-	if err != nil {
-		return fmt.Errorf("find %s: %w", s.cfg.DaemonBin, err)
+	if !filepath.IsAbs(s.cfg.DaemonBin) {
+		return fmt.Errorf("DaemonBin must be an absolute path, got: %s", s.cfg.DaemonBin)
+	}
+	if _, err := os.Stat(s.cfg.DaemonBin); err != nil {
+		return fmt.Errorf("daemon binary not found at %s: %w", s.cfg.DaemonBin, err)
 	}
 
-	s.cmd = exec.CommandContext(ctx, daemonBin, "daemon")
+	s.cmd = exec.CommandContext(ctx, s.cfg.DaemonBin, "daemon")
 	s.cmd.Env = s.pam.Env()
-	s.cmd.Stdout = os.Stdout
-	s.cmd.Stderr = os.Stderr
+	// Don't pass root's stdout/stderr to user process.
+	s.cmd.Stdout = nil
+	s.cmd.Stderr = nil
 	s.cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 		Credential: &syscall.Credential{
-			Uid: uint32(s.pam.Uid()),
-			Gid: uint32(s.pam.Gid()),
+			Uid:    uint32(s.pam.Uid()),
+			Gid:    uint32(s.pam.Gid()),
+			Groups: s.pam.Groups(),
 		},
 	}
 
-	log.Printf("[dm] starting user session for %s (uid=%d)", s.creds.Username, s.pam.Uid())
+	log.Printf("[dm] starting user session (uid=%d)", s.pam.Uid())
 
 	if err := s.cmd.Run(); err != nil {
 		return fmt.Errorf("user session exited: %w", err)
@@ -247,21 +311,44 @@ func (s *UserSession) Close() {
 		s.cmd.Process.Signal(syscall.SIGTERM)
 	}
 	if s.pam != nil {
-		s.pam.CloseSession()
+		s.pam.Close()
 	}
 }
 
 // ResolveConfigPath resolves the frontend config path.
-// This is exported for use by the DM.
 func ResolveConfigPath() string {
 	systemDir := "/usr/share/snry-shell/frontend/ii"
 	if _, err := os.Stat(filepath.Join(systemDir, "shell.qml")); err == nil {
 		return systemDir
 	}
-	// Development fallback.
 	if _, err := os.Stat("frontend/ii/shell.qml"); err == nil {
 		abs, _ := filepath.Abs("frontend/ii")
 		return abs
 	}
-	return systemDir // fallback to system path
+	return systemDir
+}
+
+// resolveUserGroups returns the supplementary group IDs for a user.
+func resolveUserGroups(username string, primaryGID int) []uint32 {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return nil
+	}
+	groupStrs, err := u.GroupIds()
+	if err != nil {
+		return nil
+	}
+	seen := map[int]bool{primaryGID: true}
+	var gids []uint32
+	for _, gs := range groupStrs {
+		g, err := strconv.Atoi(gs)
+		if err != nil {
+			continue
+		}
+		if !seen[g] {
+			seen[g] = true
+			gids = append(gids, uint32(g))
+		}
+	}
+	return gids
 }

@@ -25,22 +25,21 @@ const (
 )
 
 // OpenVT opens the specified VT number. If num is 0, it finds an available VT.
+// O_NOCTTY prevents the VT from becoming the controlling terminal.
 func OpenVT(num int) (*VT, error) {
 	var vtNum int
 	var f *os.File
 	var err error
 
 	if num > 0 {
-		// Open the specific VT.
 		path := fmt.Sprintf("/dev/tty%d", num)
-		f, err = os.OpenFile(path, os.O_RDWR, 0)
+		f, err = os.OpenFile(path, os.O_RDWR|syscall.O_NOCTTY, 0)
 		if err != nil {
 			return nil, fmt.Errorf("open %s: %w", path, err)
 		}
 		vtNum = num
 	} else {
-		// Find an available VT.
-		console, err := os.Open("/dev/console")
+		console, err := os.OpenFile("/dev/console", os.O_RDWR|syscall.O_NOCTTY, 0)
 		if err != nil {
 			return nil, fmt.Errorf("open /dev/console: %w", err)
 		}
@@ -53,7 +52,7 @@ func OpenVT(num int) (*VT, error) {
 		}
 
 		path := fmt.Sprintf("/dev/tty%d", avail)
-		f, err = os.OpenFile(path, os.O_RDWR, 0)
+		f, err = os.OpenFile(path, os.O_RDWR|syscall.O_NOCTTY, 0)
 		if err != nil {
 			return nil, fmt.Errorf("open %s: %w", path, err)
 		}
@@ -95,6 +94,9 @@ func (v *VT) SetGraphicsMode() error {
 
 // SetTextMode restores the VT to text mode.
 func (v *VT) SetTextMode() error {
+	if v.fd == nil {
+		return nil
+	}
 	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, v.fd.Fd(), kdSetmode, kdText)
 	if errno != 0 {
 		return fmt.Errorf("KDSETMODE KD_TEXT: %v", errno)
@@ -102,11 +104,11 @@ func (v *VT) SetTextMode() error {
 	return nil
 }
 
-// Close releases the VT file descriptor.
+// Close releases the VT file descriptor. Restores text mode first.
 func (v *VT) Close() error {
-	if v.fd != nil {
-		v.SetTextMode()
-		return v.fd.Close()
+	if v.fd == nil {
+		return nil
 	}
-	return nil
+	v.SetTextMode()
+	return v.fd.Close()
 }

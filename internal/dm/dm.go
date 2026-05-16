@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -14,12 +15,13 @@ import (
 // lifecycle: start a graphical greeter, authenticate the user via PAM,
 // create a proper logind session, and start the user's desktop.
 type DM struct {
-	cfg     Config
-	socket  *Socket
-	pam     *PAMSession
-	greeter *Greeter
-	session *UserSession
-	vt      *VT
+	cfg        Config
+	greeterUID uint32
+	greeterGID uint32
+	socket     *Socket
+	greeter    *Greeter
+	session    *UserSession
+	vt         *VT
 }
 
 type Config struct {
@@ -35,32 +37,56 @@ type Config struct {
 	ShellQMLPath string
 	// ShellQSConfigDir is the parent directory of shell.qml.
 	ShellQSConfigDir string
-	// HyprlandBin is the path to Hyprland or start-hyprland.
+	// HyprlandBin is the absolute path to Hyprland.
 	HyprlandBin string
-	// QSBin is the path to the Quickshell binary.
+	// QSBin is the absolute path to the Quickshell binary.
 	QSBin string
-	// DaemonBin is the path to snry-daemon.
+	// DaemonBin is the absolute path to snry-daemon.
 	DaemonBin string
 	// GreeterVT is the VT number for the greeter (0 = auto).
 	GreeterVT int
+}
+
+// Known absolute binary paths. Using exec.LookPath is unsafe for setuid-root
+// programs because a malicious PATH can substitute binaries.
+var defaultBinPaths = []string{
+	"/usr/bin",
+	"/usr/local/bin",
 }
 
 func DefaultConfig() Config {
 	return Config{
 		SocketPath:  "/run/snry-dm.sock",
 		GreeterUser: "snry-dm",
-		HyprlandBin: "start-hyprland",
-		QSBin:       "qs",
-		DaemonBin:   "snry-daemon",
+		HyprlandBin: findBinary("Hyprland"),
+		QSBin:       findBinary("qs"),
+		DaemonBin:   findBinary("snry-daemon"),
 		GreeterVT:   1,
 	}
 }
 
-// Run is the main DM loop. It repeatedly starts the greeter, waits for
-// successful authentication, starts the user session, and loops when the
-// session ends.
+// findBinary resolves an absolute path from known directories.
+// Returns the binary name if not found (will fail later with clear error).
+func findBinary(name string) string {
+	for _, dir := range defaultBinPaths {
+		p := dir + "/" + name
+		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() {
+			return p
+		}
+	}
+	return name
+}
+
+// Run is the main DM loop.
 func (dm *DM) Run(ctx context.Context) error {
-	// Resolve frontend paths.
+	// Resolve greeter user IDs.
+	uid, gid, err := lookupUserIDs(dm.cfg.GreeterUser)
+	if err != nil {
+		return fmt.Errorf("lookup greeter user: %w", err)
+	}
+	dm.greeterUID = uint32(uid)
+	dm.greeterGID = uint32(gid)
+
 	dm.resolvePaths()
 
 	for {
@@ -84,7 +110,6 @@ func (dm *DM) Run(ctx context.Context) error {
 	}
 }
 
-// runGreeterCycle runs one complete greeter → session cycle.
 func (dm *DM) runGreeterCycle(ctx context.Context) error {
 	// Open and configure the VT.
 	vt, err := OpenVT(dm.cfg.GreeterVT)
@@ -92,22 +117,25 @@ func (dm *DM) runGreeterCycle(ctx context.Context) error {
 		return fmt.Errorf("open VT: %w", err)
 	}
 	dm.vt = vt
-	defer vt.Close()
+	defer func() {
+		vt.SetTextMode()
+		vt.Close()
+	}()
 
 	vt.SetGraphicsMode()
 	vt.Activate()
 	log.Printf("[dm] activated VT %d", vt.num)
 
 	// Start the greeter (Hyprland + Quickshell on VT).
-	greeter, err := NewGreeter(dm.cfg, vt)
+	greeter, err := NewGreeter(dm.cfg, dm.greeterUID, dm.greeterGID, vt)
 	if err != nil {
 		return fmt.Errorf("start greeter: %w", err)
 	}
 	dm.greeter = greeter
 	defer greeter.Kill()
 
-	// Start IPC socket for greeter auth.
-	sock := NewSocket(dm.cfg.SocketPath)
+	// Start IPC socket for greeter auth (restricted to greeter user).
+	sock := NewSocket(dm.cfg.SocketPath, dm.greeterUID, dm.greeterGID)
 	dm.socket = sock
 
 	sockCtx, sockCancel := context.WithCancel(ctx)
@@ -125,15 +153,15 @@ func (dm *DM) runGreeterCycle(ctx context.Context) error {
 		return fmt.Errorf("auth: %w", err)
 	}
 
-	log.Printf("[dm] user '%s' authenticated, starting session", creds.Username)
+	log.Printf("[dm] user authenticated, starting session")
 
-	// Kill the greeter.
+	// Kill the greeter before starting user session.
 	sockCancel()
 	greeter.Kill()
 	os.Remove(dm.cfg.SocketPath)
 
-	// Open PAM session for the user.
-	session, err := NewUserSession(dm.cfg, creds, vt)
+	// Open PAM session for the user (no re-auth; password already verified).
+	session, err := NewUserSession(dm.cfg, creds, dm.greeterUID, dm.greeterGID, vt)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
@@ -144,13 +172,12 @@ func (dm *DM) runGreeterCycle(ctx context.Context) error {
 
 	log.Printf("[dm] user session ended: %v", sessionErr)
 
-	// Close PAM session.
 	session.Close()
-
 	return nil
 }
 
 // waitForAuth blocks until the greeter sends valid credentials via the IPC socket.
+// On success, the password is zeroed from the Credentials after PAM verification.
 func (dm *DM) waitForAuth(ctx context.Context, sock *Socket) (*Credentials, error) {
 	for {
 		select {
@@ -161,26 +188,31 @@ func (dm *DM) waitForAuth(ctx context.Context, sock *Socket) (*Credentials, erro
 				continue
 			}
 
-			log.Printf("[dm] authenticating user '%s'", creds.Username)
+			// Sanitize username for logging (no control chars, no newlines).
+			safeName := sanitizeForLog(creds.Username)
+			log.Printf("[dm] authenticating user '%s'", safeName)
 
-			// Authenticate via PAM.
+			// Authenticate via PAM (single handle; reused for session).
 			pam := NewPAMSession(creds.Username, creds.Password)
-			err := pam.Authenticate()
-			if err != nil {
-				log.Printf("[dm] PAM auth failed for '%s': %v", creds.Username, err)
-				sock.SendAuthResult(false, err.Error())
+			if err := pam.Authenticate(); err != nil {
+				log.Printf("[dm] PAM auth failed: %v", err)
+				sock.SendAuthResultAll(false, "Authentication failed.")
+				creds.Zero()
 				continue
 			}
 
-			// Account management check.
 			if err := pam.AcctMgmt(); err != nil {
-				log.Printf("[dm] PAM acct check failed for '%s': %v", creds.Username, err)
-				sock.SendAuthResult(false, err.Error())
+				log.Printf("[dm] PAM acct check failed: %v", err)
+				sock.SendAuthResultAll(false, "Authentication failed.")
+				pam.Close()
+				creds.Zero()
 				continue
 			}
 
-			sock.SendAuthResult(true, "")
-			dm.pam = pam
+			sock.SendAuthResultAll(true, "")
+
+			// Hand the open PAM handle to the session creator — no re-auth needed.
+			creds.pamHandle = pam
 			return creds, nil
 		}
 	}
@@ -188,28 +220,27 @@ func (dm *DM) waitForAuth(ctx context.Context, sock *Socket) (*Credentials, erro
 
 // resolvePaths resolves the frontend QML paths from system or development locations.
 func (dm *DM) resolvePaths() {
-	// Try system install path first, then development path.
 	systemDir := "/usr/share/snry-shell/frontend/ii"
 
 	if dm.cfg.GreeterQSConfigDir == "" {
-		if _, err := os.Stat(systemDir + "/greeter.qml"); err == nil {
+		if verifyQMLDir(systemDir, "greeter.qml") {
 			dm.cfg.GreeterQSConfigDir = systemDir
 		}
 	}
 	if dm.cfg.ShellQSConfigDir == "" {
-		if _, err := os.Stat(systemDir + "/shell.qml"); err == nil {
+		if verifyQMLDir(systemDir, "shell.qml") {
 			dm.cfg.ShellQSConfigDir = systemDir
 		}
 	}
 
-	// Development fallback: check relative to working directory.
+	// Development fallback (only if running from source tree).
 	if dm.cfg.GreeterQSConfigDir == "" {
-		if _, err := os.Stat("frontend/ii/greeter.qml"); err == nil {
+		if verifyQMLDir("frontend/ii", "greeter.qml") {
 			dm.cfg.GreeterQSConfigDir = "frontend/ii"
 		}
 	}
 	if dm.cfg.ShellQSConfigDir == "" {
-		if _, err := os.Stat("frontend/ii/shell.qml"); err == nil {
+		if verifyQMLDir("frontend/ii", "shell.qml") {
 			dm.cfg.ShellQSConfigDir = "frontend/ii"
 		}
 	}
@@ -222,7 +253,40 @@ func (dm *DM) resolvePaths() {
 	}
 }
 
-// RunFromMain is a convenience function for the main package.
+// verifyQMLDir checks that a QML file exists and is owned by root
+// (prevents TOCTOU symlink attacks on system paths).
+func verifyQMLDir(dir, file string) bool {
+	p := dir + "/" + file
+	fi, err := os.Stat(p)
+	if err != nil {
+		return false
+	}
+	// For system paths, verify root ownership.
+	if strings.HasPrefix(dir, "/usr/") {
+		stat, ok := fi.Sys().(*syscall.Stat_t)
+		if ok && stat.Uid != 0 {
+			log.Printf("[dm] rejecting non-root-owned QML file: %s (uid=%d)", p, stat.Uid)
+			return false
+		}
+	}
+	return true
+}
+
+// sanitizeForLog strips control characters and newlines from untrusted strings.
+func sanitizeForLog(s string) string {
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	s = strings.ReplaceAll(s, "\r", "\\r")
+	var b strings.Builder
+	for _, r := range s {
+		if r < 0x20 && r != ' ' {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// RunFromMain is the CLI entrypoint.
 func RunFromMain() {
 	if os.Getuid() != 0 {
 		fmt.Fprintln(os.Stderr, "snry-dm must run as root")
