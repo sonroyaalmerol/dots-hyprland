@@ -261,19 +261,6 @@ func (s *Socket) checkRateLimit() bool {
 	return true
 }
 
-// SendAuthResult sends an auth result event to the requesting connection only.
-func (s *Socket) SendAuthResult(conn net.Conn, success bool, message string) {
-	s.emit(conn, map[string]any{
-		"event": "auth_result",
-		"data": map[string]any{
-			"success":   success,
-			"message":   message,
-			"remaining": 3,
-			"lockedOut": false,
-		},
-	})
-}
-
 // SendAuthResultAll sends an auth result to all connected clients.
 // Used for backwards compatibility when we don't know which conn asked.
 func (s *Socket) SendAuthResultAll(success bool, message string) {

@@ -161,7 +161,7 @@ func (dm *DM) runGreeterCycle(ctx context.Context) error {
 	os.Remove(dm.cfg.SocketPath)
 
 	// Open PAM session for the user (no re-auth; password already verified).
-	session, err := NewUserSession(dm.cfg, creds, dm.greeterUID, dm.greeterGID, vt)
+	session, err := NewUserSession(dm.cfg, creds, vt)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}

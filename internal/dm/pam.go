@@ -181,9 +181,6 @@ func (p *PAMSession) Groups() []uint32 {
 // HomeDir returns the user's home directory.
 func (p *PAMSession) HomeDir() string { return p.homeDir }
 
-// Handle returns the underlying PAM transaction (for transferring to UserSession).
-func (p *PAMSession) Handle() *pam.Transaction { return p.pamh }
-
 // ensureRuntimeDir creates the user's XDG_RUNTIME_DIR if it doesn't exist.
 func (p *PAMSession) ensureRuntimeDir() error {
 	runtimeDir := fmt.Sprintf("/run/user/%d", p.uid)
@@ -238,7 +235,7 @@ type UserSession struct {
 
 // NewUserSession creates a user session from a pre-authenticated PAM handle.
 // The PAM handle comes from waitForAuth — no password re-entry needed.
-func NewUserSession(cfg Config, creds *Credentials, greeterUID, greeterGID uint32, vt *VT) (*UserSession, error) {
+func NewUserSession(cfg Config, creds *Credentials, vt *VT) (*UserSession, error) {
 	pam := creds.pamHandle
 	if pam == nil {
 		creds.Zero()
@@ -313,19 +310,6 @@ func (s *UserSession) Close() {
 	if s.pam != nil {
 		s.pam.Close()
 	}
-}
-
-// ResolveConfigPath resolves the frontend config path.
-func ResolveConfigPath() string {
-	systemDir := "/usr/share/snry-shell/frontend/ii"
-	if _, err := os.Stat(filepath.Join(systemDir, "shell.qml")); err == nil {
-		return systemDir
-	}
-	if _, err := os.Stat("frontend/ii/shell.qml"); err == nil {
-		abs, _ := filepath.Abs("frontend/ii")
-		return abs
-	}
-	return systemDir
 }
 
 // resolveUserGroups returns the supplementary group IDs for a user.
