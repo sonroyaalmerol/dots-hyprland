@@ -85,7 +85,7 @@ func NewGreeter(cfg Config, uid, gid uint32, vt *VT) (*Greeter, error) {
 
 func (g *Greeter) startHyprland(uid, gid uint32, runtimeDir string) error {
 	if _, err := os.Stat(g.cfg.HyprlandBin); err != nil {
-		return fmt.Errorf("Hyprland binary not found at %s: %w", g.cfg.HyprlandBin, err)
+		return fmt.Errorf("hyprland binary not found at %s: %w", g.cfg.HyprlandBin, err)
 	}
 
 	g.hyprland = exec.Command(g.cfg.HyprlandBin)
