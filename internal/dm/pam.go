@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/msteinert/pam/v2"
 )
@@ -226,11 +227,13 @@ func (c *Credentials) Zero() {
 
 // UserSession manages the user's desktop session after PAM authentication.
 type UserSession struct {
-	cfg   Config
-	creds *Credentials
-	pam   *PAMSession
-	vt    *VT
-	cmd   *exec.Cmd
+	cfg       Config
+	creds     *Credentials
+	pam       *PAMSession
+	vt        *VT
+	cmd       *exec.Cmd
+	hyprland  *exec.Cmd
+	signature string
 }
 
 // NewUserSession creates a user session from a pre-authenticated PAM handle.
@@ -268,11 +271,96 @@ func NewUserSession(cfg Config, creds *Credentials, vt *VT) (*UserSession, error
 }
 
 // Run starts the user's desktop session and blocks until it exits.
+// It launches the Wayland compositor (Hyprland) first, waits for its IPC
+// socket to become available, then starts snry-daemon. The daemon detects
+// the running compositor and proceeds with QuickShell and services.
 func (s *UserSession) Run(ctx context.Context) error {
 	if s.vt != nil {
 		s.vt.Activate()
 	}
 
+	if err := s.startCompositor(ctx); err != nil {
+		return fmt.Errorf("compositor: %w", err)
+	}
+
+	if err := s.startDaemon(ctx); err != nil {
+		return fmt.Errorf("daemon: %w", err)
+	}
+
+	// Block until the daemon process exits.
+	if err := s.cmd.Wait(); err != nil {
+		return fmt.Errorf("user session exited: %w", err)
+	}
+	return nil
+}
+
+// startCompositor launches Hyprland as the user and waits for its IPC socket.
+func (s *UserSession) startCompositor(ctx context.Context) error {
+	if !filepath.IsAbs(s.cfg.HyprlandBin) {
+		return fmt.Errorf("HyprlandBin must be an absolute path, got: %s", s.cfg.HyprlandBin)
+	}
+	if _, err := os.Stat(s.cfg.HyprlandBin); err != nil {
+		return fmt.Errorf("hyprland binary not found at %s: %w", s.cfg.HyprlandBin, err)
+	}
+
+	s.signature = fmt.Sprintf("snry-%d", s.pam.Uid())
+
+	args := []string{}
+	if config := systemHyprlandConfig(); config != "" {
+		args = append(args, "--config", config)
+	}
+
+	s.hyprland = exec.Command(s.cfg.HyprlandBin, args...)
+	s.hyprland.Env = s.pam.Env()
+	if s.vt != nil {
+		s.hyprland.Env = append(s.hyprland.Env, fmt.Sprintf("XDG_VTNR=%d", s.vt.Num()))
+	}
+	s.hyprland.Env = append(s.hyprland.Env,
+		fmt.Sprintf("HYPRLAND_INSTANCE_SIGNATURE=%s", s.signature),
+	)
+	s.hyprland.Stdout = nil
+	s.hyprland.Stderr = nil
+	s.hyprland.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+		Credential: &syscall.Credential{
+			Uid:    uint32(s.pam.Uid()),
+			Gid:    uint32(s.pam.Gid()),
+			Groups: s.pam.Groups(),
+		},
+	}
+
+	log.Printf("[dm] starting Hyprland for user session (uid=%d)", s.pam.Uid())
+	if err := s.hyprland.Start(); err != nil {
+		return fmt.Errorf("start hyprland: %w", err)
+	}
+
+	// Wait for the Hyprland IPC socket to appear.
+	runtimeDir := fmt.Sprintf("/run/user/%d", s.pam.Uid())
+	sockPath := filepath.Join(runtimeDir, "hypr", s.signature, ".socket.sock")
+
+	timeout := time.NewTimer(30 * time.Second)
+	defer timeout.Stop()
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timeout.C:
+			return fmt.Errorf("timeout waiting for Hyprland socket (30s)")
+		case <-ticker.C:
+			if _, err := os.Stat(sockPath); err == nil {
+				log.Printf("[dm] Hyprland socket ready (signature=%s)", s.signature)
+				return nil
+			}
+		}
+	}
+}
+
+// startDaemon starts snry-daemon as the user. The daemon will detect the
+// already-running compositor and proceed with QuickShell and services.
+func (s *UserSession) startDaemon(ctx context.Context) error {
 	if !filepath.IsAbs(s.cfg.DaemonBin) {
 		return fmt.Errorf("DaemonBin must be an absolute path, got: %s", s.cfg.DaemonBin)
 	}
@@ -281,12 +369,14 @@ func (s *UserSession) Run(ctx context.Context) error {
 	}
 
 	s.cmd = exec.CommandContext(ctx, s.cfg.DaemonBin, "daemon")
-	env := s.pam.Env()
+	s.cmd.Env = s.pam.Env()
 	if s.vt != nil {
-		env = append(env, fmt.Sprintf("XDG_VTNR=%d", s.vt.Num()))
+		s.cmd.Env = append(s.cmd.Env, fmt.Sprintf("XDG_VTNR=%d", s.vt.Num()))
 	}
-	s.cmd.Env = env
-	// Don't pass root's stdout/stderr to user process.
+	// Propagate the compositor instance signature so the daemon finds it immediately.
+	s.cmd.Env = append(s.cmd.Env,
+		fmt.Sprintf("HYPRLAND_INSTANCE_SIGNATURE=%s", s.signature),
+	)
 	s.cmd.Stdout = nil
 	s.cmd.Stderr = nil
 	s.cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -298,19 +388,27 @@ func (s *UserSession) Run(ctx context.Context) error {
 		},
 	}
 
-	log.Printf("[dm] starting user session (uid=%d)", s.pam.Uid())
+	log.Printf("[dm] starting snry-daemon (uid=%d)", s.pam.Uid())
+	return s.cmd.Start()
+}
 
-	if err := s.cmd.Run(); err != nil {
-		return fmt.Errorf("user session exited: %w", err)
+// systemHyprlandConfig returns the path to the system-level Hyprland config
+// (hyprland.lua preferred, hyprland.conf fallback). Returns empty string if not found.
+func systemHyprlandConfig() string {
+	systemDir := "/usr/share/snry-shell/configs/hypr"
+	for _, name := range []string{"hyprland.lua", "hyprland.conf"} {
+		p := systemDir + "/" + name
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
 	}
-	return nil
+	return ""
 }
 
 // Close cleans up the user session.
 func (s *UserSession) Close() {
-	if s.cmd != nil && s.cmd.Process != nil {
-		s.cmd.Process.Signal(syscall.SIGTERM)
-	}
+	killProcWithTimeout(s.cmd, "snry-daemon")
+	killProcWithTimeout(s.hyprland, "hyprland")
 	if s.pam != nil {
 		s.pam.Close()
 	}
