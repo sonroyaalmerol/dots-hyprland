@@ -83,7 +83,10 @@ func Launch(ctx context.Context) (string, error) {
 		}
 	}
 
-	cmd := exec.CommandContext(ctx, bin, args...)
+	// Use exec.Command (NOT CommandContext) so the compositor survives
+	// daemon restart. CommandContext binds the child lifecycle to ctx,
+	// killing Hyprland when the daemon receives SIGTERM.
+	cmd := exec.Command(bin, args...)
 	cmd.Env = os.Environ()
 	// Detach from the terminal so the compositor runs independently.
 	cmd.Stdin = nil
