@@ -291,7 +291,7 @@ func (s *Service) subscribeEvents(ctx context.Context) error {
 				if err := s.fetchAll(); err != nil {
 					log.Printf("[hyprland] full re-fetch after configreloaded: %v", err)
 				} else {
-					s.emit()
+					s.emitFull()
 				}
 			}
 			if s.needsMonitorDetails {
@@ -331,11 +331,13 @@ func (s *Service) fetchMonitorDetails() {
 			maps.Copy(s.monitors[i], fm)
 		}
 	}
+	monSnap := s.snapshotMonitors()
 	s.mu.Unlock()
-	s.emit()
+	s.emitDelta("hypr_monitors_full", map[string]any{
+		"monitors": monSnap,
+	})
 }
 
-// fetchWindowDetails fetches j/clients and replaces cached window data with
 // the authoritative fresh data (mirrors QuickShell's refreshToplevels). It is
 // called after openwindow to fill size/pid/position fields not available from
 // the event. Windows not yet visible in j/clients are kept from the cache.
@@ -369,8 +371,11 @@ func (s *Service) fetchWindowDetails() {
 	}
 
 	s.windows = merged
+	winSnap := s.snapshotWindows()
 	s.mu.Unlock()
-	s.emit()
+	s.emitDelta("hypr_windows_full", map[string]any{
+		"windows": winSnap,
+	})
 }
 
 func (s *Service) Run(ctx context.Context) error {
@@ -384,7 +389,7 @@ func (s *Service) Run(ctx context.Context) error {
 	if err := s.fetchAll(); err != nil {
 		log.Printf("[hyprland] initial fetch failed: %v", err)
 	} else {
-		s.emit()
+		s.emitFull()
 	}
 
 	// Event loop with reconnection.
@@ -416,12 +421,14 @@ func (s *Service) Run(ctx context.Context) error {
 		if err := s.fetchAll(); err != nil {
 			log.Printf("[hyprland] re-fetch after reconnect: %v", err)
 		} else {
-			s.emit()
+			s.emitFull()
 		}
 	}
 }
 
-func (s *Service) emit() {
+// emitFull sends the complete state snapshot. Used only on initial connect,
+// reconnect, and configreloaded — never on individual events.
+func (s *Service) emitFull() {
 	s.mu.RLock()
 	data := map[string]any{
 		"windows":         s.windows,
@@ -434,6 +441,15 @@ func (s *Service) emit() {
 
 	s.callback(map[string]any{
 		"event": "hyprland_data",
+		"data":  data,
+	})
+}
+
+// emitDelta sends a targeted incremental update. The frontend applies it
+// surgically to the affected list/property without re-serializing everything.
+func (s *Service) emitDelta(event string, data map[string]any) {
+	s.callback(map[string]any{
+		"event": event,
 		"data":  data,
 	})
 }

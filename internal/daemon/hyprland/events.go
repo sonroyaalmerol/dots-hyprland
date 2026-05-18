@@ -1,13 +1,17 @@
 package hyprland
 
 import (
+	"maps"
 	"strconv"
 	"strings"
 )
 
 // handleSocket2Event parses a socket2 event line and mutates the in-memory cache.
-// Zero heap allocation on the parse path — all CSV fields are sliced substrings
-// of the original event data, and all cache maps are mutated in-place.
+// After mutation, each handler calls emitDelta() with a targeted payload — never
+// the full snapshot.  The frontend applies surgical QML property updates, so a
+// single window title change sends ~80 bytes instead of the full state.
+//
+// Convention: snapshot under lock → unlock → emit.
 func (s *Service) handleSocket2Event(eventName, data string) {
 	switch eventName {
 
@@ -22,8 +26,11 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		s.mu.Lock()
 		s.putActiveWorkspace(idn, name)
 		s.upsertWorkspace(idn, name)
+		snap := s.snapshotActiveWorkspace()
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_active_workspace", map[string]any{
+			"activeWorkspace": snap,
+		})
 
 	case "focusedmonv2":
 		monName, wsIDStr := split2(data)
@@ -35,11 +42,19 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		wsName := s.workspaceNameByID(wsID)
 		s.putMonitorActiveWS(monName, wsID, wsName)
 		s.putActiveWorkspaceFull(wsID, wsName, monName)
+		snapAW := s.snapshotActiveWorkspace()
+		snapMon := s.snapshotMonitorByName(monName)
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_active_workspace", map[string]any{
+			"activeWorkspace": snapAW,
+		})
+		if snapMon != nil {
+			s.emitDelta("hypr_monitor_update", map[string]any{
+				"monitor": snapMon,
+			})
+		}
 
 	case "focusedmon":
-		// Legacy fallback: "MONNAME,WORKSPACENAME"
 		monName, wsName := split2(data)
 		if monName == "" {
 			return
@@ -51,8 +66,17 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		s.mu.Lock()
 		s.putMonitorActiveWS(monName, wsID, wsName)
 		s.putActiveWorkspaceFull(wsID, wsName, monName)
+		snapAW := s.snapshotActiveWorkspace()
+		snapMon := s.snapshotMonitorByName(monName)
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_active_workspace", map[string]any{
+			"activeWorkspace": snapAW,
+		})
+		if snapMon != nil {
+			s.emitDelta("hypr_monitor_update", map[string]any{
+				"monitor": snapMon,
+			})
+		}
 
 	case "createworkspacev2":
 		id, name := split2(data)
@@ -63,7 +87,9 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		s.mu.Lock()
 		s.upsertWorkspace(idn, name)
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_workspace_add", map[string]any{
+			"workspace": map[string]any{"id": idn, "name": name},
+		})
 
 	case "destroyworkspacev2":
 		id, _ := split2(data)
@@ -79,20 +105,22 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 				break
 			}
 		}
-		// If any monitor's active workspace was the destroyed one,
-		// clear it (mirrors QuickShell's null-check after destroyworkspacev2).
+		var affectedMonitors []map[string]any
 		for i, m := range s.monitors {
 			if aw, ok := m["activeWorkspace"].(map[string]any); ok {
 				if awid, _ := aw["id"].(float64); int(awid) == idn {
 					delete(s.monitors[i], "activeWorkspace")
+					affectedMonitors = append(affectedMonitors, s.snapshotMonitorByName(m["name"].(string)))
 				}
 			}
 		}
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_workspace_remove", map[string]any{"id": idn})
+		for _, monSnap := range affectedMonitors {
+			s.emitDelta("hypr_monitor_update", map[string]any{"monitor": monSnap})
+		}
 
 	case "moveworkspacev2":
-		// "WORKSPACEID,WORKSPACENAME,MONNAME"
 		id, rest := split2(data)
 		wsName, monName := split2(rest)
 		if id == "" || monName == "" {
@@ -102,18 +130,17 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		s.mu.Lock()
 		s.upsertWorkspace(wsID, wsName)
 		s.putMonitorActiveWS(monName, wsID, wsName)
-		// Clear this workspace from other monitors.
+		var clearedMonSnaps []map[string]any
 		for i, m := range s.monitors {
 			if name, _ := m["name"].(string); name != monName {
 				if aw, ok := m["activeWorkspace"].(map[string]any); ok {
 					if awid, _ := aw["id"].(float64); int(awid) == wsID {
 						delete(s.monitors[i], "activeWorkspace")
+						clearedMonSnaps = append(clearedMonSnaps, s.snapshotMonitorByName(name))
 					}
 				}
 			}
 		}
-		// Update monitor field on all windows on this workspace
-		// (the old debounced re-fetch handled this implicitly).
 		newMonID := 0
 		for _, m := range s.monitors {
 			if mn, _ := m["name"].(string); mn == monName {
@@ -123,17 +150,35 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 				break
 			}
 		}
+		var windowDeltas []map[string]any
 		if newMonID > 0 {
 			for _, w := range s.windows {
 				if ws, ok := w["workspace"].(map[string]any); ok {
 					if wid, _ := ws["id"].(float64); int(wid) == wsID {
 						w["monitor"] = newMonID
+						if addr, _ := w["address"].(string); addr != "" {
+							windowDeltas = append(windowDeltas, map[string]any{
+								"address": addr, "updates": map[string]any{"monitor": newMonID},
+							})
+						}
 					}
 				}
 			}
 		}
+		targetMonSnap := s.snapshotMonitorByName(monName)
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_workspace_update", map[string]any{
+			"workspace": map[string]any{"id": wsID, "name": wsName, "monitorName": monName},
+		})
+		if targetMonSnap != nil {
+			s.emitDelta("hypr_monitor_update", map[string]any{"monitor": targetMonSnap})
+		}
+		for _, monSnap := range clearedMonSnaps {
+			s.emitDelta("hypr_monitor_update", map[string]any{"monitor": monSnap})
+		}
+		for _, wd := range windowDeltas {
+			s.emitDelta("hypr_window_update", wd)
+		}
 
 	case "renameworkspace":
 		idStr, newName := split2(data)
@@ -144,10 +189,11 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		s.mu.Lock()
 		s.renameWorkspaceInPlace(id, newName)
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_workspace_update", map[string]any{
+			"workspace": map[string]any{"id": id, "name": newName},
+		})
 
 	case "activespecialv2":
-		// "WORKSPACEID,WORKSPACENAME,MONNAME"
 		id, rest := split2(data)
 		wsName, monName := split2(rest)
 		if monName == "" {
@@ -161,13 +207,15 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 			s.upsertWorkspace(wsID, wsName)
 			s.putMonitorField(monName, "specialWorkspace", map[string]any{"id": wsID, "name": wsName})
 		}
+		monSnap := s.snapshotMonitorByName(monName)
 		s.mu.Unlock()
-		s.emit()
+		if monSnap != nil {
+			s.emitDelta("hypr_monitor_update", map[string]any{"monitor": monSnap})
+		}
 
 	// ── Windows ─────────────────────────────────────────────────────────────
 
 	case "openwindow":
-		// "ADDR,WORKSPACENAME,CLASS,TITLE" — up to 3 cuts
 		addr, rest := split2(data)
 		wsName, rest := split2(rest)
 		class, title := split2(rest)
@@ -182,15 +230,22 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		}
 		s.windows = append(s.windows, win)
 		s.needsWindowFetch = true
+		// Snapshot the stub for immediate emission.
+		winSnap := make(map[string]any, len(win))
+		maps.Copy(winSnap, win)
+		if ws, ok := win["workspace"].(map[string]any); ok {
+			wsCp := make(map[string]any, len(ws))
+			maps.Copy(wsCp, ws)
+			winSnap["workspace"] = wsCp
+		}
 		s.mu.Unlock()
-		// Do NOT emit here — the window entry is incomplete (no at/size/monitor).
-		// fetchWindowDetails() will emit after the j/clients round-trip.
+		s.emitDelta("hypr_window_add", map[string]any{"window": winSnap})
 
 	case "closewindow", "kill":
 		s.mu.Lock()
 		s.removeWindow(data)
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_window_remove", map[string]any{"address": data})
 
 	case "activewindowv2":
 		s.mu.Lock()
@@ -202,11 +257,13 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		} else {
 			s.activeWorkspace["activeWindow"] = data
 		}
+		snap := s.snapshotActiveWorkspace()
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_active_workspace", map[string]any{
+			"activeWorkspace": snap,
+		})
 
 	case "movewindowv2":
-		// "ADDR,WORKSPACEID,WORKSPACENAME"
 		addr, rest := split2(data)
 		wsIDStr, wsName := split2(rest)
 		if addr == "" {
@@ -215,21 +272,32 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		wsID, _ := strconv.Atoi(wsIDStr)
 		s.mu.Lock()
 		s.putWindowWorkspace(addr, wsID, wsName)
+		monID := 0
 		for _, m := range s.monitors {
 			if aw, ok := m["activeWorkspace"].(map[string]any); ok {
 				if awid, _ := aw["id"].(float64); int(awid) == wsID {
 					if mid, ok := m["id"].(float64); ok {
-						s.putWindowField(addr, "monitor", int(mid))
+						monID = int(mid)
 					}
 					break
 				}
 			}
 		}
+		if monID > 0 {
+			s.putWindowField(addr, "monitor", monID)
+		}
 		s.mu.Unlock()
-		s.emit()
+		updates := map[string]any{
+			"workspace": map[string]any{"id": wsID, "name": wsName},
+		}
+		if monID > 0 {
+			updates["monitor"] = monID
+		}
+		s.emitDelta("hypr_window_update", map[string]any{
+			"address": addr, "updates": updates,
+		})
 
 	case "movewindow":
-		// Legacy fallback: "ADDR,WORKSPACENAME"
 		addr, wsName := split2(data)
 		if addr == "" {
 			return
@@ -240,18 +308,30 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		}
 		s.mu.Lock()
 		s.putWindowWorkspace(addr, wsID, wsName)
+		monID := 0
 		for _, m := range s.monitors {
 			if aw, ok := m["activeWorkspace"].(map[string]any); ok {
 				if awid, _ := aw["id"].(float64); int(awid) == wsID {
 					if mid, ok := m["id"].(float64); ok {
-						s.putWindowField(addr, "monitor", int(mid))
+						monID = int(mid)
 					}
 					break
 				}
 			}
 		}
+		if monID > 0 {
+			s.putWindowField(addr, "monitor", monID)
+		}
 		s.mu.Unlock()
-		s.emit()
+		updates := map[string]any{
+			"workspace": map[string]any{"id": wsID, "name": wsName},
+		}
+		if monID > 0 {
+			updates["monitor"] = monID
+		}
+		s.emitDelta("hypr_window_update", map[string]any{
+			"address": addr, "updates": updates,
+		})
 
 	case "windowtitlev2":
 		addr, title := split2(data)
@@ -261,66 +341,87 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		s.mu.Lock()
 		s.putWindowField(addr, "title", title)
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_window_update", map[string]any{
+			"address": addr, "updates": map[string]any{"title": title},
+		})
 
 	case "windowtitle":
-		// Legacy fallback: "TITLE"
-		// No address — look up active window.
 		s.mu.Lock()
-		if aw, ok := s.activeWorkspace["activeWindow"].(string); ok {
+		aw, _ := s.activeWorkspace["activeWindow"].(string)
+		if aw != "" {
 			s.putWindowField(aw, "title", data)
 		}
 		s.mu.Unlock()
-		s.emit()
+		if aw != "" {
+			s.emitDelta("hypr_window_update", map[string]any{
+				"address": aw, "updates": map[string]any{"title": data},
+			})
+		}
 
 	case "changefloatingmode":
 		addr, val := split2(data)
 		if addr == "" {
 			return
 		}
+		floating := val == "1"
 		s.mu.Lock()
-		s.putWindowField(addr, "floating", val == "1")
+		s.putWindowField(addr, "floating", floating)
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_window_update", map[string]any{
+			"address": addr, "updates": map[string]any{"floating": floating},
+		})
 
 	case "fullscreen":
+		isFS := data == "1"
 		s.mu.Lock()
-		if aw, ok := s.activeWorkspace["activeWindow"].(string); ok {
-			s.putWindowField(aw, "fullscreen", data == "1")
+		aw, _ := s.activeWorkspace["activeWindow"].(string)
+		if aw != "" {
+			s.putWindowField(aw, "fullscreen", isFS)
 		}
 		s.mu.Unlock()
-		s.emit()
+		if aw != "" {
+			s.emitDelta("hypr_window_update", map[string]any{
+				"address": aw, "updates": map[string]any{"fullscreen": isFS},
+			})
+		}
 
 	case "pin":
 		addr, val := split2(data)
 		if addr == "" {
 			return
 		}
+		pinned := val == "1"
 		s.mu.Lock()
-		s.putWindowField(addr, "pinned", val == "1")
+		s.putWindowField(addr, "pinned", pinned)
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_window_update", map[string]any{
+			"address": addr, "updates": map[string]any{"pinned": pinned},
+		})
 
 	case "minimized":
 		addr, val := split2(data)
 		if addr == "" {
 			return
 		}
+		minimized := val == "1"
 		s.mu.Lock()
-		s.putWindowField(addr, "minimized", val == "1")
+		s.putWindowField(addr, "minimized", minimized)
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_window_update", map[string]any{
+			"address": addr, "updates": map[string]any{"minimized": minimized},
+		})
 
 	case "urgent":
 		s.mu.Lock()
 		s.putWindowField(data, "urgent", true)
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_window_update", map[string]any{
+			"address": data, "updates": map[string]any{"urgent": true},
+		})
 
 	// ── Monitors ────────────────────────────────────────────────────────────
 
 	case "monitoraddedv2":
-		// "ID,NAME,DESCRIPTION"
 		id, rest := split2(data)
 		name, desc := split2(rest)
 		if name == "" {
@@ -340,11 +441,11 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 				"id": monID, "name": name, "description": desc,
 			})
 		}
-		// Always refresh monitors after add — workspace focus may have changed
-		// even if the monitor was already tracked (mirrors QuickShell).
 		s.needsMonitorDetails = true
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_monitor_add", map[string]any{
+			"monitor": map[string]any{"id": monID, "name": name, "description": desc},
+		})
 
 	case "monitorremovedv2":
 		_, rest := split2(data)
@@ -360,7 +461,7 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 			}
 		}
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_monitor_remove", map[string]any{"name": name})
 
 	// ── Layers ──────────────────────────────────────────────────────────────
 
@@ -371,7 +472,7 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		}
 		s.layers[data] = true
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_layer_update", map[string]any{"name": data, "state": true})
 
 	case "closelayer":
 		s.mu.Lock()
@@ -379,7 +480,7 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 			delete(s.layers, data)
 		}
 		s.mu.Unlock()
-		s.emit()
+		s.emitDelta("hypr_layer_update", map[string]any{"name": data, "state": false})
 
 	// ── Config ──────────────────────────────────────────────────────────────
 
@@ -388,19 +489,13 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 	}
 }
 
-// ── In-place cache mutators (zero map allocations) ────────────────────────────
+// ── In-place cache mutators ────────────────────────────────────────────────────
 
-// putActiveWorkspace sets id/name on the activeWorkspace map, preserving the
-// existing monitor field (workspacev2 fires on same-monitor switches where
-// focusedmonv2 does NOT fire). Also updates the per-monitor activeWorkspace.id
-// so the bar workspace highlight stays in sync.
 func (s *Service) putActiveWorkspace(id int, name string) {
 	if s.activeWorkspace == nil {
 		s.activeWorkspace = make(map[string]any, 4)
 	}
-	// Preserve monitor from current value.
 	mon, _ := s.activeWorkspace["monitor"].(string)
-	// Wipe old keys except monitor.
 	for k := range s.activeWorkspace {
 		if k != "monitor" {
 			delete(s.activeWorkspace, k)
@@ -414,19 +509,6 @@ func (s *Service) putActiveWorkspace(id int, name string) {
 	}
 }
 
-// putActiveWorkspaceMonitor sets id+monitor on activeWorkspace (used by focusedmonv2).
-func (s *Service) putActiveWorkspaceMonitor(id int, monName string) {
-	if s.activeWorkspace == nil {
-		s.activeWorkspace = make(map[string]any, 4)
-	}
-	for k := range s.activeWorkspace {
-		delete(s.activeWorkspace, k)
-	}
-	s.activeWorkspace["id"] = id
-	s.activeWorkspace["monitor"] = monName
-}
-
-// putActiveWorkspaceFull sets id+name+monitor on activeWorkspace.
 func (s *Service) putActiveWorkspaceFull(id int, name, monName string) {
 	if s.activeWorkspace == nil {
 		s.activeWorkspace = make(map[string]any, 4)
@@ -439,7 +521,6 @@ func (s *Service) putActiveWorkspaceFull(id int, name, monName string) {
 	s.activeWorkspace["monitor"] = monName
 }
 
-// putMonitorActiveWS sets the activeWorkspace field on a specific monitor entry.
 func (s *Service) putMonitorActiveWS(monName string, wsID int, wsName string) {
 	for i, m := range s.monitors {
 		if name, _ := m["name"].(string); name == monName {
@@ -454,7 +535,6 @@ func (s *Service) putMonitorActiveWS(monName string, wsID int, wsName string) {
 	}
 }
 
-// putMonitorField sets a named field on a specific monitor entry.
 func (s *Service) putMonitorField(monName, field string, val any) {
 	for i, m := range s.monitors {
 		if name, _ := m["name"].(string); name == monName {
@@ -464,7 +544,6 @@ func (s *Service) putMonitorField(monName, field string, val any) {
 	}
 }
 
-// deleteMonitorField removes a named field from a monitor entry.
 func (s *Service) deleteMonitorField(monName, field string) {
 	for i, m := range s.monitors {
 		if name, _ := m["name"].(string); name == monName {
@@ -474,7 +553,6 @@ func (s *Service) deleteMonitorField(monName, field string) {
 	}
 }
 
-// putWindowField sets a named field on the window with the given address.
 func (s *Service) putWindowField(addr, field string, val any) {
 	for i, w := range s.windows {
 		if a, _ := w["address"].(string); a == addr {
@@ -484,11 +562,9 @@ func (s *Service) putWindowField(addr, field string, val any) {
 	}
 }
 
-// putWindowWorkspace sets the workspace field on the window with the given address.
 func (s *Service) putWindowWorkspace(addr string, wsID int, wsName string) {
 	for i, w := range s.windows {
 		if a, _ := w["address"].(string); a == addr {
-			// Mutate existing workspace map if possible, else allocate.
 			if ws, ok := w["workspace"].(map[string]any); ok {
 				ws["id"] = wsID
 				ws["name"] = wsName
@@ -500,7 +576,6 @@ func (s *Service) putWindowWorkspace(addr string, wsID int, wsName string) {
 	}
 }
 
-// removeWindow deletes the window with the given address from the list.
 func (s *Service) removeWindow(addr string) {
 	for i, w := range s.windows {
 		if a, _ := w["address"].(string); a == addr {
@@ -510,7 +585,6 @@ func (s *Service) removeWindow(addr string) {
 	}
 }
 
-// removeWorkspace deletes the workspace with the given ID from the list.
 func (s *Service) removeWorkspace(id int) {
 	for i, ws := range s.workspaces {
 		if wid, _ := ws["id"].(float64); int(wid) == id {
@@ -520,8 +594,6 @@ func (s *Service) removeWorkspace(id int) {
 	}
 }
 
-// renameWorkspaceInPlace updates the name of a workspace by ID in the list,
-// activeWorkspace, and wsNameToID map.
 func (s *Service) renameWorkspaceInPlace(id int, newName string) {
 	for i, ws := range s.workspaces {
 		if wid, _ := ws["id"].(float64); int(wid) == id {
@@ -565,7 +637,6 @@ func (s *Service) lookupWorkspaceID(name string) int {
 	return 0
 }
 
-// workspaceNameByID looks up a workspace name from its ID in the workspace list.
 func (s *Service) workspaceNameByID(id int) string {
 	for _, ws := range s.workspaces {
 		if wid, _ := ws["id"].(float64); int(wid) == id {
@@ -577,10 +648,75 @@ func (s *Service) workspaceNameByID(id int) string {
 	return ""
 }
 
+// ── Snapshot helpers (caller must hold at least a read lock) ───────────────
+
+func (s *Service) snapshotActiveWorkspace() map[string]any {
+	if s.activeWorkspace == nil {
+		return nil
+	}
+	cp := make(map[string]any, len(s.activeWorkspace))
+	maps.Copy(cp, s.activeWorkspace)
+	return cp
+}
+
+func (s *Service) snapshotMonitorByName(name string) map[string]any {
+	for _, m := range s.monitors {
+		if mn, _ := m["name"].(string); mn == name {
+			cp := make(map[string]any, len(m))
+			maps.Copy(cp, m)
+			if aw, ok := m["activeWorkspace"].(map[string]any); ok {
+				awCp := make(map[string]any, len(aw))
+				maps.Copy(awCp, aw)
+				cp["activeWorkspace"] = awCp
+			}
+			return cp
+		}
+	}
+	return nil
+}
+
+func (s *Service) snapshotWindows() []map[string]any {
+	out := make([]map[string]any, len(s.windows))
+	for i, w := range s.windows {
+		out[i] = snapshotWindowMap(w)
+	}
+	return out
+}
+
+func (s *Service) snapshotMonitors() []map[string]any {
+	out := make([]map[string]any, len(s.monitors))
+	for i, m := range s.monitors {
+		out[i] = snapshotMonitorMap(m)
+	}
+	return out
+}
+
+// snapshotWindowMap deep-copies a single window entry.
+func snapshotWindowMap(w map[string]any) map[string]any {
+	cp := make(map[string]any, len(w))
+	maps.Copy(cp, w)
+	if ws, ok := w["workspace"].(map[string]any); ok {
+		wsCp := make(map[string]any, len(ws))
+		maps.Copy(wsCp, ws)
+		cp["workspace"] = wsCp
+	}
+	return cp
+}
+
+// snapshotMonitorMap deep-copies a single monitor entry.
+func snapshotMonitorMap(m map[string]any) map[string]any {
+	cp := make(map[string]any, len(m))
+	maps.Copy(cp, m)
+	if aw, ok := m["activeWorkspace"].(map[string]any); ok {
+		awCp := make(map[string]any, len(aw))
+		maps.Copy(awCp, aw)
+		cp["activeWorkspace"] = awCp
+	}
+	return cp
+}
+
 // ── Zero-alloc CSV splitting ──────────────────────────────────────────────────
 
-// split2 splits data at the first comma. Returns two substrings of the original
-// data — zero heap allocation (Go string slicing is a view).
 func split2(data string) (string, string) {
 	if before, after, ok := strings.Cut(data, ","); ok {
 		return before, after

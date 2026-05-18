@@ -334,6 +334,62 @@ Singleton {
 			root.hyprWorkspaces = obj.data.workspaces || []
 			root.hyprLayers = obj.data.layers || {}
 			root.hyprActiveWorkspace = obj.data.activeWorkspace || null
+		} else if (obj.event === "hypr_active_workspace" && obj.data) {
+			root.hyprActiveWorkspace = obj.data.activeWorkspace || null
+		} else if (obj.event === "hypr_windows_full" && obj.data) {
+			root.hyprWindows = obj.data.windows || []
+		} else if (obj.event === "hypr_monitors_full" && obj.data) {
+			root.hyprMonitors = obj.data.monitors || []
+		} else if (obj.event === "hypr_window_add" && obj.data) {
+			var newWin = obj.data.window
+			if (newWin && !root.hyprWindows.some(w => w.address === newWin.address))
+				root.hyprWindows = [...root.hyprWindows, newWin]
+		} else if (obj.event === "hypr_window_remove" && obj.data) {
+			var addr = obj.data.address
+			root.hyprWindows = root.hyprWindows.filter(w => w.address !== addr)
+		} else if (obj.event === "hypr_window_update" && obj.data) {
+			var uAddr = obj.data.address
+			var uFields = obj.data.updates
+			if (uAddr && uFields) {
+				root.hyprWindows = root.hyprWindows.map(w =>
+					w.address === uAddr ? Object.assign({}, w, uFields) : w
+				)
+			}
+		} else if (obj.event === "hypr_workspace_add" && obj.data) {
+			var newWs = obj.data.workspace
+			if (newWs && !root.hyprWorkspaces.some(ws => ws.id === newWs.id))
+				root.hyprWorkspaces = [...root.hyprWorkspaces, newWs]
+		} else if (obj.event === "hypr_workspace_remove" && obj.data) {
+			var rmWsId = obj.data.id
+			root.hyprWorkspaces = root.hyprWorkspaces.filter(ws => ws.id !== rmWsId)
+		} else if (obj.event === "hypr_workspace_update" && obj.data) {
+			var wsUpd = obj.data.workspace
+			if (wsUpd) {
+				root.hyprWorkspaces = root.hyprWorkspaces.map(ws =>
+					ws.id === wsUpd.id ? Object.assign({}, ws, wsUpd) : ws
+				)
+			}
+		} else if (obj.event === "hypr_monitor_add" && obj.data) {
+			var newMon = obj.data.monitor
+			if (newMon && !root.hyprMonitors.some(m => m.name === newMon.name))
+				root.hyprMonitors = [...root.hyprMonitors, newMon]
+		} else if (obj.event === "hypr_monitor_remove" && obj.data) {
+			var rmMonName = obj.data.name
+			root.hyprMonitors = root.hyprMonitors.filter(m => m.name !== rmMonName)
+		} else if (obj.event === "hypr_monitor_update" && obj.data) {
+			var monUpd = obj.data.monitor
+			if (monUpd) {
+				root.hyprMonitors = root.hyprMonitors.map(m =>
+					m.name === monUpd.name ? Object.assign({}, m, monUpd) : m
+				)
+			}
+		} else if (obj.event === "hypr_layer_update" && obj.data) {
+			var l = Object.assign({}, root.hyprLayers)
+			if (obj.data.state)
+				l[obj.data.name] = true
+			else
+				delete l[obj.data.name]
+			root.hyprLayers = l
 		} else if (obj.event === "weather" && obj.data) {
 			root.weatherRaw = obj.data.raw || ""
 			root.weatherCity = obj.data.city || ""
