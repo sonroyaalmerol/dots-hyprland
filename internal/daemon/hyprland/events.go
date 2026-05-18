@@ -37,6 +37,22 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		s.mu.Unlock()
 		s.emit()
 
+	case "focusedmon":
+		// Legacy fallback: "MONNAME,WORKSPACENAME"
+		monName, wsName := split2(data)
+		if monName == "" {
+			return
+		}
+		wsID := s.lookupWorkspaceID(wsName)
+		if wsID == 0 {
+			return
+		}
+		s.mu.Lock()
+		s.putMonitorActiveWS(monName, wsID)
+		s.putActiveWorkspaceMonitor(wsID, monName)
+		s.mu.Unlock()
+		s.emit()
+
 	case "createworkspacev2":
 		id, name := split2(data)
 		if id == "" {
@@ -157,7 +173,8 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		s.windows = append(s.windows, win)
 		s.needsWindowFetch = true
 		s.mu.Unlock()
-		s.emit()
+		// Do NOT emit here — the window entry is incomplete (no at/size/monitor).
+		// fetchWindowDetails() will emit after the full j/clients round-trip.
 
 	case "closewindow", "kill":
 		s.mu.Lock()
@@ -201,6 +218,33 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 				}
 			}
 		}
+		s.needsWindowFetch = true // re-fetch to update at/size after workspace move
+		s.mu.Unlock()
+		s.emit()
+
+	case "movewindow":
+		// Legacy fallback: "ADDR,WORKSPACENAME"
+		addr, wsName := split2(data)
+		if addr == "" {
+			return
+		}
+		wsID := s.lookupWorkspaceID(wsName)
+		if wsID == 0 {
+			return
+		}
+		s.mu.Lock()
+		s.putWindowWorkspace(addr, wsID, wsName)
+		for _, m := range s.monitors {
+			if aw, ok := m["activeWorkspace"].(map[string]any); ok {
+				if awid, _ := aw["id"].(float64); int(awid) == wsID {
+					if mid, ok := m["id"].(float64); ok {
+						s.putWindowField(addr, "monitor", int(mid))
+					}
+					break
+				}
+			}
+		}
+		s.needsWindowFetch = true
 		s.mu.Unlock()
 		s.emit()
 
@@ -211,6 +255,16 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		}
 		s.mu.Lock()
 		s.putWindowField(addr, "title", title)
+		s.mu.Unlock()
+		s.emit()
+
+	case "windowtitle":
+		// Legacy fallback: "TITLE"
+		// No address — look up active window.
+		s.mu.Lock()
+		if aw, ok := s.activeWorkspace["activeWindow"].(string); ok {
+			s.putWindowField(aw, "title", data)
+		}
 		s.mu.Unlock()
 		s.emit()
 

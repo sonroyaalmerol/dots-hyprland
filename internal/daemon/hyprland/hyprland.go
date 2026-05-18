@@ -193,12 +193,29 @@ func fetchLayers() (map[string]any, error) {
 }
 
 func (s *Service) fetchAll() error {
+	// Fetch all data WITHOUT holding the lock — socket calls can block.
+	windows, _ := fetchWindows()
+	monitors, _ := fetchMonitors()
+	workspaces, _ := fetchWorkspaces()
+	layers, _ := fetchLayers()
+	activeWorkspace, _ := fetchActiveWorkspace()
+
 	s.mu.Lock()
-	s.windows, _ = fetchWindows()
-	s.monitors, _ = fetchMonitors()
-	s.workspaces, _ = fetchWorkspaces()
-	s.layers, _ = fetchLayers()
-	s.activeWorkspace, _ = fetchActiveWorkspace()
+	if windows != nil {
+		s.windows = windows
+	}
+	if monitors != nil {
+		s.monitors = monitors
+	}
+	if workspaces != nil {
+		s.workspaces = workspaces
+	}
+	if layers != nil {
+		s.layers = layers
+	}
+	if activeWorkspace != nil {
+		s.activeWorkspace = activeWorkspace
+	}
 
 	// Rebuild the name→ID map from the fresh workspace list.
 	s.wsNameToID = make(map[string]int, len(s.workspaces))
@@ -253,6 +270,10 @@ func (s *Service) subscribeEvents(ctx context.Context) error {
 		}
 	}()
 
+	// Periodic window refresh to catch position/size drift that events don't cover.
+	refreshTick := time.NewTicker(5 * time.Second)
+	defer refreshTick.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -260,6 +281,10 @@ func (s *Service) subscribeEvents(ctx context.Context) error {
 
 		case err := <-doneCh:
 			return err
+
+		case <-refreshTick.C:
+			// Light-weight: only re-fetch windows to keep at/size current.
+			s.fetchWindowDetails()
 
 		case line := <-eventCh:
 			// Hyprland format: "EVENT>>DATA\n" — event name has no whitespace.
@@ -289,31 +314,92 @@ func (s *Service) subscribeEvents(ctx context.Context) error {
 }
 
 // fetchMonitorDetails is a targeted fetch to fill in monitor resolution/scale/position
-// that aren't available from the monitoraddedv2 event. Called inline from the
-// event loop after handling monitoraddedv2.
+// that aren't available from the monitoraddedv2 event. It merges fresh data into
+// existing monitor entries to preserve event-driven fields (activeWorkspace, etc.).
 func (s *Service) fetchMonitorDetails() {
-	m, err := fetchMonitors()
+	fresh, err := fetchMonitors()
 	if err != nil {
 		log.Printf("[hyprland] fetchMonitorDetails error: %v", err)
 		return
 	}
 	s.mu.Lock()
-	s.monitors = m
+	freshByName := make(map[string]map[string]any, len(fresh))
+	for _, m := range fresh {
+		if name, _ := m["name"].(string); name != "" {
+			freshByName[name] = m
+		}
+	}
+	for i, m := range s.monitors {
+		name, _ := m["name"].(string)
+		if fm, ok := freshByName[name]; ok {
+			// Merge all fresh fields, but preserve our activeWorkspace/specialWorkspace.
+			for k, v := range fm {
+				switch k {
+				case "activeWorkspace", "specialWorkspace":
+					// keep our event-driven value
+				default:
+					s.monitors[i][k] = v
+				}
+			}
+		}
+	}
 	s.mu.Unlock()
 	s.emit()
 }
 
-// fetchWindowDetails is a targeted fetch to fill in window size/pid fields
-// that aren't available from the openwindow event. Called inline from the
-// event loop after handling openwindow.
+// fetchWindowDetails is a targeted fetch to fill in window size/pid/position
+// fields that aren't available from socket2 events. It merges the fresh data
+// into the existing window entries so that event-driven workspace/monitor
+// updates that happened just before the fetch are preserved.
 func (s *Service) fetchWindowDetails() {
-	w, err := fetchWindows()
+	fresh, err := fetchWindows()
 	if err != nil {
 		log.Printf("[hyprland] fetchWindowDetails error: %v", err)
 		return
 	}
 	s.mu.Lock()
-	s.windows = w
+	// Build a lookup from address → fresh window data.
+	freshByAddr := make(map[string]map[string]any, len(fresh))
+	for _, w := range fresh {
+		if a, _ := w["address"].(string); a != "" {
+			freshByAddr[a] = w
+		}
+	}
+
+	// For each existing window, merge in fresh fields (at, size, pid, etc.)
+	// but keep event-driven fields (workspace, monitor) from our cache.
+	eventFields := map[string]struct{}{
+		"address": {}, "workspace": {}, "monitor": {}, "floating": {},
+		"fullscreen": {}, "pinned": {}, "minimized": {}, "urgent": {},
+		"title": {}, "class": {},
+	}
+	for i, w := range s.windows {
+		addr, _ := w["address"].(string)
+		if fw, ok := freshByAddr[addr]; ok {
+			for k, v := range fw {
+				if _, isEvent := eventFields[k]; !isEvent {
+					s.windows[i][k] = v
+				}
+			}
+		}
+	}
+
+	// Add any windows from the fresh list that we don't have yet (shouldn't
+	// happen normally, but covers edge cases).
+	for _, fw := range fresh {
+		addr, _ := fw["address"].(string)
+		found := false
+		for _, w := range s.windows {
+			if a, _ := w["address"].(string); a == addr {
+				found = true
+				break
+			}
+		}
+		if !found {
+			s.windows = append(s.windows, fw)
+		}
+	}
+
 	s.mu.Unlock()
 	s.emit()
 }
