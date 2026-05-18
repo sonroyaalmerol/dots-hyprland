@@ -149,11 +149,14 @@ func killQS(s *Service) {
 		return
 	}
 
-	// Send SIGTERM to the process group.
+	// Send SIGTERM first so QuickShell can clean up Wayland resources.
+	// If it doesn't exit in 2 seconds, escalate to SIGKILL.
 	pgid, err := syscall.Getpgid(s.cmd.Process.Pid)
-	if err == nil {
-		syscall.Kill(-pgid, syscall.SIGTERM)
+	if err != nil {
+		return
 	}
+
+	_ = syscall.Kill(-pgid, syscall.SIGTERM)
 
 	done := make(chan struct{})
 	go func() {
@@ -164,10 +167,9 @@ func killQS(s *Service) {
 	select {
 	case <-done:
 		log.Printf("quickshell: terminated gracefully")
-	case <-time.After(5 * time.Second):
+	case <-time.After(2 * time.Second):
 		log.Printf("quickshell: SIGTERM timeout, sending SIGKILL")
-		if pgid > 0 {
-			syscall.Kill(-pgid, syscall.SIGKILL)
-		}
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		<-done
 	}
 }

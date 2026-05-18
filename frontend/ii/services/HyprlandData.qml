@@ -77,7 +77,7 @@ Singleton {
 	}
 
 	function hyprlandClientsForWorkspace(workspace) {
-		return root.windowList.filter(win => win.workspace.id === workspace)
+		return root.windowList.filter(win => win.workspace?.id === workspace)
 	}
 
 	function clientForToplevel(toplevel) {
@@ -89,7 +89,7 @@ Singleton {
 	}
 
 	function biggestWindowForWorkspace(workspaceId) {
-		const windowsInThisWorkspace = HyprlandData.windowList.filter(w => w.workspace.id == workspaceId)
+		const windowsInThisWorkspace = HyprlandData.windowList.filter(w => w.workspace?.id == workspaceId)
 		return windowsInThisWorkspace.reduce((maxWin, win) => {
 			const maxArea = (maxWin?.size?.[0] ?? 0) * (maxWin?.size?.[1] ?? 0)
 			const winArea = (win?.size?.[0] ?? 0) * (win?.size?.[1] ?? 0)

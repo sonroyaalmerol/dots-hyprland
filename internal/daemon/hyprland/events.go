@@ -110,7 +110,9 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 			if aw, ok := m["activeWorkspace"].(map[string]any); ok {
 				if awid, _ := aw["id"].(float64); int(awid) == idn {
 					delete(s.monitors[i], "activeWorkspace")
-					affectedMonitors = append(affectedMonitors, s.snapshotMonitorByName(m["name"].(string)))
+					if name, ok2 := m["name"].(string); ok2 {
+						affectedMonitors = append(affectedMonitors, s.snapshotMonitorByName(name))
+					}
 				}
 			}
 		}
