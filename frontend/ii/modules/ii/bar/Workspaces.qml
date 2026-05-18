@@ -18,7 +18,10 @@ Item {
     property bool borderless: Config.options.bar.borderless
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
     readonly property Toplevel activeWindow: ToplevelManager.activeToplevel
-    readonly property int effectiveActiveWorkspaceId: monitor?.activeWorkspace?.id ?? 1
+    readonly property int effectiveActiveWorkspaceId: {
+        const raw = monitor?.activeWorkspace?.id ?? 1;
+        return (raw >= 1 && raw <= 100) ? raw : 1;
+    }
     
     readonly property int workspacesShown: Config.options.bar.workspaces.shown
     readonly property int workspaceGroup: Math.floor((effectiveActiveWorkspaceId - 1) / root.workspacesShown)
@@ -200,10 +203,7 @@ Item {
                 implicitHeight: vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
                 implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.verticalBarWidth
                 onPressed: {
-                    const curr = root.effectiveActiveWorkspaceId;
-                    const base = ((curr - 1) / root.workspacesShown | 0) * root.workspacesShown;
-                    const targetWS = base + index + 1;
-                    Hyprland.dispatch("workspace " + targetWS);
+                    Hyprland.dispatch("workspace " + workspaceValue);
                 }
                 width: vertical ? undefined : workspaceButtonWidth
                 height: vertical ? workspaceButtonWidth : undefined
