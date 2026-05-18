@@ -18,10 +18,7 @@ Item {
     readonly property var toplevels: ToplevelManager.toplevels
     // Avoid lock-screen temp workspace (2147483646+) leaking into UI.
     // Fall back to 1 for any workspace outside normal range (1-100).
-    readonly property int effectiveActiveWorkspaceId: {
-        const raw = monitor?.activeWorkspace?.id ?? 1
-        return (raw >= 1 && raw <= 100) ? raw : 1
-    }
+    readonly property int effectiveActiveWorkspaceId: Math.max(1, Math.min(100, monitor?.activeWorkspace?.id ?? 1))
     readonly property int workspacesShown: Config.options.overview.rows * Config.options.overview.columns
     readonly property int workspaceGroup: Math.floor((effectiveActiveWorkspaceId - 1) / workspacesShown)
     property bool monitorIsFocused: (Hyprland.focusedMonitor?.name == monitor.name)

@@ -7,6 +7,7 @@ import qs.modules.common.functions
 import QtQuick
 import QtQuick.Controls
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Wayland
 import Quickshell.Widgets
 import Qt5Compat.GraphicalEffects
@@ -15,15 +16,9 @@ Item {
     id: root
     property bool vertical: false
     property bool borderless: Config.options.bar.borderless
-    readonly property string screenName: root.QsWindow.window?.screen?.name ?? ""
-    readonly property var monitorData: HyprlandData.monitors.find(m => m.name === screenName)
+    readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
     readonly property Toplevel activeWindow: ToplevelManager.activeToplevel
-    // Avoid lock-screen temp workspace (2147483646+) leaking into UI.
-    // Fall back to 1 for any workspace outside normal range (1-100).
-    readonly property int effectiveActiveWorkspaceId: {
-        const raw = monitorData?.activeWorkspace?.id ?? 1
-        return (raw >= 1 && raw <= 100) ? raw : 1
-    }
+    readonly property int effectiveActiveWorkspaceId: monitor?.activeWorkspace?.id ?? 1
     
     readonly property int workspacesShown: Config.options.bar.workspaces.shown
     readonly property int workspaceGroup: Math.floor((effectiveActiveWorkspaceId - 1) / root.workspacesShown)
@@ -63,22 +58,22 @@ Item {
 
     // Function to update workspaceOccupied
     function updateWorkspaceOccupied() {
-        const maxWsId = 100 // ignore lock-screen temp workspaces (2147483646+)
         workspaceOccupied = Array.from({ length: root.workspacesShown }, (_, i) => {
-            const targetId = workspaceGroup * root.workspacesShown + i + 1
-            if (targetId > maxWsId) return false
-            return HyprlandData.workspaceIds.includes(targetId)
+            return Hyprland.workspaces.values.some(ws => ws.id === workspaceGroup * root.workspacesShown + i + 1);
         })
     }
 
     // Occupied workspace updates
     Component.onCompleted: updateWorkspaceOccupied()
     Connections {
-        target: HyprlandData
-        function onWorkspacesChanged() {
+        target: Hyprland.workspaces
+        function onValuesChanged() {
             updateWorkspaceOccupied();
         }
-        function onMonitorsChanged() {
+    }
+    Connections {
+        target: Hyprland
+        function onFocusedWorkspaceChanged() {
             updateWorkspaceOccupied();
         }
     }

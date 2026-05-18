@@ -136,6 +136,7 @@ type App struct {
 	gamemodeSvc     *gamemode.Service
 	darkmodeSvc     *darkmode.Service
 	conflictSvc     *conflict.Service
+	compositor      compositor.Compositor
 
 	// State loop — all state mutations happen in a single goroutine.
 	stateCh chan stateEvent
@@ -199,31 +200,11 @@ func (a *App) Run(ctx context.Context) error {
 		log.Printf("uinput: %v (virtual keyboard disabled)", err)
 	}
 
-	// Launch the Wayland compositor first (if not already running).
-	// This blocks until Hyprland's IPC socket is available.
-	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") == "" {
-		log.Printf("[app] Hyprland not detected, launching compositor...")
-		if _, err := compositor.Launch(ctx); err != nil {
-			log.Printf("[app] compositor launch failed: %v", err)
-			// Continue anyway — some daemon features work without Hyprland.
-		}
-	} else if compositor.IsAlive(os.Getenv("HYPRLAND_INSTANCE_SIGNATURE")) {
-		log.Printf("[app] Hyprland already running (signature=%s)", os.Getenv("HYPRLAND_INSTANCE_SIGNATURE"))
-		// Ensure WAYLAND_DISPLAY and DISPLAY are in the systemd environment
-		// even when the daemon restarts with Hyprland already running.
-		runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-		if runtimeDir == "" {
-			runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
-		}
-		compositor.ImportEnvironment(runtimeDir)
-	} else {
-		log.Printf("[app] stale HYPRLAND_INSTANCE_SIGNATURE detected, clearing and relaunching compositor")
-		os.Unsetenv("HYPRLAND_INSTANCE_SIGNATURE")
-		os.Unsetenv("WAYLAND_DISPLAY")
-		if _, err := compositor.Launch(ctx); err != nil {
-			log.Printf("[app] compositor launch failed: %v", err)
-		}
-	}
+	// The daemon does NOT manage the compositor. It starts all services
+	// immediately and reacts when the compositor (Hyprland) becomes
+	// available or disappears. Services that depend on Hyprland already
+	// handle its absence gracefully (they log and idle until detected).
+	a.compositor = compositor.NewHyprland()
 
 	a.socketServer = socket.New(a.cfg.SocketPath)
 
@@ -338,17 +319,11 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runService(ctx, "gamemode", a.gamemodeSvc) })
 	wg.Go(func() { a.runService(ctx, "darkmode", a.darkmodeSvc) })
 
-	// Initial setup: bind keys, generate config files.
-	go func() {
-		time.Sleep(3 * time.Second)
-		cleanup := a.setupHyprlandSystemBinds()
-		defer cleanup()
-		for _, rel := range []string{"monitors.lua", "workspaces.lua"} {
-			if err := a.regenerateGeneratedConfig(rel); err != nil {
-				log.Printf("[app] generate %s: %v", rel, err)
-			}
-		}
-	}()
+	// Compositor watcher: monitors for Hyprland availability and reacts.
+	// When Hyprland first appears: imports environment, regenerates config
+	// files, and binds system keys. This replaces the old blocking
+	// compositor-launch + fixed-delay setup.
+	wg.Go(func() { a.runCompositorWatcher(ctx) })
 
 	<-ctx.Done()
 	log.Printf("shutting down...")
@@ -721,6 +696,64 @@ func (a *App) runQuickshell(ctx context.Context) {
 	}
 }
 
+// runCompositorWatcher polls for Hyprland availability and reacts to
+// state changes. When Hyprland first becomes available it:
+//   - imports WAYLAND_DISPLAY/DISPLAY into the systemd environment
+//   - regenerates Hyprland config files (monitors.lua, workspaces.lua)
+//   - registers system keybinds (power button, lid switch)
+//
+// If Hyprland disappears (compositor restarted or crashed), the watcher
+// resets and waits for it to come back, then re-does setup.
+func (a *App) runCompositorWatcher(ctx context.Context) {
+	const pollInterval = 2 * time.Second
+
+	wasReady := false
+	cleanupBinds := func() {}
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+	defer cleanupBinds()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		ready := a.hyprlandSvc != nil && a.hyprlandSvc.IsRunning()
+
+		if ready && !wasReady {
+			log.Printf("[app] Hyprland detected, running compositor setup")
+			a.onCompositorReady()
+			cleanupBinds = a.setupHyprlandSystemBinds()
+			wasReady = true
+		} else if !ready && wasReady {
+			log.Printf("[app] Hyprland lost, will re-setup when it returns")
+			cleanupBinds()
+			cleanupBinds = func() {}
+			wasReady = false
+		}
+	}
+}
+
+// onCompositorReady runs one-time setup when the compositor first appears.
+func (a *App) onCompositorReady() {
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
+	}
+	if a.compositor != nil {
+		a.compositor.ImportEnvironment(runtimeDir)
+	}
+
+	for _, rel := range []string{"monitors.lua", "workspaces.lua"} {
+		if err := a.regenerateGeneratedConfig(rel); err != nil {
+			log.Printf("[app] generate %s: %v", rel, err)
+		}
+	}
+}
+
 func (a *App) setupHyprlandSystemBinds() func() {
 	binds := []struct{ key, cmd string }{
 		{"XF86PowerOff", "snry send power-button"},
@@ -874,7 +907,9 @@ func (a *App) softReload() {
 	if runtimeDir == "" {
 		runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
 	}
-	compositor.ImportEnvironment(runtimeDir)
+	if a.compositor != nil {
+		a.compositor.ImportEnvironment(runtimeDir)
+	}
 
 	// Regenerate Hyprland config from live monitor/workspace data.
 	for _, rel := range []string{"monitors.lua", "workspaces.lua"} {
