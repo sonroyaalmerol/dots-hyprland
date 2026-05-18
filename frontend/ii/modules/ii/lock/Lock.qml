@@ -7,6 +7,7 @@ import qs.modules.common.panels.lock
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 
 LockScreen {
     id: root
@@ -23,8 +24,8 @@ LockScreen {
                 var monName = Quickshell.screens[j].name
                 var wsId = root.savedWorkspaces[monName]
                 if (wsId !== undefined) {
-                    DaemonSocket.monitorFocus(monName)
-                    DaemonSocket.workspaceFocus(wsId.toString())
+                    Hyprland.dispatch("focusmonitor " + monName)
+                    Hyprland.dispatch("workspace " + wsId)
                 }
             }
             DaemonSocket.reload()
@@ -56,8 +57,8 @@ LockScreen {
                 for (i = 0; i < Quickshell.screens.length; ++i) {
                     mon = Quickshell.screens[i].name
                     ws = next[mon]
-                    DaemonSocket.monitorFocus(mon)
-                    DaemonSocket.workspaceFocus((2147483647 - ws).toString())
+                    Hyprland.dispatch("focusmonitor " + mon)
+                    Hyprland.dispatch("workspace " + (2147483647 - ws))
                 }
                 DaemonSocket.reload()
             } else {

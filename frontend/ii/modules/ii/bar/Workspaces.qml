@@ -74,11 +74,11 @@ Item {
     // Occupied workspace updates
     Component.onCompleted: updateWorkspaceOccupied()
     Connections {
-        target: DaemonSocket
-        function onHyprWorkspacesChanged() {
+        target: HyprlandData
+        function onWorkspacesChanged() {
             updateWorkspaceOccupied();
         }
-        function onHyprMonitorsChanged() {
+        function onMonitorsChanged() {
             updateWorkspaceOccupied();
         }
     }
@@ -93,9 +93,9 @@ Item {
     WheelHandler {
         onWheel: (event) => {
             if (event.angleDelta.y < 0)
-                DaemonSocket.sendCommand("workspace-action workspace r+1");
+                Hyprland.dispatch("workspace r+1");
             else if (event.angleDelta.y > 0)
-                DaemonSocket.sendCommand("workspace-action workspace r-1");
+                Hyprland.dispatch("workspace r-1");
         }
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
     }
@@ -105,7 +105,7 @@ Item {
         acceptedButtons: Qt.BackButton
         onPressed: (event) => {
             if (event.button === Qt.BackButton) {
-                DaemonSocket.workspaceSpecial();
+                Hyprland.dispatch("togglespecialworkspace");
             } 
         }
     }
@@ -204,7 +204,12 @@ Item {
                 property int workspaceValue: workspaceGroup * root.workspacesShown + index + 1
                 implicitHeight: vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
                 implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.verticalBarWidth
-                onPressed: DaemonSocket.sendCommand("workspace-action workspace " + (index + 1))
+                onPressed: {
+                    const curr = root.effectiveActiveWorkspaceId;
+                    const base = ((curr - 1) / root.workspacesShown | 0) * root.workspacesShown;
+                    const targetWS = base + index + 1;
+                    Hyprland.dispatch("workspace " + targetWS);
+                }
                 width: vertical ? undefined : workspaceButtonWidth
                 height: vertical ? workspaceButtonWidth : undefined
 

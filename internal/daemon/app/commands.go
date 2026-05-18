@@ -142,22 +142,6 @@ func dispatchCommand(a *App, line string) {
 		go a.handleCheckdeps()
 	case "diagnose":
 		go a.handleDiagnose()
-	case "workspace-action":
-		a.handleWorkspaceAction(fields[1:])
-	case "workspace":
-		a.routeWorkspace(fields[1:])
-	case "window":
-		a.routeWindow(fields[1:])
-	case "monitor":
-		a.routeMonitor(fields[1:])
-	case "exec":
-		if len(fields) >= 2 {
-			go a.hyprlandSvc.ExecCommand(strings.Join(fields[1:], " "))
-		}
-	case "global":
-		if len(fields) >= 2 {
-			go a.hyprlandSvc.ActivateGlobalShortcut(fields[1])
-		}
 	case "config":
 		a.routeConfig(fields[1:])
 	case "reload":
@@ -497,111 +481,6 @@ func (a *App) dispatchQsLock() {
 	configPath := a.cfg.QuickshellCfg.ConfigPath
 	if err := exec.Command(binary, "-p", configPath, "ipc", "call", "lock", "activate").Run(); err != nil {
 		log.Printf("[app] qs ipc lock failed: %v", err)
-	}
-}
-
-func (a *App) handleWorkspaceAction(args []string) {
-	if len(args) < 2 || a.hyprlandSvc == nil {
-		return
-	}
-	target := args[1]
-
-	if strings.ContainsAny(target, "+-") {
-		if err := a.hyprlandSvc.FocusWorkspace(target); err != nil {
-			log.Printf("[app] workspace-action focus: %v", err)
-		}
-		return
-	}
-
-	if id, err := strconv.Atoi(target); err == nil {
-		currID, err := a.hyprlandSvc.ActiveWorkspaceID()
-		if err != nil {
-			log.Printf("[app] workspace-action get active: %v", err)
-			return
-		}
-		targetWS := ((currID-1)/10)*10 + id
-		if err := a.hyprlandSvc.FocusWorkspace(strconv.Itoa(targetWS)); err != nil {
-			log.Printf("[app] workspace-action focus: %v", err)
-		}
-		return
-	}
-
-	if err := a.hyprlandSvc.FocusWorkspace(target); err != nil {
-		log.Printf("[app] workspace-action focus: %v", err)
-	}
-}
-
-// ── REST-like Hyprland routing ─────────────────────────────────────────────────
-
-func (a *App) routeWorkspace(args []string) {
-	if len(args) < 1 || a.hyprlandSvc == nil {
-		return
-	}
-	switch args[0] {
-	case "focus":
-		if len(args) >= 2 {
-			if err := a.hyprlandSvc.FocusWorkspace(args[1]); err != nil {
-				log.Printf("[app] workspace focus: %v", err)
-			}
-		}
-	case "special":
-		name := ""
-		if len(args) >= 2 {
-			name = args[1]
-		}
-		if err := a.hyprlandSvc.ToggleSpecialWorkspace(name); err != nil {
-			log.Printf("[app] workspace special: %v", err)
-		}
-	}
-}
-
-func (a *App) routeWindow(args []string) {
-	if len(args) < 1 || a.hyprlandSvc == nil {
-		return
-	}
-	switch args[0] {
-	case "focus":
-		if len(args) >= 2 {
-			go a.hyprlandSvc.FocusWindow(args[1])
-		}
-	case "close":
-		if len(args) >= 2 {
-			go a.hyprlandSvc.CloseWindow(args[1])
-		}
-	case "move":
-		if len(args) < 2 {
-			return
-		}
-		switch args[1] {
-		case "workspace":
-			if len(args) >= 3 {
-				win := ""
-				if len(args) >= 4 {
-					win = args[3]
-				}
-				go a.hyprlandSvc.MoveWindowToWorkspace(args[2], win)
-			}
-		case "coords":
-			if len(args) >= 4 {
-				win := ""
-				if len(args) >= 5 {
-					win = args[4]
-				}
-				go a.hyprlandSvc.MoveWindowToCoords(args[2], args[3], win)
-			}
-		}
-	}
-}
-
-func (a *App) routeMonitor(args []string) {
-	if len(args) < 1 || a.hyprlandSvc == nil {
-		return
-	}
-	switch args[0] {
-	case "focus":
-		if len(args) >= 2 {
-			go a.hyprlandSvc.FocusMonitor(args[1])
-		}
 	}
 }
 

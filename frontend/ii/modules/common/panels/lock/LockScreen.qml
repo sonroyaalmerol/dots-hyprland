@@ -65,8 +65,8 @@ Scope {
             GlobalStates.screenLocked = false;
 
             // Refocus last focused window on unlock (hack)
-            DaemonSocket.workspaceSpecial()
-            DaemonSocket.workspaceSpecial()
+            Hyprland.dispatch("togglespecialworkspace")
+            Hyprland.dispatch("togglespecialworkspace")
 
             // Reset
             lockContext.reset();

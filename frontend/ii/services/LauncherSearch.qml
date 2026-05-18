@@ -110,7 +110,7 @@ Singleton {
         {
             action: "wallpaper",
             execute: () => {
-                DaemonSocket.globalShortcut( "quickshell:wallpaperSelectorToggle")
+                Hyprland.dispatch("global quickshell:wallpaperSelectorToggle")
             }
         },
         {

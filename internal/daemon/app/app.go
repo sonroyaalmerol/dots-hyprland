@@ -147,9 +147,6 @@ type App struct {
 	lastStateHash   uint64
 	lastFocusActive time.Time
 
-	// Monitor change dedup: only regenerate monitors/workspaces when topology changes.
-	lastMonitorHash uint64
-
 	// Canonical state (accessed only from stateLoop goroutine).
 	hwTablet     bool
 	textFocus    bool
@@ -230,9 +227,7 @@ func (a *App) Run(ctx context.Context) error {
 
 	a.socketServer = socket.New(a.cfg.SocketPath)
 
-	// Wrap the socket emitter to also react to Hyprland monitor changes.
-	hlEmit := a.hyprlandEmitFunc(a.socketServer.Emitter().Emit)
-	a.hyprlandSvc = hyprland.New(a.cfg.HyprlandCfg, hlEmit)
+	a.hyprlandSvc = hyprland.New(a.cfg.HyprlandCfg, nil)
 
 	a.lockscreenSvc = lockscreen.New(a.cfg.LockscreenCfg, a.hyprlandSvc, a.onLockscreenEvent)
 	a.powersaveSvc = powersave.New(a.cfg.PowersaveTimeout, a.onPowerState)
@@ -643,7 +638,6 @@ func (a *App) socketSnapshots() []socket.SnapshotProvider {
 	}
 	snap(a) // App always provides state
 	snap(a.lockscreenSvc)
-	snap(a.hyprlandSvc)
 	snap(a.resourcesSvc)
 	snap(a.weatherSvc)
 	snap(a.updatesSvc)
@@ -863,47 +857,6 @@ func (a *App) regenerateGeneratedConfig(rel string) error {
 }
 
 // hyprlandEmitFunc returns a wrapper around the socket emitter that detects
-// monitor topology changes and triggers regeneration of monitors.lua and
-// workspaces.lua. This replaces the old 5-minute polling ticker.
-func (a *App) hyprlandEmitFunc(emit func(map[string]any)) func(map[string]any) {
-	return func(m map[string]any) {
-		// Always forward the event to socket clients.
-		emit(m)
-
-		// Detect monitor topology changes for reactive config regeneration.
-		if m["event"] != "hyprland_data" {
-			return
-		}
-		data, ok := m["data"].(map[string]any)
-		if !ok {
-			return
-		}
-		mons, ok := data["monitors"].([]map[string]any)
-		if !ok || len(mons) == 0 {
-			return
-		}
-
-		// Hash monitor topology (name + resolution) to detect real changes.
-		h := fnv.New64a()
-		for _, m := range mons {
-			fmt.Fprintf(h, "%v|%v|%v|%v", m["name"], m["width"], m["height"], m["refreshRate"])
-		}
-		newHash := h.Sum64()
-		if newHash == a.lastMonitorHash {
-			return // no topology change
-		}
-		a.lastMonitorHash = newHash
-
-		go func() {
-			for _, rel := range []string{"monitors.lua", "workspaces.lua"} {
-				if err := a.regenerateGeneratedConfig(rel); err != nil {
-					log.Printf("[app] generate %s: %v", rel, err)
-				}
-			}
-		}()
-	}
-}
-
 func (a *App) DispatchCommand(line string) {
 	dispatchCommand(a, line)
 }

@@ -8,6 +8,7 @@ import qs.modules.common
 
 /**
  * Exposes the active Hyprland Xkb keyboard layout name and code for indicators.
+ * Reads layout list from daemon on startup, then tracks changes via Hyprland raw events.
  */
 Singleton {
 	id: root
@@ -23,6 +24,11 @@ Singleton {
 				const dataString = event.data;
 				const newLayout = dataString.substring(dataString.indexOf(",") + 1);
 				Config.options.osk.layout = newLayout.split(" (")[0];
+				root.currentLayoutName = newLayout;
+				// Resolve code from cached mapping
+				if (root.cachedLayoutCodes && root.cachedLayoutCodes[newLayout]) {
+					root.currentLayoutCode = root.cachedLayoutCodes[newLayout];
+				}
 			}
 		}
 	}
