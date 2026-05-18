@@ -135,7 +135,7 @@ Singleton {
 
 	property bool connected: daemonSocket.connected
 
-	readonly property string socketPath: Quickshell.env("XDG_RUNTIME_DIR") + "/snry-daemon.sock"
+	readonly property string socketPath: Quickshell.env("SNRY_DAEMON_SOCK") || (Quickshell.env("XDG_RUNTIME_DIR") + "/snry-daemon.sock")
 
 	function authenticate(password) { sendCommand("auth " + password) }
 	function lock() { sendCommand("lock") }

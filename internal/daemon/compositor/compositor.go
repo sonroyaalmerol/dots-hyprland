@@ -15,6 +15,19 @@ import (
 	"time"
 )
 
+// resolveCompositorBinary finds the compositor launcher. Prefers start-hyprland
+// wrapper, falls back to Hyprland directly. Returns (binary, isWrapper).
+func resolveCompositorBinary() (string, bool) {
+	if bin, err := exec.LookPath("start-hyprland"); err == nil {
+		return bin, true
+	}
+	if bin, err := exec.LookPath("Hyprland"); err == nil {
+		log.Printf("[compositor] start-hyprland not found, using Hyprland directly")
+		return bin, false
+	}
+	return "", false
+}
+
 // Launch starts the Hyprland compositor and blocks until its IPC socket is
 // available (or ctx is cancelled). It returns the HYPRLAND_INSTANCE_SIGNATURE
 // that should be set in the environment for subsequent Hyprland IPC calls.
@@ -52,10 +65,10 @@ func Launch(ctx context.Context) (string, error) {
 		return existing, nil
 	}
 
-	// Launch start-hyprland as a subprocess.
-	bin, err := exec.LookPath("start-hyprland")
-	if err != nil {
-		return "", fmt.Errorf("start-hyprland not found: %w", err)
+	// Launch the compositor. Prefer start-hyprland wrapper; fall back to Hyprland.
+	bin, isWrapper := resolveCompositorBinary()
+	if bin == "" {
+		return "", fmt.Errorf("neither start-hyprland nor Hyprland found in PATH")
 	}
 
 	// Determine the system config entry point.
@@ -63,7 +76,11 @@ func Launch(ctx context.Context) (string, error) {
 
 	args := []string{}
 	if systemConfig != "" {
-		args = append(args, "--", "--config", systemConfig)
+		if isWrapper {
+			args = append(args, "--", "--config", systemConfig)
+		} else {
+			args = append(args, "--config", systemConfig)
+		}
 	}
 
 	cmd := exec.CommandContext(ctx, bin, args...)
@@ -75,10 +92,10 @@ func Launch(ctx context.Context) (string, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("start start-hyprland: %w", err)
+		return "", fmt.Errorf("start %s: %w", filepath.Base(bin), err)
 	}
 
-	log.Printf("[compositor] started start-hyprland (pid %d), waiting for socket...", cmd.Process.Pid)
+	log.Printf("[compositor] started %s (pid %d), waiting for socket...", filepath.Base(bin), cmd.Process.Pid)
 
 	// Wait for the Hyprland socket to appear.
 	// start-hyprland creates $XDG_RUNTIME_DIR/hypr/<signature>/.socket.sock

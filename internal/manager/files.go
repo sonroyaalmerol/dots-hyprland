@@ -238,6 +238,10 @@ func syncQuickshell(cfg Config) error {
 
 	deployDir := "/usr/share/snry-shell/frontend/ii"
 	if err := os.MkdirAll(deployDir, 0o755); err != nil {
+		if os.IsPermission(err) {
+			fmt.Printf("  [sync] quickshell frontend already deployed at %s (skipping user sync)\n", deployDir)
+			return nil
+		}
 		return fmt.Errorf("create deploy dir %s: %w", deployDir, err)
 	}
 
@@ -313,35 +317,6 @@ func syncHyprland(cfg Config, hl hyprland.API) error {
 		return err
 	}
 	return GenerateWorkspacesLua(cfg, hl)
-}
-
-func copyDirRecursive(src, dst string, skipExisting bool) error {
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		return err
-	}
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		srcPath := filepath.Join(src, e.Name())
-		dstPath := filepath.Join(dst, e.Name())
-		if e.IsDir() {
-			if err := copyDirRecursive(srcPath, dstPath, skipExisting); err != nil {
-				return err
-			}
-		} else {
-			if skipExisting {
-				if _, err := os.Stat(dstPath); err == nil {
-					continue
-				}
-			}
-			if err := copyFile(srcPath, dstPath, 0o644); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 func syncBash(cfg Config) error {
@@ -610,6 +585,11 @@ func ensureSnrySymlink() error {
 }
 
 func installPythonVenv(cfg Config) error {
+	if _, err := exec.LookPath("uv"); err != nil {
+		fmt.Println("  [warn] uv not found, skipping Python venv setup")
+		fmt.Println("  [warn] Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh")
+		return nil
+	}
 	venvPath := cfg.VenvPath()
 	reqFile := PythonRequirements(cfg.DataDir())
 

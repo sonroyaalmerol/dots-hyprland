@@ -120,18 +120,18 @@ func isMonochromeFromColors(colors ColorMap) bool {
 func GenerateGhosttyConfig(colors ColorMap, termColors map[string]string, isDark bool) string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("background = %s\n", colors["surface"]))
-	b.WriteString(fmt.Sprintf("foreground = %s\n", colors["on_surface"]))
-	b.WriteString(fmt.Sprintf("cursor-color = %s\n", colors["on_surface"]))
-	b.WriteString(fmt.Sprintf("selection-background = %s\n", colors["on_secondary_container"]))
-	b.WriteString(fmt.Sprintf("selection-foreground = %s\n", colors["secondary_container"]))
+	fmt.Fprintf(&b, "background = %s\n", colors["surface"])
+	fmt.Fprintf(&b, "foreground = %s\n", colors["on_surface"])
+	fmt.Fprintf(&b, "cursor-color = %s\n", colors["on_surface"])
+	fmt.Fprintf(&b, "selection-background = %s\n", colors["on_secondary_container"])
+	fmt.Fprintf(&b, "selection-foreground = %s\n", colors["secondary_container"])
 	b.WriteString("\n")
 
 	// Standard 16 palette entries
 	for i := 0; i <= 15; i++ {
 		key := fmt.Sprintf("term%d", i)
 		if hex, ok := termColors[key]; ok {
-			b.WriteString(fmt.Sprintf("palette = %d=%s\n", i, hex))
+			fmt.Fprintf(&b, "palette = %d=%s\n", i, hex)
 		}
 	}
 
@@ -147,7 +147,7 @@ func GenerateGhosttyConfig(colors ColorMap, termColors map[string]string, isDark
 	}
 	for _, e := range extended {
 		if hex, ok := colors[e.name]; ok {
-			b.WriteString(fmt.Sprintf("palette = %d=%s\n", e.idx, hex))
+			fmt.Fprintf(&b, "palette = %d=%s\n", e.idx, hex)
 		}
 	}
 
@@ -163,7 +163,7 @@ func GenerateGhosttyConfig(colors ColorMap, termColors map[string]string, isDark
 	}
 	for _, e := range onEntries {
 		if hex, ok := colors[e.name]; ok {
-			b.WriteString(fmt.Sprintf("palette = %d=%s\n", e.idx, hex))
+			fmt.Fprintf(&b, "palette = %d=%s\n", e.idx, hex)
 		}
 	}
 
@@ -177,7 +177,7 @@ func GenerateGhosttyConfig(colors ColorMap, termColors map[string]string, isDark
 	}
 	for _, e := range accents {
 		if hex, ok := colors[e.name]; ok {
-			b.WriteString(fmt.Sprintf("palette = %d=%s\n", e.idx, hex))
+			fmt.Fprintf(&b, "palette = %d=%s\n", e.idx, hex)
 		}
 	}
 
@@ -193,7 +193,7 @@ func GenerateTerminalSequences(colors ColorMap, termColors map[string]string) st
 	for i := 0; i <= 15; i++ {
 		key := fmt.Sprintf("term%d", i)
 		if hex, ok := termColors[key]; ok {
-			b.WriteString(fmt.Sprintf("\x1b]4;%d;%s\x1b\\", i, hex))
+			fmt.Fprintf(&b, "\x1b]4;%d;%s\x1b\\", i, hex)
 		}
 	}
 
@@ -210,7 +210,7 @@ func GenerateTerminalSequences(colors ColorMap, termColors map[string]string) st
 		248: colors["error_container"],
 	}
 	for idx, hex := range extended {
-		b.WriteString(fmt.Sprintf("\x1b]4;%d;%s\x1b\\", idx, hex))
+		fmt.Fprintf(&b, "\x1b]4;%d;%s\x1b\\", idx, hex)
 	}
 
 	// On- entries
@@ -226,7 +226,7 @@ func GenerateTerminalSequences(colors ColorMap, termColors map[string]string) st
 		240: colors["on_primary"],
 	}
 	for idx, hex := range onEntries {
-		b.WriteString(fmt.Sprintf("\x1b]4;%d;%s\x1b\\", idx, hex))
+		fmt.Fprintf(&b, "\x1b]4;%d;%s\x1b\\", idx, hex)
 	}
 
 	// Accent entries
@@ -236,22 +236,22 @@ func GenerateTerminalSequences(colors ColorMap, termColors map[string]string) st
 		245: colors["outline_variant"],
 	}
 	for idx, hex := range accents {
-		b.WriteString(fmt.Sprintf("\x1b]4;%d;%s\x1b\\", idx, hex))
+		fmt.Fprintf(&b, "\x1b]4;%d;%s\x1b\\", idx, hex)
 	}
 
 	// Foreground/background
 	termFg, fgOk := termColors["term7"]
 	termBg, bgOk := termColors["term0"]
 	if fgOk {
-		b.WriteString(fmt.Sprintf("\x1b]10;%s\x1b\\", termFg)) // foreground
+		fmt.Fprintf(&b, "\x1b]10;%s\x1b\\", termFg) // foreground
 	}
 	if bgOk {
-		b.WriteString(fmt.Sprintf("\x1b]11;[100]%s\x1b\\", termBg))  // background
-		b.WriteString(fmt.Sprintf("\x1b]12;%s\x1b\\", termFg))       // cursor
-		b.WriteString(fmt.Sprintf("\x1b]13;%s\x1b\\", termFg))       // cursor foreground
-		b.WriteString(fmt.Sprintf("\x1b]17;%s\x1b\\", termFg))       // selection fg
-		b.WriteString(fmt.Sprintf("\x1b]19;%s\x1b\\", termBg))       // selection bg
-		b.WriteString(fmt.Sprintf("\x1b]708;[100]%s\x1b\\", termBg)) // bg
+		fmt.Fprintf(&b, "\x1b]11;[100]%s\x1b\\", termBg)  // background
+		fmt.Fprintf(&b, "\x1b]12;%s\x1b\\", termFg)       // cursor
+		fmt.Fprintf(&b, "\x1b]13;%s\x1b\\", termFg)       // cursor foreground
+		fmt.Fprintf(&b, "\x1b]17;%s\x1b\\", termFg)       // selection fg
+		fmt.Fprintf(&b, "\x1b]19;%s\x1b\\", termBg)       // selection bg
+		fmt.Fprintf(&b, "\x1b]708;[100]%s\x1b\\", termBg) // bg
 	}
 
 	return b.String()

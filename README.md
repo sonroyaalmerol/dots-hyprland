@@ -151,7 +151,7 @@ Full keybind list is available in-app via `Super + /`.
 
 ### Optional
 
-See `PKGBUILD` for the full dependency list. Key packages:
+See `dist/aur/snry-shell/PKGBUILD` for the full dependency list. Key packages:
 
 | Category | Packages                                    |
 | -------- | ------------------------------------------- |
@@ -168,8 +168,13 @@ See `PKGBUILD` for the full dependency list. Key packages:
 ### Arch Linux (AUR)
 
 ```sh
-paru -S snry-shell-qs
+# Shell (bar, panels, daemon, configs)
+paru -S snry-shell
 snry-daemon setup
+
+# Display manager (optional, replaces login screen)
+paru -S snry-dm
+sudo systemctl enable snry-dm.service
 ```
 
 ### From Source
@@ -178,6 +183,8 @@ snry-daemon setup
 git clone https://github.com/sonroyaalmerol/snry-shell.git
 cd snry-shell
 go build -o snry-daemon ./cmd/snry-daemon
+go build -o snry-dm ./cmd/snry-dm
+sudo cp snry-dm /usr/bin/snry-dm
 ./snry-daemon setup
 ```
 

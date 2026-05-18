@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  publish:
+  publish-snry-shell:
+    name: Publish snry-shell
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,59 +17,117 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG#v}"
           echo "Updating pkgver to $VERSION"
-          sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+          sed -i "s/^pkgver=.*/pkgver=$VERSION/" dist/aur/snry-shell/PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" dist/aur/snry-shell/PKGBUILD
 
       - name: Validate PKGBUILD
         run: |
-          # Install dependencies needed for makepkg --printsrcinfo
-          sudo apt-get update
-          sudo apt-get install -y pacman-package-manager || true
-          # Basic validation
-          bash -n PKGBUILD
-          bash -n snry-shell-qs.install
-          source PKGBUILD
+          bash -n dist/aur/snry-shell/PKGBUILD
+          bash -n dist/aur/snry-shell/snry-shell.install
+          source dist/aur/snry-shell/PKGBUILD
           echo "Package: $pkgname $pkgver-$pkgrel"
+          echo "Arch: ${arch[*]}"
+          echo "Depends: ${#depends[@]} packages"
 
-      - name: Generate .SRCINFO
+      - name: Generate .SRCINFO for snry-shell
         run: |
-          # Generate .SRCINFO manually since pacman isn't available on Ubuntu
-          source PKGBUILD
-          cat > .SRCINFO <<EOF
-          pkgbase = snry-shell-qs
+          source dist/aur/snry-shell/PKGBUILD
+          cat > dist/aur/snry-shell/.SRCINFO <<EOF
+          pkgbase = snry-shell
           	pkgdesc = $pkgdesc
           	pkgver = $pkgver
           	pkgrel = $pkgrel
           	url = $url
-          	arch = any
-          	license = $license
+          	arch = ${arch[*]}
+          	license = ${license[*]}
           EOF
           for dep in "${depends[@]}"; do
-            echo "	depends = $dep" >> .SRCINFO
+            echo "	depends = $dep" >> dist/aur/snry-shell/.SRCINFO
           done
           for dep in "${makedepends[@]}"; do
-            echo "	makedepends = $dep" >> .SRCINFO
+            echo "	makedepends = $dep" >> dist/aur/snry-shell/.SRCINFO
           done
           for dep in "${optdepends[@]}"; do
-            echo "	optdepends = $dep" >> .SRCINFO
+            echo "	optdepends = $dep" >> dist/aur/snry-shell/.SRCINFO
           done
-          for src in "${source[@]}"; do
-            echo "	source = $src" >> .SRCINFO
-          done
-          echo "	sha256sums = SKIP" >> .SRCINFO
-          echo "" >> .SRCINFO
-          echo "pkgname = snry-shell-qs" >> .SRCINFO
-          echo "	install = snry-shell-qs.install" >> .SRCINFO
-          cat .SRCINFO
+          echo "	source = ${source[*]}" >> dist/aur/snry-shell/.SRCINFO
+          echo "	sha256sums = SKIP" >> dist/aur/snry-shell/.SRCINFO
+          echo "" >> dist/aur/snry-shell/.SRCINFO
+          echo "pkgname = snry-shell" >> dist/aur/snry-shell/.SRCINFO
+          echo "	install = snry-shell.install" >> dist/aur/snry-shell/.SRCINFO
 
-      - name: Publish snry-shell-qs to AUR
+      - name: Publish snry-shell to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
         with:
-          pkgname: snry-shell-qs
-          pkgbuild: ./PKGBUILD
+          pkgname: snry-shell
+          pkgbuild: ./dist/aur/snry-shell/PKGBUILD
           assets: |
-            ./snry-shell-qs.install
-            ./.SRCINFO
+            ./dist/aur/snry-shell/snry-shell.install
+            ./dist/aur/snry-shell/.SRCINFO
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          post_process: git checkout -B master origin/master
+
+  publish-snry-dm:
+    name: Publish snry-dm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update PKGBUILD version from tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "Updating pkgver to $VERSION"
+          sed -i "s/^pkgver=.*/pkgver=$VERSION/" dist/aur/snry-dm/PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" dist/aur/snry-dm/PKGBUILD
+
+      - name: Validate PKGBUILD
+        run: |
+          bash -n dist/aur/snry-dm/PKGBUILD
+          bash -n dist/aur/snry-dm/snry-dm.install
+          source dist/aur/snry-dm/PKGBUILD
+          echo "Package: $pkgname $pkgver-$pkgrel"
+          echo "Arch: ${arch[*]}"
+          echo "Depends: ${#depends[@]} packages"
+
+      - name: Generate .SRCINFO for snry-dm
+        run: |
+          source dist/aur/snry-dm/PKGBUILD
+          cat > dist/aur/snry-dm/.SRCINFO <<EOF
+          pkgbase = snry-dm
+          	pkgdesc = $pkgdesc
+          	pkgver = $pkgver
+          	pkgrel = $pkgrel
+          	url = $url
+          	arch = ${arch[*]}
+          	license = ${license[*]}
+          EOF
+          for dep in "${depends[@]}"; do
+            echo "	depends = $dep" >> dist/aur/snry-dm/.SRCINFO
+          done
+          for dep in "${makedepends[@]}"; do
+            echo "	makedepends = $dep" >> dist/aur/snry-dm/.SRCINFO
+          done
+          for dep in "${optdepends[@]}"; do
+            echo "	optdepends = $dep" >> dist/aur/snry-dm/.SRCINFO
+          done
+          echo "	source = ${source[*]}" >> dist/aur/snry-dm/.SRCINFO
+          echo "	sha256sums = SKIP" >> dist/aur/snry-dm/.SRCINFO
+          echo "" >> dist/aur/snry-dm/.SRCINFO
+          echo "pkgname = snry-dm" >> dist/aur/snry-dm/.SRCINFO
+          echo "	install = snry-dm.install" >> dist/aur/snry-dm/.SRCINFO
+          echo "	backup = ${backup[*]}" >> dist/aur/snry-dm/.SRCINFO
+
+      - name: Publish snry-dm to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
+        with:
+          pkgname: snry-dm
+          pkgbuild: ./dist/aur/snry-dm/PKGBUILD
+          assets: |
+            ./dist/aur/snry-dm/snry-dm.install
+            ./dist/aur/snry-dm/.SRCINFO
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}

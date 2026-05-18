@@ -13,7 +13,7 @@ post_install() {
 
 	echo ">>> Setting up Snry Shell for user: $user"
 
-	# Phase 1: System setup (we are root — groups, services, PAM, logind)
+	# Phase 1: System setup (groups, services, PAM, logind)
 	HOME="/home/$user" snry-daemon setups 2>/dev/null || true
 
 	# Phase 2: Install runtime dependencies (as the user)
@@ -31,6 +31,10 @@ post_install() {
 	echo ""
 	echo ">>> Snry Shell installed and configured!"
 	echo ">>> Log out and log back in (or reboot) to start."
+	echo ""
+	echo ">>> To enable the display manager (replaces your login screen):"
+	echo ">>>   sudo pacman -S snry-dm"
+	echo ">>>   sudo systemctl enable snry-dm.service"
 }
 
 post_upgrade() {
