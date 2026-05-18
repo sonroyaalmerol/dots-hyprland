@@ -34,7 +34,7 @@ type Service struct {
 	wsNameToID          map[string]int // workspace name → ID for O(1) lookups
 	needsFullFetch      bool           // set by configreloaded, triggers full re-fetch on next iteration
 	needsMonitorDetails bool           // set by monitoraddedv2, triggers monitor re-fetch for resolution/scale
-	needsWindowFetch    bool           // set by openwindow, triggers window re-fetch for size/pid fields
+	needsWindowFetch    bool           // set by openwindow, triggers j/clients fetch for size/pid fields
 }
 
 func New(cfg Config, cb func(map[string]any)) *Service {
@@ -235,11 +235,11 @@ func (s *Service) fetchAll() error {
 }
 
 // subscribeEvents connects to socket2 and processes Hyprland events in real time.
-// Each event is parsed inline and the cache is mutated directly — no debouncing,
-// no socket1 round-trips. The only exceptions are:
-//   - configreloaded → triggers a full re-fetch on the next iteration
-//   - monitoraddedv2 → after the event is handled, monitors are re-fetched for full detail
-//   - openwindow → triggers a window re-fetch for size/pid fields missing from the event
+// Each event is parsed inline and the cache is mutated directly — purely event-driven,
+// mirroring QuickShell's HyprlandIpc approach. The only socket1 round-trips are:
+//   - openwindow → j/clients fetch to fill size/pid fields not in the event
+//   - configreloaded → full re-fetch
+//   - monitoraddedv2 → monitor re-fetch for resolution/scale
 //   - On reconnect, the caller re-runs fetchAll()+emit before re-subscribing.
 func (s *Service) subscribeEvents(ctx context.Context) error {
 	sockPath := eventSocketPath()
@@ -270,10 +270,6 @@ func (s *Service) subscribeEvents(ctx context.Context) error {
 		}
 	}()
 
-	// Periodic window refresh to catch position/size drift that events don't cover.
-	refreshTick := time.NewTicker(5 * time.Second)
-	defer refreshTick.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -281,10 +277,6 @@ func (s *Service) subscribeEvents(ctx context.Context) error {
 
 		case err := <-doneCh:
 			return err
-
-		case <-refreshTick.C:
-			// Light-weight: only re-fetch windows to keep at/size current.
-			s.fetchWindowDetails()
 
 		case line := <-eventCh:
 			// Hyprland format: "EVENT>>DATA\n" — event name has no whitespace.
@@ -347,10 +339,10 @@ func (s *Service) fetchMonitorDetails() {
 	s.emit()
 }
 
-// fetchWindowDetails is a targeted fetch to fill in window size/pid/position
-// fields that aren't available from socket2 events. It merges the fresh data
-// into the existing window entries so that event-driven workspace/monitor
-// updates that happened just before the fetch are preserved.
+// fetchWindowDetails fetches j/clients and replaces cached window data with
+// the authoritative fresh data (mirrors QuickShell's refreshToplevels). It is
+// called after openwindow to fill size/pid/position fields not available from
+// the event. Windows not yet visible in j/clients are kept from the cache.
 func (s *Service) fetchWindowDetails() {
 	fresh, err := fetchWindows()
 	if err != nil {
@@ -358,7 +350,6 @@ func (s *Service) fetchWindowDetails() {
 		return
 	}
 	s.mu.Lock()
-	// Build a lookup from address → fresh window data.
 	freshByAddr := make(map[string]map[string]any, len(fresh))
 	for _, w := range fresh {
 		if a, _ := w["address"].(string); a != "" {
@@ -366,40 +357,22 @@ func (s *Service) fetchWindowDetails() {
 		}
 	}
 
-	// For each existing window, merge in fresh fields (at, size, pid, etc.)
-	// but keep event-driven fields (workspace, monitor) from our cache.
-	eventFields := map[string]struct{}{
-		"address": {}, "workspace": {}, "monitor": {}, "floating": {},
-		"fullscreen": {}, "pinned": {}, "minimized": {}, "urgent": {},
-		"title": {}, "class": {},
-	}
-	for i, w := range s.windows {
+	var merged []map[string]any
+	for _, w := range s.windows {
 		addr, _ := w["address"].(string)
 		if fw, ok := freshByAddr[addr]; ok {
-			for k, v := range fw {
-				if _, isEvent := eventFields[k]; !isEvent {
-					s.windows[i][k] = v
-				}
-			}
+			merged = append(merged, fw)
+			delete(freshByAddr, addr)
+		} else {
+			// Not yet in j/clients — keep event-driven entry.
+			merged = append(merged, w)
 		}
 	}
-
-	// Add any windows from the fresh list that we don't have yet (shouldn't
-	// happen normally, but covers edge cases).
-	for _, fw := range fresh {
-		addr, _ := fw["address"].(string)
-		found := false
-		for _, w := range s.windows {
-			if a, _ := w["address"].(string); a == addr {
-				found = true
-				break
-			}
-		}
-		if !found {
-			s.windows = append(s.windows, fw)
-		}
+	for _, fw := range freshByAddr {
+		merged = append(merged, fw)
 	}
 
+	s.windows = merged
 	s.mu.Unlock()
 	s.emit()
 }

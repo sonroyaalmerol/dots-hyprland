@@ -174,7 +174,7 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		s.needsWindowFetch = true
 		s.mu.Unlock()
 		// Do NOT emit here — the window entry is incomplete (no at/size/monitor).
-		// fetchWindowDetails() will emit after the full j/clients round-trip.
+		// fetchWindowDetails() will emit after the j/clients round-trip.
 
 	case "closewindow", "kill":
 		s.mu.Lock()
@@ -205,9 +205,6 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		wsID, _ := strconv.Atoi(wsIDStr)
 		s.mu.Lock()
 		s.putWindowWorkspace(addr, wsID, wsName)
-		// Also update the window's monitor field based on which monitor
-		// has the target workspace active (movewindowv2 doesn't carry
-		// monitor info; the old debounced re-fetch compensated for this).
 		for _, m := range s.monitors {
 			if aw, ok := m["activeWorkspace"].(map[string]any); ok {
 				if awid, _ := aw["id"].(float64); int(awid) == wsID {
@@ -218,7 +215,6 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 				}
 			}
 		}
-		s.needsWindowFetch = true // re-fetch to update at/size after workspace move
 		s.mu.Unlock()
 		s.emit()
 
@@ -244,7 +240,6 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 				}
 			}
 		}
-		s.needsWindowFetch = true
 		s.mu.Unlock()
 		s.emit()
 
