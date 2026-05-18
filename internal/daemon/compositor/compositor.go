@@ -118,6 +118,8 @@ func Launch(ctx context.Context) (string, error) {
 	// relying on os.Setenv which only affects the daemon process.
 	ImportEnvironment(runtimeDir)
 
+	cleanupStaleInstances(runtimeDir, sig)
+
 	log.Printf("[compositor] Hyprland ready (signature=%s)", sig)
 	return sig, nil
 }
@@ -162,6 +164,30 @@ func waitForSocket(ctx context.Context, runtimeDir string) (string, error) {
 					return e.Name(), nil
 				}
 			}
+		}
+	}
+}
+
+// cleanupStaleInstances removes Hyprland instance directories whose sockets
+// are no longer reachable. Keeps only the live instance (liveSig).
+func cleanupStaleInstances(runtimeDir, liveSig string) {
+	hyprDir := filepath.Join(runtimeDir, "hypr")
+	entries, err := os.ReadDir(hyprDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() == liveSig {
+			continue
+		}
+		sockPath := filepath.Join(hyprDir, e.Name(), ".socket.sock")
+		conn, err := net.DialTimeout("unix", sockPath, 100*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			continue // still live
+		}
+		if err := os.RemoveAll(filepath.Join(hyprDir, e.Name())); err == nil {
+			log.Printf("[compositor] cleaned up stale instance: %s", e.Name())
 		}
 	}
 }

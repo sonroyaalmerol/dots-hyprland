@@ -203,8 +203,8 @@ Item {
                     property bool atInitPosition: (initX == x && initY == y)
 
                     // Offset on the canvas
-                    property int workspaceColIndex: getWsColumn(windowData?.workspace.id)
-                    property int workspaceRowIndex: getWsRow(windowData?.workspace.id)
+                    property int workspaceColIndex: getWsColumn(windowData?.workspace?.id)
+                    property int workspaceRowIndex: getWsRow(windowData?.workspace?.id)
                     xOffset: (root.workspaceImplicitWidth + workspaceSpacing) * workspaceColIndex
                     yOffset: (root.workspaceImplicitHeight + workspaceSpacing) * workspaceRowIndex
                     property real xWithinWorkspaceWidget: Math.max((windowData?.at[0] - (monitor?.x ?? 0) - monitorData?.reserved[0]) * root.scale, 0)
@@ -256,7 +256,7 @@ Item {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         drag.target: parent
                         onPressed: (mouse) => {
-                            root.draggingFromWorkspace = windowData?.workspace.id
+                            root.draggingFromWorkspace = windowData?.workspace?.id
                             window.pressed = true
                             window.Drag.active = true
                             window.Drag.source = window
@@ -269,7 +269,7 @@ Item {
                             window.pressed = false
                             window.Drag.active = false
                             root.draggingFromWorkspace = -1
-                            if (targetWorkspace !== -1 && targetWorkspace !== windowData?.workspace.id) {
+                            if (targetWorkspace !== -1 && targetWorkspace !== windowData?.workspace?.id) {
                                 DaemonSocket.windowMoveWorkspace(targetWorkspace, `address:${window.windowData?.address}`)
                                 updateWindowPosition.restart()
                             }
