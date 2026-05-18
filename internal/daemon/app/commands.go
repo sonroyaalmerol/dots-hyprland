@@ -69,6 +69,16 @@ func dispatchCommand(a *App, line string) {
 			codes = append(codes, uint16(code))
 		}
 		a.uinput.Combo(codes)
+	case "workspace-action":
+		if len(fields) < 3 || a.hyprlandSvc == nil {
+			return
+		}
+		switch fields[1] {
+		case "workspace":
+			a.hyprlandSvc.FocusWorkspace(fields[2])
+		case "movetoworkspacesilent":
+			a.hyprlandSvc.MoveWindowToWorkspace(fields[2], "")
+		}
 	case "auth":
 		if len(fields) < 2 || a.lockscreenSvc == nil {
 			return
