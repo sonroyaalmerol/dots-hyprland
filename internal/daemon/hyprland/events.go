@@ -32,8 +32,9 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		}
 		wsID, _ := strconv.Atoi(wsIDStr)
 		s.mu.Lock()
-		s.putMonitorActiveWS(monName, wsID)
-		s.putActiveWorkspaceMonitor(wsID, monName)
+		wsName := s.workspaceNameByID(wsID)
+		s.putMonitorActiveWS(monName, wsID, wsName)
+		s.putActiveWorkspaceFull(wsID, wsName, monName)
 		s.mu.Unlock()
 		s.emit()
 
@@ -48,8 +49,8 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 			return
 		}
 		s.mu.Lock()
-		s.putMonitorActiveWS(monName, wsID)
-		s.putActiveWorkspaceMonitor(wsID, monName)
+		s.putMonitorActiveWS(monName, wsID, wsName)
+		s.putActiveWorkspaceFull(wsID, wsName, monName)
 		s.mu.Unlock()
 		s.emit()
 
@@ -78,6 +79,15 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 				break
 			}
 		}
+		// If any monitor's active workspace was the destroyed one,
+		// clear it (mirrors QuickShell's null-check after destroyworkspacev2).
+		for i, m := range s.monitors {
+			if aw, ok := m["activeWorkspace"].(map[string]any); ok {
+				if awid, _ := aw["id"].(float64); int(awid) == idn {
+					delete(s.monitors[i], "activeWorkspace")
+				}
+			}
+		}
 		s.mu.Unlock()
 		s.emit()
 
@@ -91,7 +101,7 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 		wsID, _ := strconv.Atoi(id)
 		s.mu.Lock()
 		s.upsertWorkspace(wsID, wsName)
-		s.putMonitorActiveWS(monName, wsID)
+		s.putMonitorActiveWS(monName, wsID, wsName)
 		// Clear this workspace from other monitors.
 		for i, m := range s.monitors {
 			if name, _ := m["name"].(string); name != monName {
@@ -329,8 +339,10 @@ func (s *Service) handleSocket2Event(eventName, data string) {
 			s.monitors = append(s.monitors, map[string]any{
 				"id": monID, "name": name, "description": desc,
 			})
-			s.needsMonitorDetails = true
 		}
+		// Always refresh monitors after add — workspace focus may have changed
+		// even if the monitor was already tracked (mirrors QuickShell).
+		s.needsMonitorDetails = true
 		s.mu.Unlock()
 		s.emit()
 
@@ -398,7 +410,7 @@ func (s *Service) putActiveWorkspace(id int, name string) {
 	s.activeWorkspace["name"] = name
 	if mon != "" {
 		s.activeWorkspace["monitor"] = mon
-		s.putMonitorActiveWS(mon, id)
+		s.putMonitorActiveWS(mon, id, name)
 	}
 }
 
@@ -407,7 +419,6 @@ func (s *Service) putActiveWorkspaceMonitor(id int, monName string) {
 	if s.activeWorkspace == nil {
 		s.activeWorkspace = make(map[string]any, 4)
 	}
-	// Wipe all old keys.
 	for k := range s.activeWorkspace {
 		delete(s.activeWorkspace, k)
 	}
@@ -415,14 +426,28 @@ func (s *Service) putActiveWorkspaceMonitor(id int, monName string) {
 	s.activeWorkspace["monitor"] = monName
 }
 
+// putActiveWorkspaceFull sets id+name+monitor on activeWorkspace.
+func (s *Service) putActiveWorkspaceFull(id int, name, monName string) {
+	if s.activeWorkspace == nil {
+		s.activeWorkspace = make(map[string]any, 4)
+	}
+	for k := range s.activeWorkspace {
+		delete(s.activeWorkspace, k)
+	}
+	s.activeWorkspace["id"] = id
+	s.activeWorkspace["name"] = name
+	s.activeWorkspace["monitor"] = monName
+}
+
 // putMonitorActiveWS sets the activeWorkspace field on a specific monitor entry.
-func (s *Service) putMonitorActiveWS(monName string, wsID int) {
+func (s *Service) putMonitorActiveWS(monName string, wsID int, wsName string) {
 	for i, m := range s.monitors {
 		if name, _ := m["name"].(string); name == monName {
 			if aw, ok := m["activeWorkspace"].(map[string]any); ok {
 				aw["id"] = wsID
+				aw["name"] = wsName
 			} else {
-				s.monitors[i]["activeWorkspace"] = map[string]any{"id": wsID}
+				s.monitors[i]["activeWorkspace"] = map[string]any{"id": wsID, "name": wsName}
 			}
 			return
 		}
@@ -538,6 +563,18 @@ func (s *Service) lookupWorkspaceID(name string) int {
 		return id
 	}
 	return 0
+}
+
+// workspaceNameByID looks up a workspace name from its ID in the workspace list.
+func (s *Service) workspaceNameByID(id int) string {
+	for _, ws := range s.workspaces {
+		if wid, _ := ws["id"].(float64); int(wid) == id {
+			if name, ok := ws["name"].(string); ok {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // ── Zero-alloc CSV splitting ──────────────────────────────────────────────────

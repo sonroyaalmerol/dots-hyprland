@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"net"
 	"os"
 	"strings"
@@ -324,15 +325,10 @@ func (s *Service) fetchMonitorDetails() {
 	for i, m := range s.monitors {
 		name, _ := m["name"].(string)
 		if fm, ok := freshByName[name]; ok {
-			// Merge all fresh fields, but preserve our activeWorkspace/specialWorkspace.
-			for k, v := range fm {
-				switch k {
-				case "activeWorkspace", "specialWorkspace":
-					// keep our event-driven value
-				default:
-					s.monitors[i][k] = v
-				}
-			}
+			// Accept all fresh fields including activeWorkspace.
+			// j/monitors provides the authoritative current state
+			// (mirrors QuickShell's updateFromObject for monitors).
+			maps.Copy(s.monitors[i], fm)
 		}
 	}
 	s.mu.Unlock()
