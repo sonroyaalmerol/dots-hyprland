@@ -60,7 +60,7 @@ func (s *Service) check() {
 		if slices.Contains(downloadNames, name) {
 			dlRunning = true
 		}
-		return !(pkgRunning && dlRunning)
+		return !pkgRunning || !dlRunning
 	})
 
 	if !pkgRunning {
