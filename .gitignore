@@ -22,11 +22,4 @@ scripts/osk-watcher/osk-watcher
 /cmd/snry-daemon/snry-daemon
 scripts/snry-daemon/snry-daemon
 scripts/snry-daemon/osk-watcher
-
-# Built packages
-*.pkg.tar.zst
-pkg/
-src/
-dots-hyprland
-*.log
-snry-dm
+/snry-dm

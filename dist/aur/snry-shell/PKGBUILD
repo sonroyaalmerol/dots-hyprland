@@ -1,11 +1,11 @@
 # Maintainer: Snry Shell <snry@shell.dev>
 # Release: tag as v<version> and push tag, then create GitHub release.
 # The AUR publish workflow will update pkgver and publish automatically.
-pkgname=snry-shell-qs
+pkgname=snry-shell
 pkgver=2.9.0
 pkgrel=1
-pkgdesc='Snry Shell - Hyprland dotfiles managed by snry-daemon'
-arch=('any')
+pkgdesc='Snry Shell - Hyprland desktop shell managed by snry-daemon'
+arch=('x86_64')
 url='https://github.com/sonroyaalmerol/snry-shell'
 license=('MIT')
 depends=(
@@ -110,25 +110,24 @@ depends=(
 )
 makedepends=('git' 'go' 'base-devel')
 optdepends=(
+	'snry-dm: Display manager (greeter/login screen)'
 	'plasma-browser-integration: KDE browser integration support'
 )
 source=("git+https://github.com/sonroyaalmerol/snry-shell.git#tag=v$pkgver")
 sha256sums=('SKIP')
 backup=()
-install=snry-shell-qs.install
+install=snry-shell.install
+
+build() {
+	cd "$srcdir/snry-shell"
+	go build -o snry-daemon ./cmd/snry-daemon
+}
 
 package() {
 	cd "$srcdir/snry-shell"
 
-	# Build snry-daemon binary
-	go build -o snry-daemon ./cmd/snry-daemon
-	go build -o snry-dm ./cmd/snry-dm
-
 	# Install snry-daemon binary
 	install -Dm755 snry-daemon "$pkgdir/usr/bin/snry-daemon"
-
-	# Install snry-dm binary (display manager)
-	install -Dm755 snry-dm "$pkgdir/usr/bin/snry-dm"
 
 	# Install snry-shell wrapper (convenience alias)
 	install -Dm755 /dev/stdin "$pkgdir/usr/bin/snry-shell" <<'SCRIPT'
@@ -139,14 +138,10 @@ SCRIPT
 	# Convenience symlink: snry -> snry-daemon
 	ln -s snry-daemon "$pkgdir/usr/bin/snry"
 
-	# Install shared data
+	# Install shared data (configs, data, frontend)
 	install -dm755 "$pkgdir/usr/share/snry-shell"
 	cp -a configs data frontend "$pkgdir/usr/share/snry-shell/"
 
-	# Install systemd units
+	# Install systemd user unit
 	install -Dm644 configs/systemd/user/snry-daemon.service "$pkgdir/usr/lib/systemd/user/snry-daemon.service"
-	install -Dm644 configs/systemd/system/snry-dm.service "$pkgdir/usr/lib/systemd/system/snry-dm.service"
-
-	# Install PAM config
-	install -Dm644 configs/pam/snry-dm "$pkgdir/etc/pam.d/snry-dm"
 }

@@ -73,15 +73,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate PKGBUILD shell syntax
-        run: bash -n PKGBUILD
-
-      - name: Validate install script shell syntax
-        run: bash -n snry-shell-qs.install
-
-      - name: Check PKGBUILD variables
+      - name: Validate snry-shell PKGBUILD
         run: |
-          source PKGBUILD
+          bash -n dist/aur/snry-shell/PKGBUILD
+          bash -n dist/aur/snry-shell/snry-shell.install
+          source dist/aur/snry-shell/PKGBUILD
+          echo "Package: $pkgname $pkgver-$pkgrel"
+          echo "Arch: ${arch[*]}"
+          echo "Depends: ${#depends[@]} packages"
+          echo "Make depends: ${makedepends[*]}"
+
+      - name: Validate snry-dm PKGBUILD
+        run: |
+          bash -n dist/aur/snry-dm/PKGBUILD
+          bash -n dist/aur/snry-dm/snry-dm.install
+          source dist/aur/snry-dm/PKGBUILD
           echo "Package: $pkgname $pkgver-$pkgrel"
           echo "Arch: ${arch[*]}"
           echo "Depends: ${#depends[@]} packages"
