@@ -45,6 +45,7 @@ func (b *bus) publish(topic busTopic, data any) {
 				if r := recover(); r != nil {
 					// absorb handler panics so one bad subscriber
 					// does not prevent other handlers from running
+					_ = r
 				}
 			}()
 			h(ev)

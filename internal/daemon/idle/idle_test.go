@@ -200,10 +200,9 @@ func TestTickNoSuspendWhenUnlocked(t *testing.T) {
 
 	// Tick should do nothing because we're not locked.
 	s.tick()
-	if !s.idleStarted.IsZero() {
-		// Actually tick checks isLocked first — we're not locked, so it returns early.
-		// idleStarted stays as-is.
-	}
+	// Actually tick checks isLocked first — we're not locked, so it returns early.
+	// idleStarted stays as-is.
+	_ = s.idleStarted.IsZero()
 }
 
 func TestTickNoSuspendWhenInhibited(t *testing.T) {

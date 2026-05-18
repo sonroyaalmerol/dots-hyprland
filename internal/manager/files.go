@@ -315,35 +315,6 @@ func syncHyprland(cfg Config, hl hyprland.API) error {
 	return GenerateWorkspacesLua(cfg, hl)
 }
 
-func copyDirRecursive(src, dst string, skipExisting bool) error {
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		return err
-	}
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		srcPath := filepath.Join(src, e.Name())
-		dstPath := filepath.Join(dst, e.Name())
-		if e.IsDir() {
-			if err := copyDirRecursive(srcPath, dstPath, skipExisting); err != nil {
-				return err
-			}
-		} else {
-			if skipExisting {
-				if _, err := os.Stat(dstPath); err == nil {
-					continue
-				}
-			}
-			if err := copyFile(srcPath, dstPath, 0o644); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func syncBash(cfg Config) error {
 	bashSrc := cfg.ConfigsDir() + "/bash"
 	if _, err := os.Stat(bashSrc); err != nil {
