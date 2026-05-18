@@ -140,12 +140,36 @@ ExecStart=-/sbin/agetty --noissue --nohostname --noclear --autologin ` + user + 
 }
 
 func setupPAM(ctx context.Context) error {
-	fmt.Println("  Configuring PAM for gnome-keyring...")
+	fmt.Println("  Configuring PAM...")
+
+	// Deploy distro-appropriate snry-dm PAM config if missing.
+	dmPamDst := "/etc/pam.d/snry-dm"
+	if _, err := os.Stat(dmPamDst); os.IsNotExist(err) {
+		var pamSrc string
+		switch platform.Detect() {
+		case platform.FamilyFedora:
+			pamSrc = "/usr/share/snry-shell/configs/pam/snry-dm-fedora"
+			// Also try repo-root for dev mode.
+			if _, err := os.Stat(pamSrc); err != nil {
+				pamSrc = "configs/pam/snry-dm-fedora"
+			}
+		default:
+			pamSrc = "/usr/share/snry-shell/configs/pam/snry-dm"
+			if _, err := os.Stat(pamSrc); err != nil {
+				pamSrc = "configs/pam/snry-dm"
+			}
+		}
+		if _, err := os.Stat(pamSrc); err == nil {
+			fmt.Printf("  Deploying PAM config %s -> %s\n", pamSrc, dmPamDst)
+			if _, err := platform.RunSudo(ctx, "cp", pamSrc, dmPamDst); err != nil {
+				fmt.Fprintf(os.Stderr, "  [warn] deploy PAM config: %v\n", err)
+			}
+		}
+	}
 
 	// Add pam_gnome_keyring to /etc/pam.d/login
 	loginFile := "/etc/pam.d/login"
 
-	// Auth line
 	authLine := "auth       optional   pam_gnome_keyring.so"
 	sessionLine := "session    optional   pam_gnome_keyring.so auto_start"
 

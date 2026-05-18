@@ -281,7 +281,11 @@ func (s *UserSession) Run(ctx context.Context) error {
 	}
 
 	s.cmd = exec.CommandContext(ctx, s.cfg.DaemonBin, "daemon")
-	s.cmd.Env = s.pam.Env()
+	env := s.pam.Env()
+	if s.vt != nil {
+		env = append(env, fmt.Sprintf("XDG_VTNR=%d", s.vt.Num()))
+	}
+	s.cmd.Env = env
 	// Don't pass root's stdout/stderr to user process.
 	s.cmd.Stdout = nil
 	s.cmd.Stderr = nil

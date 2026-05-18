@@ -238,6 +238,10 @@ func syncQuickshell(cfg Config) error {
 
 	deployDir := "/usr/share/snry-shell/frontend/ii"
 	if err := os.MkdirAll(deployDir, 0o755); err != nil {
+		if os.IsPermission(err) {
+			fmt.Printf("  [sync] quickshell frontend already deployed at %s (skipping user sync)\n", deployDir)
+			return nil
+		}
 		return fmt.Errorf("create deploy dir %s: %w", deployDir, err)
 	}
 
@@ -581,6 +585,11 @@ func ensureSnrySymlink() error {
 }
 
 func installPythonVenv(cfg Config) error {
+	if _, err := exec.LookPath("uv"); err != nil {
+		fmt.Println("  [warn] uv not found, skipping Python venv setup")
+		fmt.Println("  [warn] Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh")
+		return nil
+	}
 	venvPath := cfg.VenvPath()
 	reqFile := PythonRequirements(cfg.DataDir())
 
