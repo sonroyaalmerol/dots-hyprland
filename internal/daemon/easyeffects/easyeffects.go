@@ -3,9 +3,11 @@ package easyeffects
 import (
 	"context"
 	"os"
-	"strings"
+	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/proc"
 )
 
 type Config struct {
@@ -42,48 +44,10 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 
-func isProcessRunning(name string) bool {
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		return false
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile("/proc/" + entry.Name() + "/comm")
-		if err != nil {
-			continue
-		}
-		if strings.TrimSpace(string(data)) == name {
-			return true
-		}
-	}
-	return false
-}
-
-func lookPath(file string) (string, error) {
-	path := os.Getenv("PATH")
-	for dir := range strings.SplitSeq(path, ":") {
-		if dir == "" {
-			dir = "."
-		}
-		p := dir + "/" + file
-		if info, err := os.Stat(p); err == nil && !info.IsDir() {
-			return p, nil
-		}
-	}
-	return "", os.ErrNotExist
-}
-
-func isBinaryAvailable(name string) bool {
-	_, err := lookPath(name)
-	return err == nil
-}
-
 func (s *Service) check() {
-	avail := isBinaryAvailable("easyeffects")
-	active := isProcessRunning("easyeffects")
+	_, err := exec.LookPath("easyeffects")
+	avail := err == nil
+	active := proc.Running("easyeffects")
 
 	s.mu.Lock()
 	s.available = avail
@@ -136,19 +100,9 @@ func (s *Service) Enable() {
 
 func (s *Service) Disable() {
 	go func() {
-		entries, _ := os.ReadDir("/proc")
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			data, err := os.ReadFile("/proc/" + entry.Name() + "/comm")
-			if err != nil {
-				continue
-			}
-			if strings.TrimSpace(string(data)) == "easyeffects" {
-				if p, err := os.FindProcess(atoi(entry.Name())); err == nil {
-					p.Signal(os.Interrupt)
-				}
+		if pid := proc.FindPID("easyeffects"); pid > 0 {
+			if p, err := os.FindProcess(pid); err == nil {
+				p.Signal(os.Interrupt)
 			}
 		}
 		s.mu.Lock()
@@ -156,15 +110,4 @@ func (s *Service) Disable() {
 		s.mu.Unlock()
 		s.emit()
 	}()
-}
-
-func atoi(s string) int {
-	n := 0
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0
-		}
-		n = n*10 + int(c-'0')
-	}
-	return n
 }

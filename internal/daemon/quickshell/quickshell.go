@@ -6,10 +6,11 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/xdg"
 )
 
 type Config struct {
@@ -30,10 +31,7 @@ func ResolveConfigPath() string {
 	}
 
 	// 2. Embedded frontend cache
-	cacheDir := os.Getenv("XDG_CACHE_HOME")
-	if cacheDir == "" {
-		cacheDir = filepath.Join(os.Getenv("HOME"), ".cache")
-	}
+	cacheDir := xdg.Resolve().CacheHome
 	return cacheDir + "/snry-shell/embedded-frontend/ii"
 }
 

@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/xdg"
 )
 
 // Config holds wallpaper service configuration.
@@ -28,22 +30,12 @@ type Config struct {
 
 // DefaultConfig returns a config using standard XDG paths.
 func DefaultConfig() Config {
-	configHome := os.Getenv("XDG_CONFIG_HOME")
-	if configHome == "" {
-		configHome = filepath.Join(os.Getenv("HOME"), ".config")
-	}
-	stateHome := os.Getenv("XDG_STATE_HOME")
-	if stateHome == "" {
-		stateHome = filepath.Join(os.Getenv("HOME"), ".local", "state")
-	}
-	cacheHome := os.Getenv("XDG_CACHE_HOME")
-	if cacheHome == "" {
-		cacheHome = filepath.Join(os.Getenv("HOME"), ".cache")
-	}
+	xdg := xdg.Resolve()
+	configHome := xdg.ConfigHome
 	return Config{
 		ConfigHome:      configHome,
-		StateHome:       stateHome,
-		CacheHome:       cacheHome,
+		StateHome:       xdg.StateHome,
+		CacheHome:       xdg.CacheHome,
 		ShellConfigFile: filepath.Join(configHome, "snry-shell", "config.json"),
 		MatugenConfig:   filepath.Join(configHome, "matugen", "config.toml"),
 		VirtualEnv:      os.Getenv("SNRY_SHELL_VIRTUAL_ENV"),

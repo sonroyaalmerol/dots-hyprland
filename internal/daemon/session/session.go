@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/proc"
 )
 
 type Config struct {
@@ -51,33 +53,15 @@ func (s *Service) check() {
 	pkgRunning := false
 	dlRunning := false
 
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		return
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		cmdlinePath := filepath.Join("/proc", entry.Name(), "comm")
-		data, err := os.ReadFile(cmdlinePath)
-		if err != nil {
-			continue
-		}
-		name := strings.TrimSpace(string(data))
-
+	proc.ForEachComm(func(name string, _ int) bool {
 		if slices.Contains(pkgManagerNames, name) {
 			pkgRunning = true
 		}
 		if slices.Contains(downloadNames, name) {
 			dlRunning = true
 		}
-
-		if pkgRunning && dlRunning {
-			break
-		}
-	}
+		return !(pkgRunning && dlRunning)
+	})
 
 	if !pkgRunning {
 		if _, err := os.Stat("/var/lib/pacman/db.lck"); err == nil {

@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -71,35 +70,6 @@ Usage:
   snry-daemon help         Show this help`)
 }
 
-// repoRoot resolves the shared data directory.
-// NOTE: app.go has a similar method for daemon runtime use.
-func repoRoot() string {
-	// Try executable location first (when installed via package)
-	exe, err := os.Executable()
-	if err == nil {
-		shareDir := filepath.Join(filepath.Dir(exe), "..", "share", "snry-shell")
-		if _, err := os.Stat(shareDir); err == nil {
-			return shareDir
-		}
-	}
-
-	// Try source repo root (when building from source)
-	if _, err := os.Stat("go.mod"); err == nil {
-		abs, _ := filepath.Abs(".")
-		return abs
-	}
-
-	// Try parent directory
-	if _, err := os.Stat("../go.mod"); err == nil {
-		abs, _ := filepath.Abs("..")
-		return abs
-	}
-
-	// Fallback to current directory
-	abs, _ := filepath.Abs(".")
-	return abs
-}
-
 func runDaemon() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -113,7 +83,7 @@ func runDaemon() {
 func runManagerCommand(name string, fn func(context.Context, manager.Config) error) {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	cfg := manager.DefaultConfig(repoRoot())
+	cfg := manager.DefaultConfig(manager.FindRepoRoot())
 	if err := fn(ctx, cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "%s error: %v\n", name, err)
 		os.Exit(1)

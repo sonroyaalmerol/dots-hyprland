@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/proc"
 	imgPkg "github.com/sonroyaalmerol/snry-shell-qs/internal/image"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/wallpaper"
 )
@@ -1263,22 +1264,12 @@ func (a *App) handleNvimApplyColors() {
 	os.MkdirAll(filepath.Dir(nvimFile), 0755)
 	os.WriteFile(nvimFile, jsonOut, 0644)
 
-	entries, _ := os.ReadDir("/proc")
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+	proc.ForEachComm(func(comm string, pid int) bool {
+		if comm == "nvim" {
+			syscall.Kill(pid, syscall.SIGUSR1)
 		}
-		commData, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "comm"))
-		if err != nil {
-			continue
-		}
-		if strings.TrimSpace(string(commData)) == "nvim" {
-			pid, err := strconv.Atoi(entry.Name())
-			if err == nil {
-				syscall.Kill(pid, syscall.SIGUSR1)
-			}
-		}
-	}
+		return true
+	})
 }
 
 func (a *App) handleApplyVscodeColor() {

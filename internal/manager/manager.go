@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/manager/arch"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/manager/fedora"
@@ -142,6 +143,30 @@ func DefaultConfig(repoRoot string) Config {
 		Home:     platform.HomeDir(),
 		RepoRoot: repoRoot,
 	}
+}
+
+// FindRepoRoot resolves the shared data directory. It tries:
+//  1. Executable-relative share dir (installed via package)
+//  2. Source repo root (building from source with go.mod in cwd or parent)
+//  3. Current directory fallback
+func FindRepoRoot() string {
+	exe, err := os.Executable()
+	if err == nil {
+		shareDir := filepath.Join(filepath.Dir(exe), "..", "share", "snry-shell")
+		if _, err := os.Stat(shareDir); err == nil {
+			return shareDir
+		}
+	}
+	if _, err := os.Stat("go.mod"); err == nil {
+		abs, _ := filepath.Abs(".")
+		return abs
+	}
+	if _, err := os.Stat("../go.mod"); err == nil {
+		abs, _ := filepath.Abs("..")
+		return abs
+	}
+	abs, _ := filepath.Abs(".")
+	return abs
 }
 
 func consoleProgress(step string, current, total int) {

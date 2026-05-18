@@ -40,6 +40,7 @@ import (
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/updates"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/weather"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/manager"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/xdg"
 )
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -67,9 +68,10 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
+	runtimeDir := xdg.Resolve().RuntimeDir
 	return Config{
-		SocketPath:    os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.sock",
-		LockPath:      os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.lock",
+		SocketPath:    runtimeDir + "/snry-daemon.sock",
+		LockPath:      runtimeDir + "/snry-daemon.lock",
 		QuickshellCfg: quickshell.DefaultConfig(),
 		IdleCfg: func() idle.Config {
 			cfg := idle.DefaultConfig()
@@ -167,19 +169,11 @@ func (a *App) HyprlandSvc() *hyprland.Service   { return a.hyprlandSvc }
 func (a *App) ResourcesSvc() *resources.Service { return a.resourcesSvc }
 
 func (a *App) stateDir() string {
-	d := os.Getenv("XDG_STATE_HOME")
-	if d == "" {
-		d = filepath.Join(os.Getenv("HOME"), ".local/state")
-	}
-	return d
+	return xdg.Resolve().StateHome
 }
 
 func (a *App) configDir() string {
-	d := os.Getenv("XDG_CONFIG_HOME")
-	if d == "" {
-		d = filepath.Join(os.Getenv("HOME"), ".config")
-	}
-	return d
+	return xdg.Resolve().ConfigHome
 }
 
 func (a *App) genDir() string {
@@ -850,25 +844,14 @@ func (a *App) handleConflictCheck() {
 }
 
 func (a *App) repoRoot() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "."
-	}
-	shareDir := filepath.Join(filepath.Dir(exe), "..", "share", "snry-shell")
-	if _, err := os.Stat(shareDir); err == nil {
-		return shareDir
-	}
-	return "."
+	return manager.FindRepoRoot()
 }
 
 // regenerateGeneratedConfig regenerates a single excluded (generated) config file.
 // It is used as the guard's Regenerate callback and by the startup/monitor-event path.
 func (a *App) regenerateGeneratedConfig(rel string) error {
 	managerCfg := manager.Config{RepoRoot: a.repoRoot()}
-	managerCfg.XDG.ConfigHome = os.Getenv("XDG_CONFIG_HOME")
-	if managerCfg.XDG.ConfigHome == "" {
-		managerCfg.XDG.ConfigHome = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	managerCfg.XDG = xdg.Resolve()
 	switch rel {
 	case "monitors.lua":
 		return manager.GenerateMonitorsLua(managerCfg, a.hyprlandSvc)

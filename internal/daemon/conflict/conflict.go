@@ -2,9 +2,8 @@ package conflict
 
 import (
 	"log"
-	"os"
-	"path/filepath"
-	"strings"
+
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/proc"
 )
 
 // tray processes that indicate a system tray is running.
@@ -30,43 +29,15 @@ func (s *Service) Check() map[string][]string {
 	foundTrays := make([]string, 0)
 	foundNotifications := make([]string, 0)
 
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		log.Printf("[conflict] read /proc: %v", err)
-		return map[string][]string{
-			"trays":         foundTrays,
-			"notifications": foundNotifications,
-		}
-	}
-
-	seen := make(map[string]bool)
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		// Only look at numeric directories (PID dirs).
-		name := entry.Name()
-		if len(name) == 0 || name[0] < '0' || name[0] > '9' {
-			continue
-		}
-
-		comm, err := os.ReadFile(filepath.Join("/proc", name, "comm"))
-		if err != nil {
-			continue
-		}
-		procName := strings.TrimSpace(string(comm))
-		if seen[procName] {
-			continue
-		}
-		seen[procName] = true
-
+	proc.ForEachComm(func(procName string, _ int) bool {
 		if trayProcesses[procName] {
 			foundTrays = append(foundTrays, procName)
 		}
 		if notificationProcesses[procName] {
 			foundNotifications = append(foundNotifications, procName)
 		}
-	}
+		return true
+	})
 
 	log.Printf("[conflict] check complete: trays=%v notifications=%v", foundTrays, foundNotifications)
 	return map[string][]string{
