@@ -14,10 +14,10 @@ hl.bind("SUPER + M", hl.dsp.global("quickshell:mediaControlsToggle"), { descript
 hl.bind("SUPER + G", hl.dsp.global("quickshell:overlayToggle"), { description = "Toggle overlay" })
 hl.bind("CTRL + ALT + Delete", hl.dsp.global("quickshell:sessionToggle"), { description = "Toggle session menu" })
 hl.bind("SUPER + J", hl.dsp.global("quickshell:barToggle"), { description = "Toggle bar" })
-hl.bind("SHIFT + SUPER + ALT + Slash", hl.dsp.exec_cmd("qs -p ~/.config/quickshell/" .. qsConfig .. "/welcome.qml")) -- [hidden] Launch welcome app
+hl.bind("SHIFT + SUPER + ALT + Slash", hl.dsp.exec_cmd("qs -p " .. qsConfig .. "/welcome.qml")) -- [hidden] Launch welcome app
 
-hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("qs -c " .. qsConfig .. " ipc call brightness increment || brightnessctl s 5%+"), { repeating = true }) -- [hidden]
-hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("qs -c " .. qsConfig .. " ipc call brightness decrement || brightnessctl s 5%-"), { repeating = true }) -- [hidden]
+hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("qs -p " .. qsConfig .. " ipc call brightness increment || brightnessctl s 5%+"), { repeating = true }) -- [hidden]
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("qs -p " .. qsConfig .. " ipc call brightness decrement || brightnessctl s 5%-"), { repeating = true }) -- [hidden]
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%+ -l 1.5"), { repeating = true }) -- [hidden]
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%-"), { repeating = true }) -- [hidden]
 
@@ -28,7 +28,7 @@ hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_SOURCE@ tog
 hl.bind("SUPER + ALT + M", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_SOURCE@ toggle"), { description = "Toggle mic", locked = true }) -- [hidden]
 hl.bind("CTRL + SUPER + T", hl.dsp.global("quickshell:wallpaperSelectorToggle"), { description = "Toggle wallpaper selector" })
 hl.bind("CTRL + SUPER + ALT + T", hl.dsp.global("quickshell:wallpaperSelectorRandom"), { description = "Select random wallpaper" })
-hl.bind("CTRL + SUPER + R", hl.dsp.exec_cmd("killall qs quickshell; qs -c " .. qsConfig .. " &")) -- Restart widgets
+hl.bind("CTRL + SUPER + R", hl.dsp.exec_cmd("killall qs quickshell; qs -p " .. qsConfig .. " &")) -- Restart widgets
 hl.bind("CTRL + SUPER + P", hl.dsp.global("quickshell:panelFamilyCycle"), { description = "Cycle panel family" })
 
 -- Utilities
@@ -42,8 +42,8 @@ hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("hyprpicker -a"), { description = "
 -- Recording
 hl.bind("SUPER + SHIFT + R", hl.dsp.global("quickshell:regionRecord"), { locked = true }) -- Record region (no sound)
 hl.bind("SUPER + ALT + R", hl.dsp.global("quickshell:regionRecord"), { locked = true }) -- [hidden] Record region (no sound)
-hl.bind("CTRL + ALT + R", hl.dsp.exec_cmd("~/.config/quickshell/" .. qsConfig .. "/scripts/videos/record.sh --fullscreen"), { locked = true }) -- [hidden] Record screen (no sound)
-hl.bind("SUPER + SHIFT + ALT + R", hl.dsp.exec_cmd("~/.config/quickshell/" .. qsConfig .. "/scripts/videos/record.sh --fullscreen --sound"), { locked = true }) -- Record screen (with sound)
+hl.bind("CTRL + ALT + R", hl.dsp.exec_cmd(qsConfig .. "/scripts/videos/record.sh --fullscreen"), { locked = true }) -- [hidden] Record screen (no sound)
+hl.bind("SUPER + SHIFT + ALT + R", hl.dsp.exec_cmd(qsConfig .. "/scripts/videos/record.sh --fullscreen --sound"), { locked = true }) -- Record screen (with sound)
 -- Fullscreen screenshot
 hl.bind("Print", hl.dsp.exec_cmd('grim -o "$(hyprctl activeworkspace -j | jq -r \'.monitor\')" - | wl-copy')) -- Screenshot >> clipboard
 hl.bind("CTRL + Print", hl.dsp.exec_cmd('mkdir -p $(xdg-user-dir PICTURES)/Screenshots && grim -o "$(hyprctl activeworkspace -j | jq -r \'.monitor\')" $(xdg-user-dir PICTURES)/Screenshots/Screenshot_"$(date \'+%Y-%m-%d_%H.%M.%S\')".png')) -- Screenshot >> clipboard & file
@@ -115,27 +115,27 @@ hl.bind("SUPER + ALT + S", hl.dsp.window.move({ workspace = "special", follow = 
 hl.bind("CTRL + SUPER + S", hl.dsp.workspace.toggle_special()) -- [hidden]
 
 -- Focus workspace (Super+num)
-hl.bind("SUPER + code:10", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 1")) -- [hidden]
-hl.bind("SUPER + code:11", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 2")) -- [hidden]
-hl.bind("SUPER + code:12", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 3")) -- [hidden]
-hl.bind("SUPER + code:13", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 4")) -- [hidden]
-hl.bind("SUPER + code:14", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 5")) -- [hidden]
-hl.bind("SUPER + code:15", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 6")) -- [hidden]
-hl.bind("SUPER + code:16", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 7")) -- [hidden]
-hl.bind("SUPER + code:17", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 8")) -- [hidden]
-hl.bind("SUPER + code:18", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 9")) -- [hidden]
-hl.bind("SUPER + code:19", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 10")) -- [hidden]
+hl.bind("SUPER + code:10", hl.dsp.exec_cmd("snry send workspace-action workspace 1")) -- [hidden]
+hl.bind("SUPER + code:11", hl.dsp.exec_cmd("snry send workspace-action workspace 2")) -- [hidden]
+hl.bind("SUPER + code:12", hl.dsp.exec_cmd("snry send workspace-action workspace 3")) -- [hidden]
+hl.bind("SUPER + code:13", hl.dsp.exec_cmd("snry send workspace-action workspace 4")) -- [hidden]
+hl.bind("SUPER + code:14", hl.dsp.exec_cmd("snry send workspace-action workspace 5")) -- [hidden]
+hl.bind("SUPER + code:15", hl.dsp.exec_cmd("snry send workspace-action workspace 6")) -- [hidden]
+hl.bind("SUPER + code:16", hl.dsp.exec_cmd("snry send workspace-action workspace 7")) -- [hidden]
+hl.bind("SUPER + code:17", hl.dsp.exec_cmd("snry send workspace-action workspace 8")) -- [hidden]
+hl.bind("SUPER + code:18", hl.dsp.exec_cmd("snry send workspace-action workspace 9")) -- [hidden]
+hl.bind("SUPER + code:19", hl.dsp.exec_cmd("snry send workspace-action workspace 10")) -- [hidden]
 -- keypad
-hl.bind("SUPER + code:87", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 1"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:88", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 2"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:89", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 3"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:83", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 4"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:84", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 5"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:85", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 6"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:79", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 7"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:80", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 8"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:81", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 9"), { repeating = true }) -- [hidden]
-hl.bind("SUPER + code:90", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send workspace-action workspace 10"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:87", hl.dsp.exec_cmd("snry send workspace-action workspace 1"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:88", hl.dsp.exec_cmd("snry send workspace-action workspace 2"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:89", hl.dsp.exec_cmd("snry send workspace-action workspace 3"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:83", hl.dsp.exec_cmd("snry send workspace-action workspace 4"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:84", hl.dsp.exec_cmd("snry send workspace-action workspace 5"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:85", hl.dsp.exec_cmd("snry send workspace-action workspace 6"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:79", hl.dsp.exec_cmd("snry send workspace-action workspace 7"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:80", hl.dsp.exec_cmd("snry send workspace-action workspace 8"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:81", hl.dsp.exec_cmd("snry send workspace-action workspace 9"), { repeating = true }) -- [hidden]
+hl.bind("SUPER + code:90", hl.dsp.exec_cmd("snry send workspace-action workspace 10"), { repeating = true }) -- [hidden]
 
 -- Focus left/right
 hl.bind("CTRL + SUPER + Right", hl.dsp.focus({ workspace = "r+1" })) -- [hidden]
@@ -159,15 +159,15 @@ hl.bind("CTRL + SUPER + Up", hl.dsp.focus({ workspace = "r-5" })) -- [hidden]
 hl.bind("CTRL + SUPER + Down", hl.dsp.focus({ workspace = "r+5" })) -- [hidden]
 
 -- Session
-hl.bind("SUPER + L", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send lock"), { description = "Lock" })
+hl.bind("SUPER + L", hl.dsp.exec_cmd("snry send lock"), { description = "Lock" })
 hl.bind("SUPER + SHIFT + L", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"), { description = "Suspend system", locked = true })
-hl.bind("XF86PowerOff", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send power-button"), { locked = true }) -- [hidden]
-hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send lid-close"), { locked = true }) -- [hidden]
+hl.bind("XF86PowerOff", hl.dsp.exec_cmd("snry send power-button"), { locked = true }) -- [hidden]
+hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("snry send lid-close"), { locked = true }) -- [hidden]
 hl.bind("CTRL + SHIFT + ALT + SUPER + Delete", hl.dsp.exec_cmd("systemctl poweroff || loginctl poweroff"), { description = "Shutdown" }) -- [hidden]
 
 -- Screen zoom
-hl.bind("SUPER + Minus", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send zoom decrease 0.3"), { repeating = true }) -- Zoom out
-hl.bind("SUPER + Equal", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/snry-daemon send zoom increase 0.3"), { repeating = true }) -- Zoom in
+hl.bind("SUPER + Minus", hl.dsp.exec_cmd("snry send zoom decrease 0.3"), { repeating = true }) -- Zoom out
+hl.bind("SUPER + Equal", hl.dsp.exec_cmd("snry send zoom increase 0.3"), { repeating = true }) -- Zoom in
 
 -- Media
 hl.bind("SUPER + SHIFT + N", hl.dsp.exec_cmd("playerctl next || playerctl position `bc <<< \"100 * $(playerctl metadata mpris:length) / 1000000 / 100\"`"), { locked = true }) -- Next track
@@ -182,7 +182,7 @@ hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = tr
 
 -- Apps
 hl.bind("SUPER + Return", hl.dsp.exec_cmd(terminal), { description = "Terminal" })
-hl.bind("SUPER + T", hl.dsp.exec_cmd(terminal)) -- [hidden] (terminal) (alt)
+hl.bind("SUPER + T", hl.dsp.exec_cmd(fileManager), { description = "File manager" })
 hl.bind("CTRL + ALT + T", hl.dsp.exec_cmd(terminal)) -- [hidden] (terminal) (for Ubuntu people)
 hl.bind("SUPER + E", hl.dsp.exec_cmd(fileManager), { description = "File manager" })
 hl.bind("SUPER + W", hl.dsp.exec_cmd(browser), { description = "Browser" })

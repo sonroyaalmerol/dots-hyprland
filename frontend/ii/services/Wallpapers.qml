@@ -1,6 +1,7 @@
 import qs.modules.common
 import qs.modules.common.models
 import qs.modules.common.functions
+import qs.services
 import QtQuick
 import Qt.labs.folderlistmodel
 import Quickshell
@@ -9,14 +10,12 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 /**
- * Provides a list of wallpapers and an "apply" action that calls the existing
- * switchwall.sh script. Pretty much a limited file browsing service.
+ * Provides a list of wallpapers and an "apply" action that sends
+ * switch-wallpaper daemon commands for applying themes. Pretty much a limited file browsing service.
  */
 Singleton {
     id: root
 
-    property string thumbgenScriptPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/thumbnails/thumbgen-venv.sh`
-    property string generateThumbnailsMagickScriptPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/thumbnails/generate-thumbnails-magick.sh`
     property alias directory: folderModel.folder
     readonly property string effectiveDirectory: FileUtils.trimFileProtocol(folderModel.folder.toString())
     property url defaultFolder: Qt.resolvedUrl(`${Directories.pictures}/Wallpapers`)
@@ -26,7 +25,7 @@ Singleton {
         "jpg", "jpeg", "png", "webp", "avif", "bmp", "svg"
     ]
     property list<string> wallpapers: [] // List of absolute file paths (without file://)
-    readonly property bool thumbnailGenerationRunning: thumbgenProc.running
+    readonly property bool thumbnailGenerationRunning: thumbnailGenerationProgress > 0 && thumbnailGenerationProgress < 1
     property real thumbnailGenerationProgress: 0
 
     signal changed()
@@ -35,25 +34,14 @@ Singleton {
 
     function load () {} // For forcing initialization
 
-    // Executions
-    Process {
-        id: applyProc
-    }
-    
+
     function openFallbackPicker(darkMode = Appearance.m3colors.darkmode) {
-        applyProc.exec([
-            Directories.wallpaperSwitchScriptPath,
-            "--mode", (darkMode ? "dark" : "light")
-        ])
+        DaemonSocket.sendCommand("switch-wallpaper --mode " + (darkMode ? "dark" : "light"))
     }
 
     function apply(path, darkMode = Appearance.m3colors.darkmode) {
         if (!path || path.length === 0) return
-        applyProc.exec([
-            Directories.wallpaperSwitchScriptPath,
-            "--image", path,
-            "--mode", (darkMode ? "dark" : "light")
-        ])
+        DaemonSocket.sendCommand("switch-wallpaper --image " + path + " --mode " + (darkMode ? "dark" : "light"))
         root.changed()
     }
 
@@ -147,38 +135,15 @@ Singleton {
     // Thumbnail generation
     function generateThumbnail(size: string) {
         if (!["normal", "large", "x-large", "xx-large"].includes(size)) throw new Error("Invalid thumbnail size");
-        thumbgenProc.directory = root.directory
-        thumbgenProc.running = false
-        thumbgenProc.command = [
-            "bash", "-c",
-            `${thumbgenScriptPath} --size ${size} --machine_progress -d ${FileUtils.trimFileProtocol(root.directory)} || ${generateThumbnailsMagickScriptPath} --size ${size} -d ${FileUtils.trimFileProtocol(root.directory)}`,
-        ]
-        // console.log("[Wallpapers] Updating thumbnails with command ", thumbgenProc.command.join(" "))
         root.thumbnailGenerationProgress = 0
-        thumbgenProc.running = true
+        DaemonSocket.sendCommand("generate-thumbnails --size " + size + " --directory " + FileUtils.trimFileProtocol(root.directory.toString()))
     }
-    Process {
-        id: thumbgenProc
-        property string directory
-        stdout: SplitParser {
-            onRead: data => {
-                // print("thumb gen proc:", data)
-                let match = data.match(/PROGRESS (\d+)\/(\d+)/)
-                if (match) {
-                    const completed = parseInt(match[1])
-                    const total = parseInt(match[2])
-                    root.thumbnailGenerationProgress = completed / total
-                }
-                match = data.match(/FILE (.+)/)
-                if (match) {
-                    const filePath = match[1]
-                    root.thumbnailGeneratedFile(filePath)
-                }
+    Connections {
+        target: DaemonSocket
+        function onThumbnailGenerated(data) {
+            if (data.directory) {
+                root.thumbnailGenerated(data.directory)
             }
-        }
-        onExited: (exitCode, exitStatus) => {
-            // print("[Wallpapers] Thumbnail generation completed with exit code", exitCode)
-            root.thumbnailGenerated(thumbgenProc.directory)
         }
     }
 

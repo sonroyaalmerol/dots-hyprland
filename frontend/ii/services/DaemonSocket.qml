@@ -86,10 +86,7 @@ Singleton {
 	// Brightness from daemon.
 	property var brightnessMonitors: ({})
 
-	// Warp and GameMode from daemon.
-	property bool warpInstalled: false
-	property bool warpConnected: false
-	property string warpStatus: ""
+	// GameMode from daemon.
 	property bool gameModeEnabled: false
 
 	// Dark mode and fprintd from daemon.
@@ -129,8 +126,7 @@ Singleton {
 	signal networkUpdated()
 	signal networkConnectResult(var data)
 
-	// Warp and GameMode signals.
-	signal warpStatusUpdated()
+	// GameMode signal.
 	signal gameModeUpdated()
 	signal darkModeUpdated()
 	signal fprintdResult(bool available, bool enrolled)
@@ -144,18 +140,28 @@ Singleton {
 	function authenticate(password) { sendCommand("auth " + password) }
 	function lock() { sendCommand("lock") }
 	function unlock() { sendCommand("unlock") }
-	function lockStartup() { sendCommand("lock-startup") }
+	function lockStartup() { sendCommand("lock startup") }
 
 	// State commands.
 	function setMode(mode) { sendCommand("set-mode " + mode) }
 	function cycleMode() { sendCommand("cycle-mode") }
-	function oskDismiss() { sendCommand("osk-dismiss") }
-	function oskUndismiss() { sendCommand("osk-undismiss") }
-	function oskToggle() { sendCommand("osk-toggle") }
-	function oskShow() { sendCommand("osk-show") }
-	function oskHide() { sendCommand("osk-hide") }
-	function oskPin() { sendCommand("osk-pin") }
-	function oskUnpin() { sendCommand("osk-unpin") }
+	function oskDismiss() { sendCommand("osk dismiss") }
+	function oskUndismiss() { sendCommand("osk undismiss") }
+	function oskToggle() { sendCommand("osk toggle") }
+	function oskShow() { sendCommand("osk show") }
+	function oskHide() { sendCommand("osk hide") }
+	function oskPin() { sendCommand("osk pin") }
+	function oskUnpin() { sendCommand("osk unpin") }
+
+	// Image analysis signals.
+	signal findRegionsResult(var data)
+	signal leastBusyRegionResult(var data)
+	signal textColorResult(var data)
+	signal thumbnailGenerated(var data)
+	signal randomWallpaperReady(var data)
+	signal keyringLookupResult(var data)
+	signal keyringStatus(var data)
+	signal keyringUnlockResult(var data)
 
 	function sendCommand(cmd) {
 		if (!daemonSocket.connected) {
@@ -165,40 +171,36 @@ Singleton {
 		daemonSocket.flush()
 	}
 
-	function easyEffectsToggle() { sendCommand("easyeffects-toggle") }
-	function easyEffectsEnable() { sendCommand("easyeffects-enable") }
-	function easyEffectsDisable() { sendCommand("easyeffects-disable") }
-	function hyprsunsetSetGamma(gamma) { sendCommand("hyprsunset-gamma " + gamma) }
-	function hyprsunsetEnableTemperature() { sendCommand("hyprsunset-enable") }
-	function hyprsunsetDisableTemperature() { sendCommand("hyprsunset-disable") }
-	function hyprsunsetToggleTemperature(active) { sendCommand("hyprsunset-toggle " + (active !== undefined ? active : "")) }
-	function brightnessSet(screen, value) { sendCommand("brightness-set " + screen + " " + value) }
-	function brightnessIncrement(screen, delta) { sendCommand("brightness-increment " + screen + " " + delta) }
-	function brightnessGet(screen) { sendCommand("brightness-get " + screen) }
-	function wifiEnable() { sendCommand("wifi-enable") }
-	function wifiDisable() { sendCommand("wifi-disable") }
-	function wifiToggle() { sendCommand("wifi-toggle") }
-	function wifiRescan() { sendCommand("wifi-rescan") }
-	function wifiConnect(ssid) { sendCommand("wifi-connect " + ssid) }
-	function wifiDisconnect(ssid) { sendCommand("wifi-disconnect " + ssid) }
-	function wifiChangePassword(ssid, password) { sendCommand("wifi-change-password " + ssid + " " + password) }
-	function cliphistRefresh() { sendCommand("cliphist-list") }
-	function cliphistDelete(entry) { sendCommand("cliphist-delete " + entry) }
-	function cliphistWipe() { sendCommand("cliphist-wipe") }
+	function easyEffectsToggle() { sendCommand("easyeffects toggle") }
+	function easyEffectsEnable() { sendCommand("easyeffects enable") }
+	function easyEffectsDisable() { sendCommand("easyeffects disable") }
+	function hyprsunsetSetGamma(gamma) { sendCommand("hyprsunset gamma " + gamma) }
+	function hyprsunsetEnableTemperature() { sendCommand("hyprsunset enable") }
+	function hyprsunsetDisableTemperature() { sendCommand("hyprsunset disable") }
+	function hyprsunsetToggleTemperature(active) { sendCommand("hyprsunset toggle " + (active !== undefined ? active : "")) }
+	function brightnessSet(screen, value) { sendCommand("brightness set " + screen + " " + value) }
+	function brightnessIncrement(screen, delta) { sendCommand("brightness increment " + screen + " " + delta) }
+	function brightnessGet(screen) { sendCommand("brightness get " + screen) }
+	function wifiEnable() { sendCommand("wifi enable") }
+	function wifiDisable() { sendCommand("wifi disable") }
+	function wifiToggle() { sendCommand("wifi toggle") }
+	function wifiRescan() { sendCommand("wifi rescan") }
+	function wifiConnect(ssid) { sendCommand("wifi connect " + ssid) }
+	function wifiDisconnect(ssid) { sendCommand("wifi disconnect " + ssid) }
+	function wifiChangePassword(ssid, password) { sendCommand("wifi change-password " + ssid + " " + password) }
+	function cliphistRefresh() { sendCommand("cliphist list") }
+	function cliphistDelete(entry) { sendCommand("cliphist delete " + entry) }
+	function cliphistWipe() { sendCommand("cliphist wipe") }
 
-	function warpConnect() { sendCommand("warp-connect") }
-	function warpDisconnect() { sendCommand("warp-disconnect") }
-	function warpToggle() { sendCommand("warp-toggle") }
-	function warpRegister() { sendCommand("warp-register") }
-	function gameModeEnable() { sendCommand("gamemode-enable") }
-	function gameModeDisable() { sendCommand("gamemode-disable") }
-	function gameModeToggle() { sendCommand("gamemode-toggle") }
-	function fprintdCheck() { sendCommand("fprintd-check") }
-	function conflictCheck() { sendCommand("conflict-check") }
-	function fpsSet(value) { sendCommand("fps-set " + value) }
-	function hyprconfigGet(key) { sendCommand("hyprconfig-get " + key) }
-	function hyprconfigSet(key, value) { sendCommand("hyprconfig-set " + key + " " + value) }
-	function hyprconfigReset(key) { sendCommand("hyprconfig-reset " + key) }
+	function gameModeEnable() { sendCommand("gamemode enable") }
+	function gameModeDisable() { sendCommand("gamemode disable") }
+	function gameModeToggle() { sendCommand("gamemode toggle") }
+	function fprintdCheck() { sendCommand("fprintd check") }
+	function conflictCheck() { sendCommand("conflict check") }
+	function fpsSet(value) { sendCommand("fps set " + value) }
+	function hyprconfigGet(key) { sendCommand("hyprconfig get " + key) }
+	function hyprconfigSet(key, value) { sendCommand("hyprconfig set " + key + " " + value) }
+	function hyprconfigReset(key) { sendCommand("hyprconfig reset " + key) }
 
 	// ── Hyprland compositor API (REST-like) ──
 	// All Hyprland operations go through these semantic methods.
@@ -394,11 +396,6 @@ Singleton {
 			cliphistUpdated()
 		} else if (obj.event === "network_connect_result" && obj.data) {
 			networkConnectResult(obj.data)
-		} else if (obj.event === "warp_status" && obj.data) {
-			root.warpInstalled = obj.data.installed ?? false
-			root.warpConnected = obj.data.connected ?? false
-			root.warpStatus = obj.data.status ?? ""
-			warpStatusUpdated()
 		} else if (obj.event === "game_mode" && obj.data) {
 			root.gameModeEnabled = obj.data.enabled ?? false
 			gameModeUpdated()
@@ -411,6 +408,22 @@ Singleton {
 			root.fprintdAvailable = obj.data.available ?? false
 			root.fprintdEnrolled = obj.data.enrolled ?? false
 			fprintdResult(root.fprintdAvailable, root.fprintdEnrolled)
+		} else if (obj.event === "random_wallpaper_ready" && obj.data) {
+			randomWallpaperReady(obj.data)
+		} else if (obj.event === "thumbnail_generated" && obj.data) {
+			thumbnailGenerated(obj.data)
+		} else if (obj.event === "find-regions" && obj.data) {
+			findRegionsResult(obj.data)
+		} else if (obj.event === "least-busy-region" && obj.data) {
+			leastBusyRegionResult(obj.data)
+		} else if (obj.event === "text-color" && obj.data) {
+			textColorResult(obj.data)
+		} else if (obj.event === "keyring_lookup_result" && obj.data) {
+			keyringLookupResult(obj.data)
+		} else if (obj.event === "keyring_status" && obj.data) {
+			keyringStatus(obj.data)
+		} else if (obj.event === "keyring_unlock_result" && obj.data) {
+			keyringUnlockResult(obj.data)
 		} else if (obj.event === "hyprconfig_value" && obj.data) {
 			hyprconfigValue(obj.data.key ?? "", obj.data.value ?? "")
 		}

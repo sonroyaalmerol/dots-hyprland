@@ -20,8 +20,24 @@ Singleton {
         }
     }
 
+    // Revision counter bumped on every toplevel list change.
+    // ToplevelManager.toplevels is an UntypedObjectModel (QAbstractListModel).
+    // The pointer itself is constant, but the model's `values` property emits
+    // valuesChanged when toplevels are added/removed. We connect to that signal
+    // to force the `apps` binding to re-evaluate.
+    property int _revision: 0
+
+    Connections {
+        target: ToplevelManager.toplevels
+        function onValuesChanged() {
+            root._revision++
+        }
+    }
+
     property list<var> apps: {
         var map = new Map();
+        const _rev = root._revision; // ensure dependency on trigger
+        void _rev;
 
         // Pinned apps
         const pinnedApps = Config.options?.dock.pinnedApps ?? [];

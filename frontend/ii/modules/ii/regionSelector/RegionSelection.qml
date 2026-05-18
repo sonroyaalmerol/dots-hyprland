@@ -192,7 +192,7 @@ PanelWindow {
         screenshotDir: root.screenshotDir
         screenshotPath: root.screenshotPath
         onExited: (exitCode, exitStatus) => {
-            if (root.enableContentRegions) imageDetectionProcess.running = true;
+            if (root.enableContentRegions) root.startImageDetection();
             root.preparationDone = !checkRecordingProc.running;
         }
     }
@@ -211,29 +211,30 @@ PanelWindow {
     onPreparationDoneChanged: {
         if (!preparationDone) return;
         if (root.isRecording && root.recordingShouldStop) {
-            Quickshell.execDetached([Directories.recordScriptPath]);
+            DaemonSocket.sendCommand("record");
             root.dismiss();
             return;
         }
         root.visible = true;
     }
 
-    Process {
-        id: imageDetectionProcess
-        command: ["bash", "-c", `${Directories.scriptPath}/images/find-regions-venv.sh ` 
-            + `--hyprctl ` 
-            + `--image '${StringUtils.shellSingleQuoteEscape(root.screenshotPath)}' ` 
-            + `--max-width ${Math.round(root.screen.width * root.falsePositivePreventionRatio)} ` 
-            + `--max-height ${Math.round(root.screen.height * root.falsePositivePreventionRatio)} `]
-        stdout: StdioCollector {
-            id: imageDimensionCollector
-            onStreamFinished: {
+    Connections {
+        target: DaemonSocket
+        function onFindRegionsResult(data) {
+            if (data.imagePath !== root.screenshotPath) return
+            try {
                 imageRegions = RegionFunctions.filterImageRegions(
-                    JSON.parse(imageDimensionCollector.text),
+                    JSON.parse(data.result),
                     root.windowRegions
                 );
-            }
+            } catch (e) {}
         }
+    }
+
+    function startImageDetection() {
+        const maxW = Math.round(root.screen.width * root.falsePositivePreventionRatio)
+        const maxH = Math.round(root.screen.height * root.falsePositivePreventionRatio)
+        DaemonSocket.sendCommand("find-regions --hyprctl --image " + root.screenshotPath + " --max-width " + maxW + " --max-height " + maxH)
     }
 
     function getScreenshotAction() {
@@ -288,11 +289,15 @@ PanelWindow {
             screenshotAction, //
             screenshotDir
         )
-        Quickshell.execDetached(command);
         if (root.action == RegionSelection.SnipAction.Record || root.action == RegionSelection.SnipAction.RecordWithSound) {
+            const region = `${Math.round(root.regionX * root.monitorScale)},${Math.round(root.regionY * root.monitorScale)} ${Math.round(root.regionWidth * root.monitorScale)}x${Math.round(root.regionHeight * root.monitorScale)}`
+            let cmd = "record --region " + region
+            if (root.action == RegionSelection.SnipAction.RecordWithSound) cmd += " --sound"
+            DaemonSocket.sendCommand(cmd)
             root.phase = RegionSelection.Phase.Post
             root.selectionMode = RegionSelection.SelectionMode.RectCorners
-        } else {
+        } else if (command) {
+            Quickshell.execDetached(command);
             root.dismiss();
         }
     }

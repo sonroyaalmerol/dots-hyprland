@@ -2,6 +2,7 @@ pragma Singleton
 
 import qs.modules.common
 import qs.modules.common.functions
+import qs.services
 import Quickshell
 import Quickshell.Io
 
@@ -26,7 +27,7 @@ Singleton {
     }
 
     function handleFirstRun() {
-        Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, root.defaultWallpaperPath])
+        DaemonSocket.sendCommand("switch-wallpaper --image " + root.defaultWallpaperPath)
         Quickshell.execDetached(["bash", "-c", `qs -p '${root.welcomeQmlPath}'`])
     }
 

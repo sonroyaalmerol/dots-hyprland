@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import Quickshell
-import Quickshell.Io
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -11,15 +10,12 @@ import qs.modules.common.functions
 ContentPage {
     forceWidth: true
 
-    Process {
-        id: randomWallProc
-        property string status: ""
-        property string scriptPath: `${Directories.scriptPath}/colors/random/random_konachan_wall.sh`
-        command: ["bash", "-c", FileUtils.trimFileProtocol(randomWallProc.scriptPath)]
-        stdout: SplitParser {
-            onRead: data => {
-                randomWallProc.status = data.trim();
-            }
+    property bool randomWallLoading: false
+
+    Connections {
+        target: DaemonSocket
+        function onRandom_wallpaper_ready(data) {
+            root.randomWallLoading = false
         }
     }
 
@@ -89,30 +85,30 @@ ContentPage {
 
             ColumnLayout {
                 RippleButtonWithIcon {
-                    enabled: !randomWallProc.running
+                    enabled: !randomWallLoading
                     visible: Config.options.policies.weeb === 1
                     Layout.fillWidth: true
                     buttonRadius: Appearance.rounding.small
                     materialIcon: "ifl"
-                    mainText: randomWallProc.running ? Translation.tr("Be patient...") : Translation.tr("Random: Konachan")
+                    mainText: randomWallLoading ? Translation.tr("Be patient...") : Translation.tr("Random: Konachan")
                     onClicked: {
-                        randomWallProc.scriptPath = `${Directories.scriptPath}/colors/random/random_konachan_wall.sh`;
-                        randomWallProc.running = true;
+                        randomWallLoading = true;
+                        DaemonSocket.sendCommand("random-wallpaper");
                     }
                     StyledToolTip {
                         text: Translation.tr("Random SFW Anime wallpaper from Konachan\nImage is saved to ~/Pictures/Wallpapers")
                     }
                 }
                 RippleButtonWithIcon {
-                    enabled: !randomWallProc.running
+                    enabled: !randomWallLoading
                     visible: Config.options.policies.weeb === 1
                     Layout.fillWidth: true
                     buttonRadius: Appearance.rounding.small
                     materialIcon: "ifl"
-                    mainText: randomWallProc.running ? Translation.tr("Be patient...") : Translation.tr("Random: osu! seasonal")
+                    mainText: randomWallLoading ? Translation.tr("Be patient...") : Translation.tr("Random: osu! seasonal")
                     onClicked: {
-                        randomWallProc.scriptPath = `${Directories.scriptPath}/colors/random/random_osu_wall.sh`;
-                        randomWallProc.running = true;
+                        randomWallLoading = true;
+                        DaemonSocket.sendCommand("random-wallpaper --source osu");
                     }
                     StyledToolTip {
                         text: Translation.tr("Random osu! seasonal background\nImage is saved to ~/Pictures/Wallpapers")
@@ -125,7 +121,7 @@ ContentPage {
                         text: Translation.tr("Pick wallpaper image on your system")
                     }
                     onClicked: {
-                        Quickshell.execDetached(`${Directories.wallpaperSwitchScriptPath}`);
+                        DaemonSocket.sendCommand("switch-wallpaper --mode " + (Appearance.m3colors.darkmode ? "dark" : "light"));
                     }
                     mainContentComponent: Component {
                         RowLayout {
@@ -176,7 +172,7 @@ ContentPage {
             currentValue: Config.options.appearance.palette.type
             onSelected: newValue => {
                 Config.options.appearance.palette.type = newValue;
-                Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --noswitch`]);
+                DaemonSocket.sendCommand("switch-wallpaper --noswitch");
             }
             options: [
                 {

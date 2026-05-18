@@ -1,5 +1,5 @@
 -- Monitor config is auto-generated in monitors.lua
--- To override, add hl.monitor() calls in custom/general.lua
+-- Override in ~/.config/hypr/snry-override.lua
 
 -- Gestures
 hl.config({
@@ -12,6 +12,19 @@ hl.config({
 		workspace_swipe_create_new = true,
 	},
 })
+
+-- Trackpad gestures (native v0.55+)
+hl.gesture({ fingers = 3, direction = "up", action = function() hl.dispatch(hl.dsp.global("quickshell:overviewWorkspacesToggle")) end })
+hl.gesture({ fingers = 3, direction = "down", action = function() hl.dispatch(hl.dsp.global("quickshell:overviewWorkspacesToggle")) end })
+hl.gesture({ fingers = 4, direction = "up", action = function() hl.dispatch(hl.dsp.global("quickshell:overviewWorkspacesToggle")) end })
+hl.gesture({ fingers = 4, direction = "down", action = "close" })
+
+-- Touch gestures via hyprgrass plugin (if loaded)
+-- TODO: hyprgrass addConfigKeyword/addConfigValue are broken on Lua config,
+-- waiting on upstream update for v0.55+ addConfigValueV2/addLuaFunction support.
+-- Once hyprgrass supports v0.55+, re-enable edge/tap/longpress binds here:
+--   hl.plugin.touch_gestures.hyprgrass_bind(...)
+-- For now, native trackpad gestures above cover swipe:3/4.
 
 -- General
 hl.config({

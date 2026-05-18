@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -20,7 +19,6 @@ import (
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/darkmode"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/easyeffects"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/gamemode"
-	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/guard"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprkeybinds"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprsunset"
@@ -40,7 +38,6 @@ import (
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/tabletmode"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/uinput"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/updates"
-	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/warp"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/weather"
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/manager"
 )
@@ -65,17 +62,20 @@ type Config struct {
 	HyprsunsetCfg    hyprsunset.Config
 	HyprXkbCfg       hyprxkb.Config
 	NetworkCfg       network.Config
-	WarpCfg          warp.Config
 	GamemodeCfg      gamemode.Config
 	DarkmodeCfg      darkmode.Config
 }
 
 func DefaultConfig() Config {
 	return Config{
-		SocketPath:       os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.sock",
-		LockPath:         os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.lock",
-		QuickshellCfg:    quickshell.DefaultConfig(),
-		IdleCfg:          idle.DefaultConfig(),
+		SocketPath:    os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.sock",
+		LockPath:      os.Getenv("XDG_RUNTIME_DIR") + "/snry-daemon.lock",
+		QuickshellCfg: quickshell.DefaultConfig(),
+		IdleCfg: func() idle.Config {
+			cfg := idle.DefaultConfig()
+			cfg.QsConfigPath = quickshell.ResolveConfigPath()
+			return cfg
+		}(),
 		LockscreenCfg:    lockscreen.DefaultConfig(),
 		PowersaveTimeout: 30 * time.Second,
 		ResourcesCfg:     resources.DefaultConfig(),
@@ -89,7 +89,6 @@ func DefaultConfig() Config {
 		HyprsunsetCfg:    hyprsunset.DefaultConfig(),
 		HyprXkbCfg:       hyprxkb.DefaultConfig(),
 		NetworkCfg:       network.DefaultConfig(),
-		WarpCfg:          warp.DefaultConfig(),
 		GamemodeCfg:      gamemode.DefaultConfig(),
 		DarkmodeCfg:      darkmode.DefaultConfig(),
 	}
@@ -132,10 +131,7 @@ type App struct {
 	tabletModeMon   *tabletmode.Monitor
 	inputMethodW    *inputmethod.Watcher
 	networkSvc      *network.Service
-	warpSvc         *warp.Service
 	gamemodeSvc     *gamemode.Service
-	guardSvc        *guard.Service
-	hlGuardSvc      *guard.Service
 	darkmodeSvc     *darkmode.Service
 	conflictSvc     *conflict.Service
 
@@ -170,6 +166,34 @@ func New(cfg Config) *App {
 func (a *App) HyprlandSvc() *hyprland.Service   { return a.hyprlandSvc }
 func (a *App) ResourcesSvc() *resources.Service { return a.resourcesSvc }
 
+func (a *App) stateDir() string {
+	d := os.Getenv("XDG_STATE_HOME")
+	if d == "" {
+		d = filepath.Join(os.Getenv("HOME"), ".local/state")
+	}
+	return d
+}
+
+func (a *App) configDir() string {
+	d := os.Getenv("XDG_CONFIG_HOME")
+	if d == "" {
+		d = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	return d
+}
+
+func (a *App) genDir() string {
+	return filepath.Join(a.stateDir(), "quickshell", "user", "generated")
+}
+
+func (a *App) colorFilePath() string {
+	return filepath.Join(a.genDir(), "color.txt")
+}
+
+func (a *App) colorsJSONPath() string {
+	return filepath.Join(a.genDir(), "colors.json")
+}
+
 // ── Run ───────────────────────────────────────────────────────────────────────
 
 func (a *App) Run(ctx context.Context) error {
@@ -192,8 +216,22 @@ func (a *App) Run(ctx context.Context) error {
 			log.Printf("[app] compositor launch failed: %v", err)
 			// Continue anyway — some daemon features work without Hyprland.
 		}
-	} else {
+	} else if compositor.IsAlive(os.Getenv("HYPRLAND_INSTANCE_SIGNATURE")) {
 		log.Printf("[app] Hyprland already running (signature=%s)", os.Getenv("HYPRLAND_INSTANCE_SIGNATURE"))
+		// Ensure WAYLAND_DISPLAY and DISPLAY are in the systemd environment
+		// even when the daemon restarts with Hyprland already running.
+		runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+		if runtimeDir == "" {
+			runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
+		}
+		compositor.ImportEnvironment(runtimeDir)
+	} else {
+		log.Printf("[app] stale HYPRLAND_INSTANCE_SIGNATURE detected, clearing and relaunching compositor")
+		os.Unsetenv("HYPRLAND_INSTANCE_SIGNATURE")
+		os.Unsetenv("WAYLAND_DISPLAY")
+		if _, err := compositor.Launch(ctx); err != nil {
+			log.Printf("[app] compositor launch failed: %v", err)
+		}
 	}
 
 	a.socketServer = socket.New(a.cfg.SocketPath)
@@ -279,36 +317,9 @@ func (a *App) Run(ctx context.Context) error {
 
 	a.networkSvc = network.New(a.cfg.NetworkCfg, a.socketServer.Emitter().Emit)
 
-	a.warpSvc = warp.New(a.cfg.WarpCfg, a.socketServer.Emitter().Emit)
 	a.gamemodeSvc = gamemode.New(a.cfg.GamemodeCfg, a.hyprlandSvc, a.socketServer.Emitter().Emit)
 	a.darkmodeSvc = darkmode.New(a.cfg.DarkmodeCfg, a.socketServer.Emitter().Emit)
 	a.conflictSvc = conflict.New()
-
-	// Guard: protect deployed quickshell config from tampering.
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
-	guardCfg := guard.Config{
-		WatchDir: filepath.Join(configDir, "quickshell", "ii"),
-	}
-	a.guardSvc = guard.New(guardCfg)
-
-	// Guard: protect deployed hyprland config from tampering (except custom/).
-	// Generated files (monitors.lua, workspaces.lua) are excluded from
-	// source restoration — they are regenerated from live Hyprland data instead.
-	sourceDir := "/usr/share/snry-shell/configs/hypr/hyprland"
-	if info, err := os.Stat(sourceDir); err != nil || !info.IsDir() {
-		// Fallback: use repo configs during development
-		sourceDir = filepath.Join(a.repoRoot(), "configs", "hypr", "hyprland")
-	}
-	hlGuardCfg := guard.Config{
-		WatchDir:   filepath.Join(configDir, "hypr", "hyprland"),
-		SourceDir:  sourceDir,
-		Excludes:   []string{"monitors.lua", "workspaces.lua"},
-		Regenerate: a.regenerateGeneratedConfig,
-	}
-	a.hlGuardSvc = guard.New(hlGuardCfg)
 
 	// Generate terminal theme files on startup if colors are available.
 	go a.handleApplyTerminalColors()
@@ -335,13 +346,10 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Go(func() { a.runService(ctx, "hyprxkb", a.hyprXkbSvc) })
 	wg.Go(func() { a.runService(ctx, "hyprsunset", a.hyprsunsetSvc) })
 	wg.Go(func() { a.runService(ctx, "network", a.networkSvc) })
-	wg.Go(func() { a.runService(ctx, "warp", a.warpSvc) })
 	wg.Go(func() { a.runService(ctx, "gamemode", a.gamemodeSvc) })
 	wg.Go(func() { a.runService(ctx, "darkmode", a.darkmodeSvc) })
-	wg.Go(func() { a.runService(ctx, "guard", a.guardSvc) })
-	wg.Go(func() { a.runService(ctx, "hlguard", a.hlGuardSvc) })
 
-	// Initial setup: bind keys, generate config files, then seed any that are missing.
+	// Initial setup: bind keys, generate config files.
 	go func() {
 		time.Sleep(3 * time.Second)
 		cleanup := a.setupHyprlandSystemBinds()
@@ -351,7 +359,6 @@ func (a *App) Run(ctx context.Context) error {
 				log.Printf("[app] generate %s: %v", rel, err)
 			}
 		}
-		a.hlGuardSvc.EnsureGenerated()
 	}()
 
 	<-ctx.Done()
@@ -600,10 +607,7 @@ func (a *App) EmitSnapshot(emit func(map[string]any)) {
 // ── User mode persistence ─────────────────────────────────────────────────────
 
 func (a *App) userModePath() string {
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 	return filepath.Join(configDir, "snry-shell", "tablet-mode")
 }
 
@@ -657,7 +661,6 @@ func (a *App) socketSnapshots() []socket.SnapshotProvider {
 	snap(a.hyprXkbSvc)
 	snap(a.hyprsunsetSvc)
 	snap(a.networkSvc)
-	snap(a.warpSvc)
 	snap(a.gamemodeSvc)
 	snap(a.darkmodeSvc)
 	return snaps
@@ -732,8 +735,8 @@ func (a *App) runQuickshell(ctx context.Context) {
 
 func (a *App) setupHyprlandSystemBinds() func() {
 	binds := []struct{ key, cmd string }{
-		{"XF86PowerOff", os.Getenv("HOME") + "/.local/bin/snry-daemon send power-button"},
-		{"switch:on:Lid Switch", os.Getenv("HOME") + "/.local/bin/snry-daemon send lid-close"},
+		{"XF86PowerOff", "snry send power-button"},
+		{"switch:on:Lid Switch", "snry send lid-close"},
 	}
 	for _, b := range binds {
 		if err := a.hyprlandSvc.BindKey(b.key, b.cmd, true); err != nil {
@@ -922,16 +925,39 @@ func (a *App) DispatchCommand(line string) {
 	dispatchCommand(a, line)
 }
 
-func (a *App) restartSelf() {
-	bin, err := os.Executable()
-	if err != nil {
-		log.Printf("restart: cannot find executable: %v", err)
-		return
+// softReload performs a hot reload without restarting the daemon process:
+//   - reimports WAYLAND_DISPLAY/DISPLAY into systemd environment
+//   - regenerates Hyprland config (monitors/workspaces)
+//   - reloads Hyprland config
+//   - restarts quickshell
+func (a *App) softReload() {
+	log.Printf("[app] soft reload: reimporting environment, reloading hyprland, restarting quickshell")
+
+	// Reimport environment vars so any restarted services pick them up.
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		runtimeDir = "/run/user/" + fmt.Sprintf("%d", os.Getuid())
 	}
-	args := os.Args
-	// Remove stale lock so new process can start.
-	lockPath := filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "snry-daemon.lock")
-	_ = os.Remove(lockPath)
-	log.Printf("restart: re-executing %s", bin)
-	_ = syscall.Exec(bin, args, os.Environ())
+	compositor.ImportEnvironment(runtimeDir)
+
+	// Regenerate Hyprland config from live monitor/workspace data.
+	for _, rel := range []string{"monitors.lua", "workspaces.lua"} {
+		if err := a.regenerateGeneratedConfig(rel); err != nil {
+			log.Printf("[app] generate %s: %v", rel, err)
+		}
+	}
+
+	// Reload Hyprland config.
+	if a.hyprlandSvc != nil {
+		if err := a.hyprlandSvc.Reload(); err != nil {
+			log.Printf("[app] hyprland reload: %v", err)
+		} else {
+			log.Printf("[app] hyprland config reloaded")
+		}
+	}
+
+	// Restart quickshell (the Run loop will auto-restart after the process exits).
+	if a.qsSvc != nil {
+		a.qsSvc.Restart()
+	}
 }

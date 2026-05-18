@@ -9,6 +9,10 @@ Type=simple
 ExecStart=/usr/bin/snry-daemon daemon
 Restart=on-failure
 RestartSec=3
+# KillMode=process: only kill the daemon itself, not its children.
+# Hyprland is launched as a child of the daemon on first boot.
+# Without this, systemctl restart would kill Hyprland too.
+KillMode=process
 
 [Install]
 WantedBy=default.target

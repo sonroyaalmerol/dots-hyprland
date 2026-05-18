@@ -248,13 +248,3 @@ func IsKVContent(data []byte) bool {
 	}
 	return totalLines == 0 || kvLines > 0
 }
-
-func KeyValueMapFromEntries(entries []KVEntry) map[string]string {
-	m := make(map[string]string)
-	for _, e := range entries {
-		if e.Key != "" {
-			m[e.Key] = e.Value
-		}
-	}
-	return m
-}

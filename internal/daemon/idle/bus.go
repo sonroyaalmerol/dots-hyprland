@@ -40,6 +40,14 @@ func (b *bus) publish(topic busTopic, data any) {
 	handlers := b.subs[topic]
 	b.mu.RUnlock()
 	for _, h := range handlers {
-		h(ev)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// absorb handler panics so one bad subscriber
+					// does not prevent other handlers from running
+				}
+			}()
+			h(ev)
+		}()
 	}
 }

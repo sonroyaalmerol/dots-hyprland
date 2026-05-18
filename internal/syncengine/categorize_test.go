@@ -10,22 +10,6 @@ func TestCategorizeHyprlandConf(t *testing.T) {
 	}
 }
 
-func TestCategorizeHyprlockConf(t *testing.T) {
-	c := DefaultCategorizer()
-	s := c.Categorize("hypr/hyprlock.conf")
-	if s != StrategyMergeKV {
-		t.Errorf("expected %q, got %q", StrategyMergeKV, s)
-	}
-}
-
-func TestCategorizeHypridleConf(t *testing.T) {
-	c := DefaultCategorizer()
-	s := c.Categorize("hypr/hypridle.conf")
-	if s != StrategyMergeKV {
-		t.Errorf("expected %q, got %q", StrategyMergeKV, s)
-	}
-}
-
 func TestCategorizeFuzzelIni(t *testing.T) {
 	c := DefaultCategorizer()
 	s := c.Categorize("fuzzel/fuzzel.ini")
@@ -92,10 +76,10 @@ func TestCategorizeFontconfig(t *testing.T) {
 	}
 }
 
-func TestCategorizeHyprCustom(t *testing.T) {
+func TestCategorizeHyprOverride(t *testing.T) {
 	c := DefaultCategorizer()
-	s := c.Categorize("hypr/custom/rules.conf")
-	if s != StrategyMergeKV {
-		t.Errorf("expected %q, got %q", StrategyMergeKV, s)
+	s := c.Categorize("hypr/snry-override.lua")
+	if s != StrategyOverwrite {
+		t.Errorf("expected %q, got %q", StrategyOverwrite, s)
 	}
 }

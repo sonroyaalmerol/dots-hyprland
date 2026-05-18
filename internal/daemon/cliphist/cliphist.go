@@ -3,9 +3,11 @@ package cliphist
 import (
 	"context"
 	"log"
+	"math/rand"
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Config struct {
@@ -33,8 +35,16 @@ func New(cfg Config, cb func(map[string]any)) *Service {
 }
 
 func (s *Service) Run(ctx context.Context) error {
-	// Start wl-paste --watch cliphist store as a long-running process
 	log.Println("[cliphist] starting wl-paste watcher")
+
+	const (
+		minBackoff = 1 * time.Second
+		maxBackoff = 30 * time.Second
+		resetAfter = 30 * time.Second
+	)
+
+	backoff := minBackoff
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -42,14 +52,39 @@ func (s *Service) Run(ctx context.Context) error {
 		default:
 		}
 
+		start := time.Now()
 		cmd := exec.CommandContext(ctx, "wl-paste", "--watch", s.cfg.Binary, "store")
-		if err := cmd.Run(); err != nil {
+		err := cmd.Run()
+
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		if err != nil {
+			// Reset backoff if the process ran long enough before failing
+			if time.Since(start) >= resetAfter {
+				backoff = minBackoff
+			}
+
+			log.Printf("[cliphist] wl-paste watcher exited: %v, restarting in %v", err, backoff)
+
+			timer := time.NewTimer(backoff)
 			select {
 			case <-ctx.Done():
+				timer.Stop()
 				return ctx.Err()
-			default:
-				log.Printf("[cliphist] wl-paste watcher exited: %v, restarting...", err)
+			case <-timer.C:
 			}
+
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			// Add small jitter to avoid thundering herd
+			backoff += time.Duration(rand.Int63n(int64(500 * time.Millisecond)))
+		} else {
+			// Clean exit is unexpected for a watcher; reset backoff
+			backoff = minBackoff
 		}
 	}
 }

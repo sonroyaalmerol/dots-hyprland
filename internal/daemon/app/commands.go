@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/sonroyaalmerol/snry-shell-qs/internal/daemon/hyprland"
+	imgPkg "github.com/sonroyaalmerol/snry-shell-qs/internal/image"
+	"github.com/sonroyaalmerol/snry-shell-qs/internal/wallpaper"
 )
 
 const maxKey = 248
@@ -32,6 +34,7 @@ func dispatchCommand(a *App, line string) {
 		return
 	}
 	switch fields[0] {
+	// ── Input ──────────────────────────────────────────────
 	case "press":
 		if len(fields) != 2 {
 			return
@@ -71,19 +74,21 @@ func dispatchCommand(a *App, line string) {
 		}
 		password := strings.Join(fields[1:], " ")
 		go a.lockscreenSvc.Authenticate(password)
+
 	case "lock":
+		if len(fields) >= 2 && fields[1] == "startup" {
+			if a.lockscreenSvc != nil {
+				a.lockscreenSvc.LockWithAutoUnlock()
+			} else if a.idleSvc != nil {
+				a.idleSvc.Lock()
+			}
+			return
+		}
 		if a.lockscreenSvc != nil {
 			if !a.lockscreenSvc.IsLocked() {
 				a.lockscreenSvc.Lock()
-				// Dispatch to QS via IPC for reliable lock screen display
 				go a.dispatchQsLock()
 			}
-		} else if a.idleSvc != nil {
-			a.idleSvc.Lock()
-		}
-	case "lock-startup":
-		if a.lockscreenSvc != nil {
-			a.lockscreenSvc.LockWithAutoUnlock()
 		} else if a.idleSvc != nil {
 			a.idleSvc.Lock()
 		}
@@ -113,21 +118,21 @@ func dispatchCommand(a *App, line string) {
 		if a.resourcesSvc != nil {
 			a.resourcesSvc.EmitSnapshot(a.socketServer.Emitter().Emit)
 		}
-	case "weather-refresh":
-		if a.weatherSvc != nil {
+	case "weather":
+		if len(fields) >= 2 && fields[1] == "refresh" && a.weatherSvc != nil {
 			go a.weatherSvc.RefreshNow(context.Background())
 		}
-	case "cliphist-list":
-		if a.cliphistSvc != nil {
+	case "cliphist":
+		if len(fields) < 2 || a.cliphistSvc == nil {
+			return
+		}
+		switch fields[1] {
+		case "list":
 			go a.cliphistSvc.EmitList(context.Background())
-		}
-	case "cliphist-delete":
-		if a.cliphistSvc != nil {
-			entry := strings.TrimPrefix(line, "cliphist-delete ")
+		case "delete":
+			entry := strings.TrimPrefix(line, "cliphist delete ")
 			go a.cliphistSvc.DeleteEntry(context.Background(), entry)
-		}
-	case "cliphist-wipe":
-		if a.cliphistSvc != nil {
+		case "wipe":
 			go a.cliphistSvc.Wipe(context.Background())
 		}
 	case "autoscale":
@@ -216,186 +221,164 @@ func dispatchCommand(a *App, line string) {
 		}
 	case "cycle-mode":
 		a.stateCh <- stateEvent{kind: "command", cmd: "cycle-mode"}
-	case "osk-dismiss":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-dismiss"}
-	case "osk-undismiss":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-undismiss"}
-	case "osk-toggle":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-toggle"}
-	case "osk-show":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-show"}
-	case "osk-hide":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-hide"}
-	case "osk-pin":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-pin"}
-	case "osk-unpin":
-		a.stateCh <- stateEvent{kind: "command", cmd: "osk-unpin"}
+	case "osk":
+		if len(fields) < 2 {
+			return
+		}
+		a.stateCh <- stateEvent{kind: "command", cmd: "osk-" + fields[1]}
 
 	// New daemon service commands
-	case "reload-keybinds":
-		if a.hyprKeybindsSvc != nil {
+	case "keybinds":
+		if len(fields) >= 2 && fields[1] == "reload" && a.hyprKeybindsSvc != nil {
 			a.hyprKeybindsSvc.Reload()
 		}
-	case "easyeffects-toggle":
-		if a.easyEffectsSvc != nil {
+	case "easyeffects":
+		if len(fields) < 2 || a.easyEffectsSvc == nil {
+			return
+		}
+		switch fields[1] {
+		case "toggle":
 			if a.easyEffectsSvc.IsActive() {
 				a.easyEffectsSvc.Disable()
 			} else {
 				a.easyEffectsSvc.Enable()
 			}
-		}
-	case "easyeffects-enable":
-		if a.easyEffectsSvc != nil {
+		case "enable":
 			a.easyEffectsSvc.Enable()
-		}
-	case "easyeffects-disable":
-		if a.easyEffectsSvc != nil {
+		case "disable":
 			a.easyEffectsSvc.Disable()
 		}
-	case "hyprsunset-gamma":
-		if a.hyprsunsetSvc != nil && len(fields) >= 2 {
-			if gamma, err := strconv.Atoi(fields[1]); err == nil {
-				a.hyprsunsetSvc.SetGamma(gamma)
+	case "hyprsunset":
+		if len(fields) < 2 || a.hyprsunsetSvc == nil {
+			return
+		}
+		switch fields[1] {
+		case "gamma":
+			if len(fields) >= 3 {
+				if gamma, err := strconv.Atoi(fields[2]); err == nil {
+					a.hyprsunsetSvc.SetGamma(gamma)
+				}
 			}
-		}
-	case "hyprsunset-enable":
-		if a.hyprsunsetSvc != nil {
+		case "enable":
 			a.hyprsunsetSvc.EnableTemperature()
-		}
-	case "hyprsunset-disable":
-		if a.hyprsunsetSvc != nil {
+		case "disable":
 			a.hyprsunsetSvc.DisableTemperature()
-		}
-	case "hyprsunset-toggle":
-		if a.hyprsunsetSvc != nil {
+		case "toggle":
 			active := true
-			if len(fields) >= 2 {
-				active = fields[1] != "false" && fields[1] != "0"
+			if len(fields) >= 3 {
+				active = fields[2] != "false" && fields[2] != "0"
 			}
 			a.hyprsunsetSvc.ToggleTemperature(active)
 		}
-	case "wifi-enable":
-		if a.networkSvc != nil {
+	case "wifi":
+		if len(fields) < 2 || a.networkSvc == nil {
+			return
+		}
+		switch fields[1] {
+		case "enable":
 			a.networkSvc.EnableWifi(context.Background(), true)
-		}
-	case "wifi-disable":
-		if a.networkSvc != nil {
+		case "disable":
 			a.networkSvc.EnableWifi(context.Background(), false)
-		}
-	case "wifi-toggle":
-		if a.networkSvc != nil {
+		case "toggle":
 			a.networkSvc.ToggleWifi(context.Background())
-		}
-	case "wifi-rescan":
-		if a.networkSvc != nil {
+		case "rescan":
 			go a.networkSvc.RescanWifi(context.Background())
+		case "connect":
+			if len(fields) >= 3 {
+				ssid := strings.Join(fields[2:], " ")
+				go func() {
+					err := a.networkSvc.ConnectWifi(context.Background(), ssid)
+					if err != nil {
+						log.Printf("[app] wifi connect: %v", err)
+						a.socketServer.Emitter().Emit(map[string]any{
+							"event": "network_connect_result",
+							"data": map[string]any{
+								"success":        false,
+								"askingPassword": true,
+								"ssid":           ssid,
+							},
+						})
+					}
+				}()
+			}
+		case "disconnect":
+			if len(fields) >= 3 {
+				go a.networkSvc.DisconnectWifi(context.Background(), strings.Join(fields[2:], " "))
+			}
+		case "change-password":
+			if len(fields) >= 4 {
+				go a.networkSvc.ChangePassword(context.Background(), fields[2], fields[3])
+			}
 		}
-	case "wifi-connect":
-		if a.networkSvc != nil && len(fields) >= 2 {
-			go func() {
-				err := a.networkSvc.ConnectWifi(context.Background(), strings.Join(fields[1:], " "))
-				if err != nil {
-					log.Printf("[app] wifi-connect: %v", err)
-					a.socketServer.Emitter().Emit(map[string]any{
-						"event": "network_connect_result",
-						"data": map[string]any{
-							"success":        false,
-							"askingPassword": true,
-							"ssid":           strings.Join(fields[1:], " "),
-						},
-					})
+	case "brightness":
+		if len(fields) < 3 || a.brightnessSvc == nil {
+			return
+		}
+		switch fields[1] {
+		case "set":
+			if len(fields) >= 4 {
+				value, err := strconv.ParseFloat(fields[3], 64)
+				if err == nil {
+					a.brightnessSvc.SetBrightness(fields[2], value)
 				}
-			}()
-		}
-	case "wifi-disconnect":
-		if a.networkSvc != nil && len(fields) >= 2 {
-			go a.networkSvc.DisconnectWifi(context.Background(), strings.Join(fields[1:], " "))
-		}
-	case "wifi-change-password":
-		if a.networkSvc != nil && len(fields) >= 3 {
-			go a.networkSvc.ChangePassword(context.Background(), fields[1], fields[2])
-		}
-	case "brightness-set":
-		if a.brightnessSvc != nil && len(fields) >= 3 {
-			screen := fields[1]
-			value, err := strconv.ParseFloat(fields[2], 64)
-			if err == nil {
-				a.brightnessSvc.SetBrightness(screen, value)
 			}
-		}
-	case "brightness-increment":
-		if a.brightnessSvc != nil && len(fields) >= 3 {
-			screen := fields[1]
-			delta, err := strconv.ParseFloat(fields[2], 64)
-			if err == nil {
-				a.brightnessSvc.IncrementBrightness(screen, delta)
+		case "increment":
+			if len(fields) >= 4 {
+				delta, err := strconv.ParseFloat(fields[3], 64)
+				if err == nil {
+					a.brightnessSvc.IncrementBrightness(fields[2], delta)
+				}
 			}
-		}
-	case "brightness-get":
-		if a.brightnessSvc != nil && len(fields) >= 2 {
-			value := a.brightnessSvc.GetBrightness(fields[1])
+		case "get":
+			value := a.brightnessSvc.GetBrightness(fields[2])
 			a.socketServer.Emitter().Emit(map[string]any{
 				"event": "brightness_value",
 				"data": map[string]any{
-					"screen":     fields[1],
+					"screen":     fields[2],
 					"brightness": value,
 				},
 			})
 		}
-	case "warp-connect":
-		if a.warpSvc != nil {
-			go a.warpSvc.Connect()
-		}
-	case "warp-disconnect":
-		if a.warpSvc != nil {
-			go a.warpSvc.Disconnect()
-		}
-	case "warp-toggle":
-		if a.warpSvc != nil {
-			go a.warpSvc.Toggle()
-		}
-	case "warp-register":
-		if a.warpSvc != nil {
-			go a.warpSvc.Register()
-		}
-	case "gamemode-enable":
-		if a.gamemodeSvc != nil {
-			go a.gamemodeSvc.Enable()
-		}
-	case "gamemode-disable":
-		if a.gamemodeSvc != nil {
-			go a.gamemodeSvc.Disable()
-		}
-	case "gamemode-toggle":
-		if a.gamemodeSvc != nil {
-			go a.gamemodeSvc.Toggle()
-		}
-	case "conflict-check":
-		if a.conflictSvc != nil {
-			go a.handleConflictCheck()
-		}
-	case "fprintd-check":
-		user := os.Getenv("USER")
-		if user == "" {
-			user = "root"
-		}
-		out, err := exec.Command("fprintd-list", user).Output()
-		if err != nil {
-			a.socketServer.Emitter().Emit(map[string]any{
-				"event": "fprintd_result",
-				"data":  map[string]any{"available": false, "enrolled": false},
-			})
+	case "gamemode":
+		if len(fields) < 2 || a.gamemodeSvc == nil {
 			return
 		}
-		output := string(out)
-		enrolled := strings.Contains(output, "Finger") || strings.Contains(output, "finger")
-		a.socketServer.Emitter().Emit(map[string]any{
-			"event": "fprintd_result",
-			"data":  map[string]any{"available": true, "enrolled": enrolled},
-		})
-	case "fps-set":
-		if len(fields) >= 2 {
-			fpsValue := fields[1]
+		switch fields[1] {
+		case "enable":
+			go a.gamemodeSvc.Enable()
+		case "disable":
+			go a.gamemodeSvc.Disable()
+		case "toggle":
+			go a.gamemodeSvc.Toggle()
+		}
+	case "conflict":
+		if len(fields) >= 2 && fields[1] == "check" && a.conflictSvc != nil {
+			go a.handleConflictCheck()
+		}
+	case "fprintd":
+		if len(fields) >= 2 && fields[1] == "check" {
+			user := os.Getenv("USER")
+			if user == "" {
+				user = "root"
+			}
+			out, err := exec.Command("fprintd-list", user).Output()
+			if err != nil {
+				a.socketServer.Emitter().Emit(map[string]any{
+					"event": "fprintd_result",
+					"data":  map[string]any{"available": false, "enrolled": false},
+				})
+				return
+			}
+			output := string(out)
+			enrolled := strings.Contains(output, "Finger") || strings.Contains(output, "finger")
+			a.socketServer.Emitter().Emit(map[string]any{
+				"event": "fprintd_result",
+				"data":  map[string]any{"available": true, "enrolled": enrolled},
+			})
+		}
+	case "fps":
+		if len(fields) >= 3 && fields[1] == "set" {
+			fpsValue := fields[2]
 			if _, err := strconv.Atoi(fpsValue); err != nil {
 				return
 			}
@@ -424,9 +407,13 @@ func dispatchCommand(a *App, line string) {
 			}
 			exec.Command("pkill", "-SIGUSR2", "mangohud").Run()
 		}
-	case "hyprconfig-get":
-		if len(fields) >= 2 {
-			key := strings.Join(fields[1:], " ")
+	case "hyprconfig":
+		if len(fields) < 3 {
+			return
+		}
+		switch fields[1] {
+		case "get":
+			key := strings.Join(fields[2:], " ")
 			out, err := a.hyprlandSvc.GetOption(key)
 			if err != nil {
 				return
@@ -438,53 +425,66 @@ func dispatchCommand(a *App, line string) {
 					"value": strings.TrimSpace(string(out)),
 				},
 			})
-		}
-	case "hyprconfig-set":
-		if len(fields) >= 3 {
-			key := fields[1]
-			value := strings.Join(fields[2:], " ")
-			a.hyprlandSvc.SetOption(key, value)
-		}
-	case "hyprconfig-reset":
-		if len(fields) >= 2 {
-			key := strings.Join(fields[1:], " ")
-			a.hyprlandSvc.ResetOption(key)
+		case "set":
+			if len(fields) >= 4 {
+				a.hyprlandSvc.SetOption(fields[2], strings.Join(fields[3:], " "))
+			}
+		case "reset":
+			a.hyprlandSvc.ResetOption(strings.Join(fields[2:], " "))
+		case "edit":
+			if len(fields) >= 3 {
+				go a.handleHyprconfigEdit(fields[1:])
+			}
 		}
 	case "record":
 		go a.handleRecord(fields[1:])
-	case "recognize-music":
-		go a.handleRecognizeMusic(fields[1:])
-	case "keyring-check":
-		go a.handleKeyringCheck()
-	case "keyring-lookup":
-		go a.handleKeyringLookup()
-	case "keyring-unlock":
-		if len(fields) >= 2 {
-			go a.handleKeyringUnlock(fields[1])
-		}
-	case "capslock-check":
-		if a.hyprlandSvc != nil {
-			go a.handleCapslockCheck()
-		}
-	case "battery-status":
-		go a.handleBatteryStatus()
-	case "restore-video-wallpaper":
-		go a.handleRestoreVideoWallpaper()
-	case "nvim-apply-colors":
-		go a.handleNvimApplyColors()
-	case "apply-vscode-color":
-		go a.handleApplyVscodeColor()
-	case "apply-kvantum-theme":
-		go a.handleApplyKvantumTheme()
-	case "apply-terminal-colors":
-		go a.handleApplyTerminalColors()
-	case "hyprconfig-edit":
-		if len(fields) < 3 {
+	case "keyring":
+		if len(fields) < 2 {
 			return
 		}
-		go a.handleHyprconfigEdit(fields[1:])
+		switch fields[1] {
+		case "check":
+			go a.handleKeyringCheck()
+		case "lookup":
+			go a.handleKeyringLookup()
+		case "unlock":
+			if len(fields) >= 3 {
+				go a.handleKeyringUnlock(fields[2])
+			}
+		}
+	case "capslock":
+		if len(fields) >= 2 && fields[1] == "check" && a.hyprlandSvc != nil {
+			go a.handleCapslockCheck()
+		}
+	case "battery":
+		if len(fields) >= 2 && fields[1] == "status" {
+			go a.handleBatteryStatus()
+		}
+	case "restore-video-wallpaper":
+		go a.handleRestoreVideoWallpaper()
+	case "apply-colors":
+		if len(fields) >= 2 {
+			switch fields[1] {
+			case "terminal":
+				go a.handleApplyTerminalColors()
+			case "vscode":
+				go a.handleApplyVscodeColor()
+			case "kvantum":
+				go a.handleApplyKvantumTheme()
+			case "nvim":
+				go a.handleNvimApplyColors()
+			}
+		}
+	case "switch-wallpaper":
+		go a.handleSwitchWallpaper(fields[1:])
+	case "find-regions":
+		go a.handleFindRegions(fields[1:])
+	case "least-busy-region":
+		go a.handleLeastBusyRegion(fields[1:])
+	case "text-color":
+		go a.handleTextColor(fields[1:])
 	case "restart":
-		a.restartSelf()
+		a.softReload()
 	}
 }
 
@@ -493,8 +493,8 @@ func dispatchCommand(a *App, line string) {
 // the QML lock screen.
 func (a *App) dispatchQsLock() {
 	binary := a.cfg.QuickshellCfg.Binary
-	configDir := a.cfg.QuickshellCfg.ConfigDir
-	if err := exec.Command(binary, "-c", configDir, "ipc", "call", "lock", "activate").Run(); err != nil {
+	configPath := a.cfg.QuickshellCfg.ConfigPath
+	if err := exec.Command(binary, "-p", configPath, "ipc", "call", "lock", "activate").Run(); err != nil {
 		log.Printf("[app] qs ipc lock failed: %v", err)
 	}
 }
@@ -910,10 +910,7 @@ func (a *App) handleRandomWallpaper(source string) {
 	downloadPath := filepath.Join(wallpapersDir, filename)
 
 	// Check if same as current wallpaper
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 	configFile := filepath.Join(configDir, "snry-shell", "config.json")
 	if data, err := os.ReadFile(configFile); err == nil {
 		var cfg map[string]any
@@ -991,6 +988,11 @@ func (a *App) handleGenerateThumbnails(sizeName, mode, target string) {
 			}
 		}
 	}
+
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "thumbnail_generated",
+		"data":  map[string]any{"directory": target, "size": sizeName},
+	})
 }
 
 func (a *App) handleCapslockCheck() {
@@ -1060,15 +1062,21 @@ func (a *App) handleBatteryStatus() {
 }
 
 func (a *App) handleRestoreVideoWallpaper() {
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
-	scriptPath := filepath.Join(configDir, "hypr", "custom", "scripts", "__restore_video_wallpaper.sh")
-	if _, err := os.Stat(scriptPath); err != nil {
+	cfg := wallpaper.DefaultConfig()
+	shellCfg, err := wallpaper.LoadShellConfig(cfg.ShellConfigFile)
+	if err != nil {
 		return
 	}
-	exec.Command("bash", scriptPath).Run()
+	videoPath := shellCfg.Background.WallpaperPath
+	if videoPath == "" {
+		return
+	}
+	if !wallpaper.IsVideoFile(videoPath) {
+		return
+	}
+	if err := wallpaper.StartVideoWallpaper(videoPath); err != nil {
+		log.Printf("[wallpaper] restore video wallpaper: %v", err)
+	}
 }
 
 func (a *App) handleRecord(args []string) {
@@ -1176,83 +1184,6 @@ func getRecordSaveDir() string {
 	return filepath.Join(os.Getenv("HOME"), "Videos")
 }
 
-func (a *App) handleRecognizeMusic(args []string) {
-	if _, err := exec.LookPath("songrec"); err != nil {
-		a.socketServer.Emitter().Emit(map[string]any{
-			"event": "music_recognition_error",
-			"data":  map[string]any{"error": "songrec not installed"},
-		})
-		return
-	}
-
-	interval := "2"
-	source := "monitor"
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "-i":
-			if i+1 < len(args) {
-				interval = args[i+1]
-				i++
-			}
-		case "-t":
-			if i+1 < len(args) {
-				i++
-			}
-		case "-s":
-			if i+1 < len(args) {
-				source = args[i+1]
-				i++
-			}
-		}
-	}
-
-	var audioDevice string
-	if source == "monitor" {
-		out, err := exec.Command("pactl", "get-default-sink").Output()
-		if err != nil {
-			return
-		}
-		audioDevice = strings.TrimSpace(string(out)) + ".monitor"
-	} else {
-		out, err := exec.Command("pactl", "info").Output()
-		if err != nil {
-			return
-		}
-		for line := range strings.SplitSeq(string(out), "\n") {
-			if after, ok := strings.CutPrefix(line, "Default Source:"); ok {
-				audioDevice = strings.TrimSpace(after)
-				break
-			}
-		}
-	}
-
-	if audioDevice == "" {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "songrec", "listen",
-		"--audio-device", audioDevice,
-		"--request-interval", interval,
-		"--json", "--disable-mpris")
-	out, err := cmd.Output()
-	if err != nil {
-		return
-	}
-
-	for line := range strings.SplitSeq(string(out), "\n") {
-		if strings.Contains(line, `"matches": [`) {
-			a.socketServer.Emitter().Emit(map[string]any{
-				"event": "music_recognition_result",
-				"data":  json.RawMessage(line),
-			})
-			return
-		}
-	}
-}
-
 func (a *App) handleKeyringCheck() {
 	cmd := exec.Command("secret-tool", "lookup", "service", "snry-shell")
 	if cmd.Run() == nil {
@@ -1311,43 +1242,21 @@ func (a *App) handleKeyringUnlock(password string) {
 }
 
 func (a *App) handleNvimApplyColors() {
-	stateDir := os.Getenv("XDG_STATE_HOME")
-	if stateDir == "" {
-		stateDir = filepath.Join(os.Getenv("HOME"), ".local/state")
-	}
-	scssFile := filepath.Join(stateDir, "quickshell", "user", "generated", "material_colors.scss")
-	nvimFile := filepath.Join(stateDir, "quickshell", "user", "generated", "nvim_colors.json")
+	nvimFile := filepath.Join(a.genDir(), "nvim_colors.json")
 
-	data, err := os.ReadFile(scssFile)
+	colors, err := wallpaper.LoadColorMapFromJSON(a.colorsJSONPath())
 	if err != nil {
+		log.Printf("[wallpaper] nvim colors: no colors.json: %v", err)
 		return
 	}
 
-	colors := make(map[string]any)
-	for line := range strings.SplitSeq(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		line = strings.TrimSuffix(line, ";")
-		if !strings.HasPrefix(line, "$") {
-			continue
-		}
-		line = line[1:]
-		before, after, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		key := strings.TrimSpace(before)
-		val := strings.TrimSpace(after)
-		switch val {
-		case "True":
-			colors[key] = true
-		case "False":
-			colors[key] = false
-		default:
-			colors[key] = val
-		}
+	// Convert to map[string]any for JSON output
+	colorsAny := make(map[string]any, len(colors))
+	for k, v := range colors {
+		colorsAny[k] = v
 	}
 
-	jsonOut, err := json.MarshalIndent(colors, "", "  ")
+	jsonOut, err := json.MarshalIndent(colorsAny, "", "  ")
 	if err != nil {
 		return
 	}
@@ -1373,24 +1282,24 @@ func (a *App) handleNvimApplyColors() {
 }
 
 func (a *App) handleApplyVscodeColor() {
-	stateDir := os.Getenv("XDG_STATE_HOME")
-	if stateDir == "" {
-		stateDir = filepath.Join(os.Getenv("HOME"), ".local/state")
-	}
-	colorFile := filepath.Join(stateDir, "quickshell", "user", "generated", "color.txt")
+	colorFile := a.colorFilePath()
 	newColor, err := os.ReadFile(colorFile)
 	if err != nil {
 		return
 	}
 	newColorStr := strings.TrimSpace(string(newColor))
 	if newColorStr == "" {
-		return
+		if colors, err := wallpaper.LoadColorMapFromJSON(a.colorsJSONPath()); err == nil {
+			if primary, ok := colors["primary"]; ok {
+				newColorStr = strings.TrimSpace(primary)
+			}
+		}
+		if newColorStr == "" {
+			return
+		}
 	}
 
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 
 	settingsPaths := []string{
 		filepath.Join(configDir, "Code/User/settings.json"),
@@ -1423,10 +1332,7 @@ func (a *App) handleApplyVscodeColor() {
 }
 
 func (a *App) handleApplyKvantumTheme() {
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 
 	colloidDir := filepath.Join(configDir, "Kvantum", "Colloid")
 	materialAdwDir := filepath.Join(configDir, "Kvantum", "MaterialAdw")
@@ -1460,17 +1366,12 @@ func (a *App) handleApplyKvantumTheme() {
 	}
 	os.WriteFile(dstConfig, data, 0644)
 
-	// Read SCSS colors
-	stateDir := os.Getenv("XDG_STATE_HOME")
-	if stateDir == "" {
-		stateDir = filepath.Join(os.Getenv("HOME"), ".local", "state")
+	colorMap := make(map[string]string)
+	if colors, err := wallpaper.LoadColorMapFromJSON(a.colorsJSONPath()); err == nil {
+		for k, v := range colors {
+			colorMap[snakeToCamel(k)] = v
+		}
 	}
-	scssFile := filepath.Join(stateDir, "quickshell", "user", "generated", "material_colors.scss")
-	scssData, err := os.ReadFile(scssFile)
-	if err != nil {
-		return
-	}
-	colors := parseSCSSColors(string(scssData))
 
 	// Apply color mappings to kvconfig
 	content := string(data)
@@ -1501,7 +1402,7 @@ func (a *App) handleApplyKvantumTheme() {
 		"text.disabled.color":           "surfaceDim",
 	}
 	for kvKey, scssName := range mappings {
-		if hexVal, ok := colors[scssName]; ok {
+		if hexVal, ok := colorMap[scssName]; ok {
 			re := regexp.MustCompile(regexp.QuoteMeta(kvKey) + `=\s*#[0-9a-fA-F]+`)
 			content = re.ReplaceAllString(content, kvKey+"="+hexVal)
 		}
@@ -1509,126 +1410,203 @@ func (a *App) handleApplyKvantumTheme() {
 	os.WriteFile(dstConfig, []byte(content), 0644)
 }
 
-func parseSCSSColors(scss string) map[string]string {
-	colors := make(map[string]string)
-	for line := range strings.SplitSeq(scss, "\n") {
-		line = strings.TrimSpace(line)
-		line = strings.TrimSuffix(line, ";")
-		if !strings.HasPrefix(line, "$") {
-			continue
+func snakeToCamel(s string) string {
+	parts := strings.Split(s, "_")
+	for i := 1; i < len(parts); i++ {
+		if len(parts[i]) > 0 {
+			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
 		}
-		line = line[1:]
-		before, after, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		key := strings.TrimSpace(before)
-		val := strings.TrimSpace(after)
-		colors[key] = val
 	}
-	return colors
+	return strings.Join(parts, "")
 }
 
-func (a *App) findScriptsDir(configDir string) string {
-	// Try installed path first
-	exe, err := os.Executable()
-	if err == nil {
-		shareDir := filepath.Join(filepath.Dir(exe), "..", "share", "snry-shell", "configs", "quickshell", "ii", "scripts")
-		if _, err := os.Stat(shareDir); err == nil {
-			return shareDir
+func (a *App) handleSwitchWallpaper(args []string) {
+	var imgPath, mode, schemeTypeStr, color string
+	var noswitch bool
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--image":
+			// Consume all following tokens until next flag (handles paths with spaces)
+			i++
+			var parts []string
+			for i < len(args) && !strings.HasPrefix(args[i], "--") {
+				parts = append(parts, args[i])
+				i++
+			}
+			if len(parts) > 0 {
+				imgPath = strings.Join(parts, " ")
+			}
+			i-- // back up one so loop increments correctly
+		case "--mode":
+			if i+1 < len(args) {
+				mode = args[i+1]
+				i++
+			}
+		case "--type":
+			if i+1 < len(args) {
+				schemeTypeStr = args[i+1]
+				i++
+			}
+		case "--color":
+			if i+1 < len(args) {
+				color = args[i+1]
+				i++
+			}
+		case "--noswitch":
+			noswitch = true
+		default:
+			// Positional argument without flag = image path
+			if imgPath == "" && !strings.HasPrefix(args[i], "--") {
+				var parts []string
+				parts = append(parts, args[i])
+				for j := i + 1; j < len(args) && !strings.HasPrefix(args[j], "--"); j++ {
+					parts = append(parts, args[j])
+				}
+				imgPath = strings.Join(parts, " ")
+				i += len(parts) - 1
+			}
 		}
 	}
-	// Fallback to source config
-	return filepath.Join(configDir, "quickshell", "ii", "scripts")
+
+	// Handle --noswitch: use current wallpaper path from config
+	if noswitch && imgPath == "" {
+		shellCfg, err := wallpaper.LoadShellConfig(wallpaper.DefaultConfig().ShellConfigFile)
+		if err == nil {
+			imgPath = shellCfg.Background.WallpaperPath
+		}
+	}
+
+	if imgPath == "" && color == "" && !noswitch {
+		// No image specified — open a file picker dialog
+		picturesDir := os.Getenv("XDG_PICTURES_DIR")
+		if picturesDir == "" {
+			homeDir, _ := os.UserHomeDir()
+			picturesDir = filepath.Join(homeDir, "Pictures")
+		}
+		wallpaperDir := filepath.Join(picturesDir, "Wallpapers")
+		if _, err := os.Stat(wallpaperDir); err != nil {
+			wallpaperDir = picturesDir
+		}
+
+		pickerCmd := exec.Command("kdialog", "--getopenfilename", wallpaperDir,
+			"--title", "Choose wallpaper",
+			"--filter", "*.jpg *.jpeg *.png *.webp *.avif *.bmp *.svg *.mp4 *.webm *.mkv")
+		out, err := pickerCmd.Output()
+		if err != nil {
+			return // User cancelled or error
+		}
+		imgPath = strings.TrimSpace(string(out))
+		if imgPath == "" {
+			return
+		}
+		// Strip file:// prefix if present
+		imgPath = strings.TrimPrefix(imgPath, "file://")
+	}
+
+	schemeType := wallpaper.ParseSchemeType(schemeTypeStr)
+
+	// If no scheme type specified, read from config
+	if schemeTypeStr == "" {
+		shellCfg, err := wallpaper.LoadShellConfig(wallpaper.DefaultConfig().ShellConfigFile)
+		if err == nil && shellCfg.Appearance.Palette.Type != "" {
+			schemeType = wallpaper.ParseSchemeType(shellCfg.Appearance.Palette.Type)
+		}
+	}
+	if schemeType == "" {
+		schemeType = wallpaper.SchemeAuto
+	}
+
+	// Handle accent color from config if not explicitly set
+	if color == "" {
+		shellCfg, err := wallpaper.LoadShellConfig(wallpaper.DefaultConfig().ShellConfigFile)
+		if err == nil && shellCfg.Appearance.Palette.AccentColor != "" {
+			color = shellCfg.Appearance.Palette.AccentColor
+		}
+	}
+
+	// When using an image (not noswitch), clear accent color
+	if imgPath != "" && !noswitch {
+		wallpaper.ClearAccentColor(wallpaper.DefaultConfig().ShellConfigFile)
+		color = ""
+	}
+
+	// Handle color=clear explicitly
+	if color == "clear" {
+		wallpaper.ClearAccentColor(wallpaper.DefaultConfig().ShellConfigFile)
+		color = ""
+	}
+
+	if mode == "" {
+		if wallpaper.IsDarkMode() {
+			mode = "dark"
+		} else {
+			mode = "light"
+		}
+	}
+
+	cfg := wallpaper.DefaultConfig()
+	cfg.RepoRoot = a.repoRoot()
+
+	if err := wallpaper.FullWallpaperSwitch(cfg, imgPath, mode, schemeType, color); err != nil {
+		log.Printf("[wallpaper] switch failed: %v", err)
+	}
 }
 
 func (a *App) handleApplyTerminalColors() {
-	stateDir := os.Getenv("XDG_STATE_HOME")
-	if stateDir == "" {
-		stateDir = filepath.Join(os.Getenv("HOME"), ".local", "state")
-	}
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 
-	genDir := filepath.Join(stateDir, "quickshell", "user", "generated")
-	scssFile := filepath.Join(genDir, "material_colors.scss")
-	scssData, err := os.ReadFile(scssFile)
+	wpCfg := wallpaper.DefaultConfig()
+	wpCfg.ConfigHome = configDir
+	wpCfg.RepoRoot = a.repoRoot()
+
+	genDir := wpCfg.GenDir()
+
+	// Read colors.json (populated by matugen + MaterialThemeLoader)
+	colors, err := wallpaper.LoadColorMapFromJSON(a.colorsJSONPath())
 	if err != nil {
-		return
-	}
-	colors := parseSCSSColors(string(scssData))
-
-	// Check if terminal theming is enabled
-	configFile := filepath.Join(configDir, "snry-shell", "config.json")
-	enableTerminal := true // default
-	if cfgData, err := os.ReadFile(configFile); err == nil {
-		var cfg map[string]any
-		if json.Unmarshal(cfgData, &cfg) == nil {
-			if appear, ok := cfg["appearance"].(map[string]any); ok {
-				if wt, ok := appear["wallpaperTheming"].(map[string]any); ok {
-					if et, ok := wt["enableTerminal"].(bool); ok {
-						enableTerminal = et
-					}
-				}
-			}
-		}
-	}
-
-	if !enableTerminal {
+		log.Printf("[wallpaper] no colors.json: %v", err)
 		return
 	}
 
-	os.MkdirAll(filepath.Join(genDir, "terminal"), 0755)
-	termAlpha := "100"
-
-	// Get the scripts directory
-	scriptDir := a.findScriptsDir(configDir)
-
-	// Apply Ghostty theme
-	ghosttyTemplate := filepath.Join(scriptDir, "colors", "terminal", "ghostty-theme.conf")
-	if data, err := os.ReadFile(ghosttyTemplate); err == nil {
-		content := string(data)
-		for name, hexVal := range colors {
-			content = strings.ReplaceAll(content, "$"+name+" #", strings.TrimPrefix(hexVal, "#"))
-		}
-		os.WriteFile(filepath.Join(genDir, "terminal", "ghostty-theme.conf"), []byte(content), 0644)
-		// Signal ghostty
-		if out, err := exec.Command("pidof", "ghostty").Output(); err == nil {
-			for pidStr := range strings.FieldsSeq(strings.TrimSpace(string(out))) {
-				if pid, err := strconv.Atoi(pidStr); err == nil {
-					syscall.Kill(pid, syscall.SIGUSR1)
-				}
-			}
-		}
+	// Load shell config for terminal settings
+	termCfg := wallpaper.DefaultTerminalConfig()
+	shellCfg, err := wallpaper.LoadShellConfig(wpCfg.ShellConfigFile)
+	if err == nil {
+		termCfg.EnableTerminal = shellCfg.Appearance.WallpaperTheming.EnableTerminal
+		termCfg.ForceDarkMode = shellCfg.Appearance.WallpaperTheming.TerminalGenerationProps.ForceDarkMode
+		termCfg.Harmony = shellCfg.Appearance.WallpaperTheming.TerminalGenerationProps.Harmony
+		termCfg.HarmonizeThreshold = shellCfg.Appearance.WallpaperTheming.TerminalGenerationProps.HarmonizeThreshold
+		termCfg.TermFgBoost = shellCfg.Appearance.WallpaperTheming.TerminalGenerationProps.TermFgBoost
 	}
 
-	// Apply generic terminal escape sequences
-	seqTemplate := filepath.Join(scriptDir, "colors", "terminal", "sequences.txt")
-	if data, err := os.ReadFile(seqTemplate); err == nil {
-		content := string(data)
-		for name, hexVal := range colors {
-			content = strings.ReplaceAll(content, "$"+name+" #", strings.TrimPrefix(hexVal, "#"))
-		}
-		content = strings.ReplaceAll(content, "$alpha", termAlpha)
-		os.WriteFile(filepath.Join(genDir, "terminal", "sequences.txt"), []byte(content), 0644)
+	if !termCfg.EnableTerminal {
+		return
+	}
 
-		// Send to /dev/pts
-		seqPath := filepath.Join(genDir, "terminal", "sequences.txt")
-		seqData, _ := os.ReadFile(seqPath)
-		entries, _ := os.ReadDir("/dev/pts")
-		digitPattern := regexp.MustCompile(`^\d+$`)
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				if digitPattern.MatchString(entry.Name()) {
-					if f, err := os.OpenFile(filepath.Join("/dev/pts", entry.Name()), os.O_WRONLY, 0); err == nil {
-						f.Write(seqData)
-						f.Close()
-					}
-				}
-			}
-		}
+	// Determine dark mode
+	isDark := true
+	if termCfg.ForceDarkMode {
+		isDark = true
+	} else {
+		isDark = wallpaper.IsDarkMode()
+	}
+
+	// Load terminal base scheme
+	schemePath := wallpaper.FindTerminalScheme(wpCfg)
+	scheme, err := wallpaper.LoadTerminalScheme(schemePath)
+	if err != nil {
+		log.Printf("[wallpaper] terminal scheme: %v", err)
+		return
+	}
+
+	// Generate harmonized terminal colors
+	termColors := wallpaper.GenerateTerminalColors(colors, scheme, isDark,
+		termCfg.Harmony, termCfg.HarmonizeThreshold, termCfg.TermFgBoost)
+
+	// Apply terminal theme files
+	if err := wallpaper.ApplyTerminalTheme(colors, termColors, isDark, genDir); err != nil {
+		log.Printf("[wallpaper] apply terminal theme: %v", err)
 	}
 
 	// Also apply nvim and vscode colors
@@ -1641,10 +1619,7 @@ func (a *App) handleHyprconfigEdit(args []string) {
 	var setArgs [][2]string
 	var resetKeys []string
 
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
+	configDir := a.configDir()
 	// Prefer hyprland.lua (new format), fall back to hyprland.conf (legacy)
 	defaultLua := filepath.Join(configDir, "hypr", "hyprland.lua")
 	defaultConf := filepath.Join(configDir, "hypr", "hyprland.conf")
@@ -1809,4 +1784,232 @@ func (a *App) editLuaConfig(filePath string, setArgs [][2]string, resetKeys []st
 	}
 
 	os.WriteFile(filePath, []byte(content), 0644)
+}
+
+func (a *App) handleFindRegions(args []string) {
+	params := imgPkg.DefaultFindRegionsParams("")
+	params.Hyprctl = true
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--image", "-i":
+			if i+1 < len(args) {
+				params.ImagePath = args[i+1]
+				i++
+			}
+		case "--hyprctl":
+			params.Hyprctl = true
+		case "--single":
+			params.Single = true
+		case "--quality":
+			params.Quality = true
+		case "--min-width":
+			if i+1 < len(args) {
+				params.MinWidth, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--min-height":
+			if i+1 < len(args) {
+				params.MinHeight, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--max-width":
+			if i+1 < len(args) {
+				v, _ := strconv.Atoi(args[i+1])
+				params.MaxWidth = &v
+				i++
+			}
+		case "--max-height":
+			if i+1 < len(args) {
+				v, _ := strconv.Atoi(args[i+1])
+				params.MaxHeight = &v
+				i++
+			}
+		case "--k":
+			if i+1 < len(args) {
+				params.K, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--min-size":
+			if i+1 < len(args) {
+				params.MinSize, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--sigma":
+			if i+1 < len(args) {
+				params.Sigma, _ = strconv.ParseFloat(args[i+1], 64)
+				i++
+			}
+		case "--resize-factor":
+			if i+1 < len(args) {
+				params.ResizeFactor, _ = strconv.ParseFloat(args[i+1], 64)
+				i++
+			}
+		case "--debug-output", "-do":
+			if i+1 < len(args) {
+				params.DebugOutput = args[i+1]
+				i++
+			}
+		}
+	}
+
+	if params.ImagePath == "" {
+		log.Printf("[image] find-regions: no image path specified")
+		return
+	}
+
+	result, err := imgPkg.FindRegionsJSON(params)
+	if err != nil {
+		log.Printf("[image] find-regions error: %v", err)
+		return
+	}
+
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "find-regions",
+		"data":  map[string]any{"result": result, "imagePath": params.ImagePath},
+	})
+}
+
+func (a *App) handleLeastBusyRegion(args []string) {
+	params := imgPkg.DefaultLeastBusyRegionParams("")
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--image", "-i":
+			// positional arg: consume tokens until next flag
+			i++
+			var parts []string
+			for i < len(args) && !strings.HasPrefix(args[i], "-") {
+				parts = append(parts, args[i])
+				i++
+			}
+			if len(parts) > 0 {
+				params.ImagePath = strings.Join(parts, " ")
+			}
+			i--
+		case "--width":
+			if i+1 < len(args) {
+				params.RegionWidth, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--height":
+			if i+1 < len(args) {
+				params.RegionHeight, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--screen-width":
+			if i+1 < len(args) {
+				params.ScreenWidth, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--screen-height":
+			if i+1 < len(args) {
+				params.ScreenHeight, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--stride":
+			if i+1 < len(args) {
+				params.Stride, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--screen-mode":
+			if i+1 < len(args) {
+				params.ScreenMode = args[i+1]
+				i++
+			}
+		case "--horizontal-padding", "-hp":
+			if i+1 < len(args) {
+				params.HorizontalPadding, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--vertical-padding", "-vp":
+			if i+1 < len(args) {
+				params.VerticalPadding, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--busiest":
+			params.Busiest = true
+		case "--visual-output", "-v":
+			params.VisualOutput = true
+		}
+	}
+
+	if params.ImagePath == "" {
+		log.Printf("[image] least-busy-region: no image path specified")
+		return
+	}
+
+	result, err := imgPkg.FindLeastBusyRegionJSON(params)
+	if err != nil {
+		log.Printf("[image] least-busy-region error: %v", err)
+		return
+	}
+
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "least-busy-region",
+		"data":  map[string]any{"result": result, "imagePath": params.ImagePath},
+	})
+}
+
+func (a *App) handleTextColor(args []string) {
+	var imagePath string
+	var cropX, cropY, cropW, cropH int
+	hasCrop := false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--image", "-i":
+			if i+1 < len(args) {
+				imagePath = args[i+1]
+				i++
+			}
+		case "--crop-x":
+			if i+1 < len(args) {
+				cropX, _ = strconv.Atoi(args[i+1])
+				hasCrop = true
+				i++
+			}
+		case "--crop-y":
+			if i+1 < len(args) {
+				cropY, _ = strconv.Atoi(args[i+1])
+				hasCrop = true
+				i++
+			}
+		case "--crop-w", "--crop-width":
+			if i+1 < len(args) {
+				cropW, _ = strconv.Atoi(args[i+1])
+				hasCrop = true
+				i++
+			}
+		case "--crop-h", "--crop-height":
+			if i+1 < len(args) {
+				cropH, _ = strconv.Atoi(args[i+1])
+				hasCrop = true
+				i++
+			}
+		}
+	}
+
+	var result *imgPkg.TextColorResult
+	var err error
+
+	if imagePath != "" {
+		if hasCrop && cropW > 0 && cropH > 0 {
+			result, err = imgPkg.DetectTextColorFromPathCropped(imagePath, cropX, cropY, cropW, cropH)
+		} else {
+			result, err = imgPkg.DetectTextColorFromPath(imagePath)
+		}
+	} else {
+		result, err = imgPkg.DetectTextColorFromReader(os.Stdin)
+	}
+
+	if err != nil {
+		log.Printf("[image] text-color error: %v", err)
+		return
+	}
+
+	jsonResult, _ := json.Marshal(result)
+	a.socketServer.Emitter().Emit(map[string]any{
+		"event": "text-color",
+		"data":  map[string]any{"result": string(jsonResult)},
+	})
 }

@@ -82,6 +82,20 @@ func FilesSteps(cfg Config) []Step {
 				return syncMiscConfigs(cfg)
 			},
 		},
+	}
+}
+
+// InstallSteps returns steps for installing binaries, plugins, and runtime
+// dependencies. These are separate from config sync so that post_upgrade can
+// run them independently (e.g. network-heavy installs that may hang).
+func InstallSteps(cfg Config) []Step {
+	return []Step{
+		{
+			Name: "create-xdg-dirs",
+			Fn: func(ctx context.Context) error {
+				return createXDGDirs(cfg)
+			},
+		},
 		{
 			Name: "install-snry-daemon-binary",
 			Fn: func(ctx context.Context) error {
@@ -112,6 +126,12 @@ func FilesSteps(cfg Config) []Step {
 			},
 		},
 		{
+			Name: "ensure-snry-symlink",
+			Fn: func(ctx context.Context) error {
+				return ensureSnrySymlink()
+			},
+		},
+		{
 			Name: "install-python-venv",
 			Fn: func(ctx context.Context) error {
 				return installPythonVenv(cfg)
@@ -124,25 +144,10 @@ func FilesSteps(cfg Config) []Step {
 			},
 		},
 		{
-			Name: "reload-hyprland",
-			Fn: func(ctx context.Context) error {
-				_ = hyprland.ReloadConfig()
-				return nil
-			},
-			Optional: true,
-		},
-		{
 			Name: "deploy-systemd-user-unit",
 			Fn: func(ctx context.Context) error {
 				return deploySystemdUnit(cfg)
 			},
-		},
-		{
-			Name: "start-quickshell",
-			Fn: func(ctx context.Context) error {
-				return startQuickshell()
-			},
-			Optional: true,
 		},
 	}
 }
@@ -169,7 +174,7 @@ func backupConfigs(cfg Config) error {
 	backupDir := cfg.BackupDir()
 	_ = os.MkdirAll(backupDir+"/.config", 0o755)
 
-	for _, dir := range []string{"quickshell", "bash", "fontconfig", "hypr"} {
+	for _, dir := range []string{"bash", "fontconfig", "hypr"} {
 		src := cfg.XDG.ConfigHome + "/" + dir
 		if _, err := os.Stat(src); err != nil {
 			continue
@@ -230,7 +235,13 @@ func syncQuickshell(cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("extract embedded frontend: %w", err)
 	}
-	steps, err := smartSyncSteps(cfg, src, cfg.XDG.ConfigHome+"/quickshell", "quickshell")
+
+	deployDir := "/usr/share/snry-shell/frontend/ii"
+	if err := os.MkdirAll(deployDir, 0o755); err != nil {
+		return fmt.Errorf("create deploy dir %s: %w", deployDir, err)
+	}
+
+	steps, err := smartSyncSteps(cfg, src+"/ii", deployDir, "quickshell")
 	if err != nil {
 		return fmt.Errorf("scan %s: %w", src, err)
 	}
@@ -241,7 +252,7 @@ func syncQuickshell(cfg Config) error {
 // the compiled-in embed.FS to a cache directory and returns the path.
 // The embedded FS has paths like "ii/shell.qml"; this function preserves
 // that prefix so the extracted tree matches the destination layout
-// expected under ~/.config/quickshell/ii/.
+// expected under /usr/share/snry-shell/frontend/ii/.
 func extractEmbeddedFrontend(cfg Config) (string, error) {
 	cacheDir := cfg.XDG.CacheHome + "/snry-shell/embedded-frontend"
 
@@ -291,47 +302,20 @@ func extractEmbeddedFrontend(cfg Config) (string, error) {
 func syncHyprland(cfg Config, hl hyprland.API) error {
 	deployDir := cfg.XDG.ConfigHome + "/hypr"
 
-	// 1. hyprland/ config dir — always overwrites every file
-	srcDir := cfg.ConfigsDir() + "/hypr/hyprland"
-	if _, err := os.Stat(srcDir); err != nil {
-		srcDir = cfg.RepoRoot + "/configs/hypr/hyprland"
-	}
-	if err := copyDir(srcDir, deployDir+"/hyprland"); err != nil {
-		return fmt.Errorf("copy hyprland: %w", err)
+	// 1. Seed empty snry-override.lua if it doesn't exist
+	overridePath := deployDir + "/snry-override.lua"
+	if _, err := os.Stat(overridePath); os.IsNotExist(err) {
+		_ = os.WriteFile(overridePath, []byte("-- Place your Hyprland overrides here.\n-- This file is loaded after all system defaults.\n"), 0o644)
 	}
 
-	// 2. Top-level config files
-	confFiles := []string{"hyprland.lua", "hyprlock.conf", "hypridle.conf"}
-	for _, f := range confFiles {
-		srcFile := cfg.ConfigsDir() + "/hyprland-entries/" + f
-		if _, err := os.Stat(srcFile); err != nil {
-			srcFile = cfg.RepoRoot + "/configs/hypr/" + f
-		}
-		if _, err := os.Stat(srcFile); err != nil {
-			continue
-		}
-		if err := copyFile(srcFile, deployDir+"/"+f, 0o644); err != nil {
-			return fmt.Errorf("copy %s: %w", f, err)
-		}
-	}
-
-	// 3. Custom dir — only create if missing (user overrides)
-	customSrc := cfg.ConfigsDir() + "/hypr/custom"
-	if _, err := os.Stat(customSrc); err != nil {
-		customSrc = cfg.RepoRoot + "/configs/hypr/custom"
-	}
-	if err := copyDirIfMissing(customSrc, deployDir+"/custom"); err != nil {
-		return fmt.Errorf("copy custom: %w", err)
-	}
-
-	// 4. Generated configs
+	// 3. Generated configs
 	if err := GenerateMonitorsLua(cfg, hl); err != nil {
 		return err
 	}
 	return GenerateWorkspacesLua(cfg, hl)
 }
 
-func copyDir(src, dst string) error {
+func copyDirRecursive(src, dst string, skipExisting bool) error {
 	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return err
 	}
@@ -343,36 +327,14 @@ func copyDir(src, dst string) error {
 		srcPath := filepath.Join(src, e.Name())
 		dstPath := filepath.Join(dst, e.Name())
 		if e.IsDir() {
-			if err := copyDir(srcPath, dstPath); err != nil {
+			if err := copyDirRecursive(srcPath, dstPath, skipExisting); err != nil {
 				return err
 			}
 		} else {
-			if err := copyFile(srcPath, dstPath, 0o644); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func copyDirIfMissing(src, dst string) error {
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		return err
-	}
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		srcPath := filepath.Join(src, e.Name())
-		dstPath := filepath.Join(dst, e.Name())
-		if e.IsDir() {
-			if err := copyDirIfMissing(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			if _, err := os.Stat(dstPath); err == nil {
-				continue // already exists, skip
+			if skipExisting {
+				if _, err := os.Stat(dstPath); err == nil {
+					continue
+				}
 			}
 			if err := copyFile(srcPath, dstPath, 0o644); err != nil {
 				return err
@@ -616,6 +578,37 @@ func installIcon(cfg Config) error {
 	return CopyFile(context.Background(), src, dst, 0o644)
 }
 
+// ensureSnrySymlink guarantees that the `snry` symlink to snry-daemon exists.
+// The PKGBUILD creates it in /usr/bin on package install. For non-root
+// (dev mode), it falls back to ~/.local/bin/snry.
+func ensureSnrySymlink() error {
+	target := "snry-daemon"
+
+	// System-wide symlink (package install).
+	systemLink := "/usr/bin/snry"
+	if existing, err := os.Readlink(systemLink); err == nil && existing == target {
+		return nil
+	}
+	if os.Getuid() == 0 {
+		_ = os.Remove(systemLink)
+		return os.Symlink(target, systemLink)
+	}
+
+	// User-local fallback (dev mode).
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return nil
+	}
+	userBin := home + "/.local/bin"
+	userLink := userBin + "/snry"
+	if existing, err := os.Readlink(userLink); err == nil && existing == target {
+		return nil
+	}
+	_ = os.MkdirAll(userBin, 0o755)
+	_ = os.Remove(userLink)
+	return os.Symlink(target, userLink)
+}
+
 func installPythonVenv(cfg Config) error {
 	venvPath := cfg.VenvPath()
 	reqFile := PythonRequirements(cfg.DataDir())
@@ -646,17 +639,6 @@ func installPythonVenv(cfg Config) error {
 func markFirstrun(cfg Config) error {
 	_ = touchFile(cfg.FirstrunFile())
 	return LineInFile(cfg.InstalledListfile(), cfg.FirstrunFile())
-}
-
-func startQuickshell() error {
-	if err := exec.Command("pidof", "qs").Run(); err != nil {
-		fmt.Println("  Starting quickshell...")
-		cmd := exec.Command("qs", "-c", "ii")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Start()
-	}
-	return nil
 }
 
 func deploySystemdUnit(cfg Config) error {

@@ -1,8 +1,0 @@
--- Add your custom general config here
--- Example:
--- hl.config({
---     general = {
---         gaps_in = 8,
---     },
--- })
--- It will never be overwritten by snry-shell updates

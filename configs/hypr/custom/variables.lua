@@ -1,2 +1,0 @@
--- Add your custom variables here
--- They will never be overwritten by snry-shell updates

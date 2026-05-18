@@ -36,7 +36,7 @@ Singleton {
 		target: Hyprland
 		function onRawEvent(event) {
 			if (event.name == "configreloaded") {
-				DaemonSocket.sendCommand("reload-keybinds")
+				DaemonSocket.sendCommand("keybinds reload")
 			}
 		}
 	}

@@ -64,14 +64,37 @@ Singleton {
     }
 
     function fetchKeyringData() {
-        // console.log("[KeyringStorage] Fetching keyring data...");
-        // console.log("[KeyringStorage] getData command:'" + getData.command.join("' '") + "'");
-        getData.running = true;
+        DaemonSocket.sendCommand("keyring lookup");
     }
 
     function saveKeyringData() {
         saveData.stdinEnabled = true;
         saveData.running = true;
+    }
+
+    Connections {
+        target: DaemonSocket
+        function onKeyringLookupResult(data) {
+            if (data.status === "not_found") {
+                console.error("[KeyringStorage] Entry not found, initializing.");
+                root.keyringData = {};
+                saveKeyringData();
+            } else if (data.status === "ok") {
+                const text = data.data;
+                if (text && text.length > 0 && text.startsWith("{")) {
+                    try {
+                        root.keyringData = JSON.parse(text);
+                    } catch (e) {
+                        console.error("[KeyringStorage] Failed to get keyring data, reinitializing.");
+                        root.keyringData = {};
+                        saveKeyringData();
+                    }
+                } else {
+                    root.keyringData = {};
+                }
+            }
+            root.loaded = true;
+        }
     }
 
     Process {
@@ -82,43 +105,9 @@ Singleton {
         ]
         onRunningChanged: {
             if (saveData.running) {
-                // console.log("[KeyringStorage] Saving with command: '" + saveData.command.join("' '") + "'");
                 saveData.write(JSON.stringify(root.keyringData));
                 root.dataChanged()
-                stdinEnabled = false // End input stream
-            }
-        }
-    }
-
-    Process {
-        id: getData
-        command: [ // We need to use echo for a newline so splitparser does parse
-            "bash", "-c", `${Directories.scriptPath}/keyring/try_lookup.sh 2> /dev/null`,
-        ]
-        stdout: StdioCollector {
-            id: keyringDataOutputCollector
-            onStreamFinished: {
-                const data = keyringDataOutputCollector.text;
-                if (data.length === 0 || !data.startsWith("{")) return;
-                try {
-                    root.keyringData = JSON.parse(data);
-                    // console.log("[KeyringStorage] Keyring data fetched:", JSON.stringify(root.keyringData));
-                } catch (e) {
-                    console.error("[KeyringStorage] Failed to get keyring data, reinitializing.");
-                    root.keyringData = {};
-                    saveKeyringData()
-                }
-            }
-        }
-        onExited: (exitCode, exitStatus) => {
-            // console.log("[KeyringStorage] Keyring data fetch process exited with code:", exitCode);
-            if (exitCode === 1) {
-                console.error("[KeyringStorage] Entry not found, initializing.");
-                root.keyringData = {};
-                saveKeyringData()
-            }
-            if (exitCode !== 2) {
-                root.loaded = true;
+                stdinEnabled = false
             }
         }
     }

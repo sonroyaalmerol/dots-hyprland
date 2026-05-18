@@ -27,15 +27,17 @@ func main() {
 	case "setup":
 		runSetup()
 	case "deps":
-		runDeps()
-	case "files":
-		runFiles()
-	case "setups":
-		runSetups()
+		if len(os.Args) >= 3 && os.Args[2] == "--check" {
+			runCheckDeps()
+		} else {
+			runDeps()
+		}
+	case "sync":
+		runSync()
+	case "install":
+		runInstall()
 	case "diagnose":
 		runDiagnose()
-	case "checkdeps":
-		runCheckDeps()
 	case "autoscale":
 		runAutoscale()
 	case "uninstall":
@@ -57,12 +59,12 @@ func printUsage() {
 Usage:
   snry-daemon              Start daemon (default)
   snry-daemon daemon       Start daemon explicitly
-  snry-daemon setup        Full installation (deps + files + setups)
-  snry-daemon deps         Install packages only
-  snry-daemon files        Sync config files only
-  snry-daemon setups       System setup only (groups, systemd, PAM)
+  snry-daemon setup        Full installation (deps + install + sync + system setup)
+  snry-daemon deps         Install packages
+  snry-daemon deps --check Check for missing packages
+  snry-daemon sync         Sync config files to XDG directories
+  snry-daemon install      Install binaries, plugins, fonts, venv, systemd unit
   snry-daemon diagnose     Collect system diagnostics
-  snry-daemon checkdeps    Check for missing packages
   snry-daemon autoscale    Auto-set monitor scale
   snry-daemon uninstall    Remove installed files and revert changes
   snry-daemon send <cmd>   Send command to running daemon
@@ -120,8 +122,8 @@ func runManagerCommand(name string, fn func(context.Context, manager.Config) err
 
 func runSetup()     { runManagerCommand("setup", manager.Setup) }
 func runDeps()      { runManagerCommand("deps", manager.Deps) }
-func runFiles()     { runManagerCommand("files", manager.Files) }
-func runSetups()    { runManagerCommand("setups", manager.Setups) }
+func runSync()      { runManagerCommand("sync", manager.Files) }
+func runInstall()   { runManagerCommand("install", manager.Install) }
 func runDiagnose()  { runManagerCommand("diagnose", manager.Diagnose) }
 func runCheckDeps() { runManagerCommand("checkdeps", manager.CheckDeps) }
 func runUninstall() { runManagerCommand("uninstall", manager.Uninstall) }
