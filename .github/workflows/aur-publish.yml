@@ -68,6 +68,7 @@ jobs:
           commit_email: ${{ secrets.AUR_EMAIL }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           force_push: true
+          post_process: git checkout -B master
 
   publish-snry-dm:
     name: Publish snry-dm
@@ -132,3 +133,4 @@ jobs:
           commit_email: ${{ secrets.AUR_EMAIL }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           force_push: true
+          post_process: git checkout -B master
