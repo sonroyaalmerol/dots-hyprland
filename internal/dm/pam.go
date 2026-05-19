@@ -296,21 +296,21 @@ func (s *UserSession) Run(ctx context.Context) error {
 
 // startCompositor launches Hyprland as the user and waits for its IPC socket.
 func (s *UserSession) startCompositor(ctx context.Context) error {
-	if !filepath.IsAbs(s.cfg.HyprlandBin) {
-		return fmt.Errorf("HyprlandBin must be an absolute path, got: %s", s.cfg.HyprlandBin)
+	startHypr := s.cfg.StartHyprlandBin
+	if startHypr == "" {
+		startHypr = "start-hyprland"
 	}
-	if _, err := os.Stat(s.cfg.HyprlandBin); err != nil {
-		return fmt.Errorf("hyprland binary not found at %s: %w", s.cfg.HyprlandBin, err)
+
+	configPath := systemHyprlandConfig()
+	if configPath == "" {
+		return fmt.Errorf("no system Hyprland config found in /usr/share/snry-shell/configs/hypr")
 	}
 
 	s.signature = fmt.Sprintf("snry-%d", s.pam.Uid())
 
-	args := []string{}
-	if config := systemHyprlandConfig(); config != "" {
-		args = append(args, "--config", config)
-	}
+	args := []string{"--", "-c", configPath}
 
-	s.hyprland = exec.Command(s.cfg.HyprlandBin, args...)
+	s.hyprland = exec.Command(startHypr, args...)
 	s.hyprland.Env = s.pam.Env()
 	if s.vt != nil {
 		s.hyprland.Env = append(s.hyprland.Env, fmt.Sprintf("XDG_VTNR=%d", s.vt.Num()))

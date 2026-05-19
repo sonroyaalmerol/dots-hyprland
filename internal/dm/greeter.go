@@ -39,8 +39,9 @@ func NewGreeter(cfg Config, uid, gid uint32, vt *VT) (*Greeter, error) {
 		return nil, fmt.Errorf("QSBin must be an absolute path, got: %s", cfg.QSBin)
 	}
 
-	// Ensure the greeter user has an XDG runtime directory.
-	greeterRuntimeDir := fmt.Sprintf("/run/user/%d", uid)
+	// System users don't get /run/user/<uid> (that's managed by logind for login
+	// sessions). Use a dedicated runtime dir under /run/snry-dm instead.
+	greeterRuntimeDir := "/run/snry-dm"
 	if err := os.MkdirAll(greeterRuntimeDir, 0700); err != nil {
 		return nil, fmt.Errorf("create greeter runtime dir: %w", err)
 	}
@@ -84,11 +85,12 @@ func NewGreeter(cfg Config, uid, gid uint32, vt *VT) (*Greeter, error) {
 }
 
 func (g *Greeter) startHyprland(uid, gid uint32, runtimeDir string) error {
-	if _, err := os.Stat(g.cfg.HyprlandBin); err != nil {
-		return fmt.Errorf("hyprland binary not found at %s: %w", g.cfg.HyprlandBin, err)
+	startHypr := g.cfg.StartHyprlandBin
+	if startHypr == "" {
+		startHypr = "start-hyprland"
 	}
 
-	g.hyprland = exec.Command(g.cfg.HyprlandBin)
+	g.hyprland = exec.Command(startHypr, "--", "-c", "/usr/share/snry-shell/configs/hyprland/hyprland-greeter/hyprland.conf")
 	g.hyprland.Env = []string{
 		fmt.Sprintf("HOME=/var/lib/%s", g.cfg.GreeterUser),
 		fmt.Sprintf("USER=%s", g.cfg.GreeterUser),
@@ -98,7 +100,6 @@ func (g *Greeter) startHyprland(uid, gid uint32, runtimeDir string) error {
 		"WAYLAND_DISPLAY=wayland-greeter",
 		"PATH=/usr/local/bin:/usr/bin:/bin",
 		fmt.Sprintf("XDG_VTNR=%d", g.vt.Num()),
-		"HYPRLAND_CONFIG=/usr/share/snry-shell/configs/hyprland/hyprland-greeter/hyprland.conf",
 	}
 	// Don't inherit root's stdout/stderr — use /dev/null or dedicated log.
 	g.hyprland.Stdout = nil

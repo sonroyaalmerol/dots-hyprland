@@ -39,6 +39,8 @@ type Config struct {
 	ShellQSConfigDir string
 	// HyprlandBin is the absolute path to Hyprland.
 	HyprlandBin string
+	// StartHyprlandBin is the absolute path to start-hyprland.
+	StartHyprlandBin string
 	// QSBin is the absolute path to the Quickshell binary.
 	QSBin string
 	// DaemonBin is the absolute path to snry-daemon.
@@ -56,12 +58,13 @@ var defaultBinPaths = []string{
 
 func DefaultConfig() Config {
 	return Config{
-		SocketPath:  "/run/snry-dm.sock",
-		GreeterUser: "snry-dm",
-		HyprlandBin: findBinary("Hyprland"),
-		QSBin:       findBinary("qs"),
-		DaemonBin:   findBinary("snry-daemon"),
-		GreeterVT:   1,
+		SocketPath:       "/run/snry-dm.sock",
+		GreeterUser:      "snry-dm",
+		HyprlandBin:      findBinary("Hyprland"),
+		StartHyprlandBin: findBinary("start-hyprland"),
+		QSBin:            findBinary("qs"),
+		DaemonBin:        findBinary("snry-daemon"),
+		GreeterVT:        1,
 	}
 }
 
