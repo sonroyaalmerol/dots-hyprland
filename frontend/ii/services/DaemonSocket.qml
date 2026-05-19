@@ -154,6 +154,32 @@ Singleton {
 	function oskPin() { sendCommand("osk pin") }
 	function oskUnpin() { sendCommand("osk unpin") }
 
+	// Hyprland dispatch commands (version-aware, routed through daemon).
+	function hyprFocusWorkspace(selector) { sendCommand("hyprland workspace " + selector) }
+	function hyprToggleSpecialWorkspace(name) {
+		if (name !== undefined)
+			sendCommand("hyprland toggle-special-workspace " + name)
+		else
+			sendCommand("hyprland toggle-special-workspace")
+	}
+	function hyprFocusMonitor(name) { sendCommand("hyprland focus-monitor " + name) }
+	function hyprFocusWindow(selector) { sendCommand("hyprland focus-window " + selector) }
+	function hyprCloseWindow(selector) { sendCommand("hyprland close-window " + selector) }
+	function hyprMoveWindowToWorkspace(ws, window) {
+		if (window !== undefined)
+			sendCommand("hyprland move-window-to-workspace " + ws + " " + window)
+		else
+			sendCommand("hyprland move-window-to-workspace " + ws)
+	}
+	function hyprMoveWindowToCoords(x, y, window) {
+		if (window !== undefined)
+			sendCommand("hyprland move-window-to-coords " + x + " " + y + " " + window)
+		else
+			sendCommand("hyprland move-window-to-coords " + x + " " + y)
+	}
+	function hyprExec(cmd) { sendCommand("hyprland exec " + cmd) }
+	function hyprGlobal(name) { sendCommand("hyprland global " + name) }
+
 	function sendCommand(cmd) {
 		if (!daemonSocket.connected) {
 			return

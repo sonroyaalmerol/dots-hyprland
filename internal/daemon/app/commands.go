@@ -79,6 +79,58 @@ func dispatchCommand(a *App, line string) {
 		case "movetoworkspacesilent":
 			a.hyprlandSvc.MoveWindowToWorkspace(fields[2], "")
 		}
+	case "hyprland":
+		if len(fields) < 2 || a.hyprlandSvc == nil {
+			return
+		}
+		switch fields[1] {
+		case "workspace":
+			if len(fields) >= 3 {
+				a.hyprlandSvc.FocusWorkspace(fields[2])
+			}
+		case "toggle-special-workspace":
+			name := ""
+			if len(fields) >= 3 {
+				name = fields[2]
+			}
+			a.hyprlandSvc.ToggleSpecialWorkspace(name)
+		case "focus-monitor":
+			if len(fields) >= 3 {
+				a.hyprlandSvc.FocusMonitor(fields[2])
+			}
+		case "focus-window":
+			if len(fields) >= 3 {
+				a.hyprlandSvc.FocusWindow(fields[2])
+			}
+		case "close-window":
+			if len(fields) >= 3 {
+				a.hyprlandSvc.CloseWindow(fields[2])
+			}
+		case "move-window-to-workspace":
+			if len(fields) >= 3 {
+				window := ""
+				if len(fields) >= 4 {
+					window = fields[3]
+				}
+				a.hyprlandSvc.MoveWindowToWorkspace(fields[2], window)
+			}
+		case "move-window-to-coords":
+			if len(fields) >= 4 {
+				window := ""
+				if len(fields) >= 5 {
+					window = fields[4]
+				}
+				a.hyprlandSvc.MoveWindowToCoords(fields[2], fields[3], window)
+			}
+		case "exec":
+			if len(fields) >= 3 {
+				a.hyprlandSvc.ExecCommand(strings.Join(fields[2:], " "))
+			}
+		case "global":
+			if len(fields) >= 3 {
+				a.hyprlandSvc.ActivateGlobalShortcut(strings.Join(fields[2:], " "))
+			}
+		}
 	case "auth":
 		if len(fields) < 2 || a.lockscreenSvc == nil {
 			return

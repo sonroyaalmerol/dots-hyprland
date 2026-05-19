@@ -5,7 +5,6 @@ import qs.services
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
 import Quickshell.Services.UPower
 
@@ -108,9 +107,9 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: event => {
                     if (Appearance.m3colors.darkmode) {
-                        Hyprland.dispatch("exec gsettings set org.gnome.desktop.interface color-scheme prefer-light");
+                        DaemonSocket.hyprExec("gsettings set org.gnome.desktop.interface color-scheme prefer-light")
                     } else {
-                        Hyprland.dispatch("exec gsettings set org.gnome.desktop.interface color-scheme prefer-dark");
+                        DaemonSocket.hyprExec("gsettings set org.gnome.desktop.interface color-scheme prefer-dark")
                     }
                 }
                 MaterialSymbol {

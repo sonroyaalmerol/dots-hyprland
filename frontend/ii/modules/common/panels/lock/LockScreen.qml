@@ -7,7 +7,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 Scope {
     id: root
@@ -65,8 +64,8 @@ Scope {
             GlobalStates.screenLocked = false;
 
             // Refocus last focused window on unlock (hack)
-            Hyprland.dispatch("togglespecialworkspace")
-            Hyprland.dispatch("togglespecialworkspace")
+            DaemonSocket.hyprToggleSpecialWorkspace()
+            DaemonSocket.hyprToggleSpecialWorkspace()
 
             // Reset
             lockContext.reset();

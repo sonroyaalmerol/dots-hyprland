@@ -91,9 +91,9 @@ Item {
     WheelHandler {
         onWheel: (event) => {
             if (event.angleDelta.y < 0)
-                Hyprland.dispatch("workspace r+1");
+                DaemonSocket.hyprFocusWorkspace("r+1")
             else if (event.angleDelta.y > 0)
-                Hyprland.dispatch("workspace r-1");
+                DaemonSocket.hyprFocusWorkspace("r-1")
         }
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
     }
@@ -103,7 +103,7 @@ Item {
         acceptedButtons: Qt.BackButton
         onPressed: (event) => {
             if (event.button === Qt.BackButton) {
-                Hyprland.dispatch("togglespecialworkspace");
+                DaemonSocket.hyprToggleSpecialWorkspace()
             } 
         }
     }
@@ -203,7 +203,7 @@ Item {
                 implicitHeight: vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
                 implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.verticalBarWidth
                 onPressed: {
-                    Hyprland.dispatch("workspace " + workspaceValue);
+                    DaemonSocket.hyprFocusWorkspace("" + workspaceValue)
                 }
                 width: vertical ? undefined : workspaceButtonWidth
                 height: vertical ? workspaceButtonWidth : undefined

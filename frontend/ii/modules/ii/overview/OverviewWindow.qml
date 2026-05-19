@@ -160,7 +160,7 @@ Item { // Window
         hoverEnabled: true
         onClicked: (mouse) => {
             if (windowData) {
-                Hyprland.dispatch("closewindow address:" + windowData.address)
+                DaemonSocket.hyprCloseWindow("address:" + windowData.address)
             }
             mouse.accepted = true
         }

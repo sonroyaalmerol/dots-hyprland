@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -41,6 +42,8 @@ func main() {
 		runAutoscale()
 	case "uninstall":
 		runUninstall()
+	case "start-hyprland":
+		runStartHyprland()
 	case "send":
 		runSend()
 	case "help", "-h", "--help":
@@ -66,6 +69,7 @@ Usage:
   snry-daemon diagnose     Collect system diagnostics
   snry-daemon autoscale    Auto-set monitor scale
   snry-daemon uninstall    Remove installed files and revert changes
+  snry-daemon start-hyprland Start Hyprland compositor with snry-shell config
   snry-daemon send <cmd>   Send command to running daemon
   snry-daemon help         Show this help`)
 }
@@ -105,6 +109,39 @@ func runAutoscale() {
 		fmt.Fprintf(os.Stderr, "autoscale error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func runStartHyprland() {
+	configPath := "/usr/share/snry-shell/configs/hypr/hyprland.lua"
+
+	// Allow override via env var or CLI arg.
+	if env := os.Getenv("SNRY_HYPRLAND_CONFIG"); env != "" {
+		configPath = env
+	}
+	if len(os.Args) >= 3 {
+		configPath = os.Args[2]
+	}
+
+	if _, err := os.Stat(configPath); err != nil {
+		fmt.Fprintf(os.Stderr, "error: config not found: %s\n", configPath)
+		os.Exit(1)
+	}
+
+	fmt.Printf("starting Hyprland with config: %s\n", configPath)
+
+	// Detach Hyprland into its own session so it survives the caller exiting.
+	cmd := exec.Command("Hyprland", "-c", configPath)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: failed to start Hyprland: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Hyprland started (pid %d)\n", cmd.Process.Pid)
+	os.Exit(0)
 }
 
 func runSend() {

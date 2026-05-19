@@ -24,8 +24,8 @@ LockScreen {
                 var monName = Quickshell.screens[j].name
                 var wsId = root.savedWorkspaces[monName]
                 if (wsId !== undefined) {
-                    Hyprland.dispatch("focusmonitor " + monName)
-                    Hyprland.dispatch("workspace " + wsId)
+                    DaemonSocket.hyprFocusMonitor(monName)
+                    DaemonSocket.hyprFocusWorkspace("" + wsId)
                 }
             }
             DaemonSocket.reload()
@@ -57,8 +57,8 @@ LockScreen {
                 for (i = 0; i < Quickshell.screens.length; ++i) {
                     mon = Quickshell.screens[i].name
                     ws = next[mon]
-                    Hyprland.dispatch("focusmonitor " + mon)
-                    Hyprland.dispatch("workspace " + (2147483647 - ws))
+                    DaemonSocket.hyprFocusMonitor(mon)
+                    DaemonSocket.hyprFocusWorkspace("" + (2147483647 - ws))
                 }
                 DaemonSocket.reload()
             } else {
