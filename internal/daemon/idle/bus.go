@@ -6,8 +6,7 @@ import "sync"
 type busTopic string
 
 const (
-	topicScreenLock  busTopic = "screenlock"
-	topicIdleInhibit busTopic = "idleinhibit"
+	topicScreenLock busTopic = "screenlock"
 )
 
 type busEvent struct {

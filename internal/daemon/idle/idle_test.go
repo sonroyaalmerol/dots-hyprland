@@ -55,6 +55,18 @@ func (m *mockHL) GetClients() ([]byte, error)         { return nil, nil }
 func (m *mockHL) GetDevices() ([]byte, error)         { return nil, nil }
 func (m *mockHL) IsRunning() bool                     { return true }
 
+// ── Helper: set a source flag directly and recompute ────────────────────────
+
+// setInhibitedForTest sets screensaverInhibited and recomputes.
+func (s *Service) setInhibitedForTest(inhibited bool) {
+	s.mu.Lock()
+	s.screensaverInhibited = inhibited
+	s.mu.Unlock()
+	s.recomputeInhibition()
+}
+
+// ── Config tests ────────────────────────────────────────────────────────────
+
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg.IdleTimeout != 5*time.Minute {
@@ -70,6 +82,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("SuspendTimeout = %v, want 0", cfg.SuspendTimeout)
 	}
 }
+
+// ── isLocked tests ──────────────────────────────────────────────────────────
 
 func TestIsLockedNoProvider(t *testing.T) {
 	s := New(nil, nil, DefaultConfig(), nil)
@@ -98,12 +112,13 @@ func TestSetLockedProvider(t *testing.T) {
 		called = true
 		return true
 	})
-	// isLocked doesn't call provider if nil? It does: s.lockedProvider != nil check.
 	_ = s.isLocked()
 	if !called {
 		t.Error("lockedProvider should be called")
 	}
 }
+
+// ── Display tests ───────────────────────────────────────────────────────────
 
 func TestSuppressDisplayOn(t *testing.T) {
 	hl := &mockHL{}
@@ -138,206 +153,25 @@ func TestSetDisplayNilHyprland(t *testing.T) {
 	s.setDisplay(false)
 }
 
-func TestNotifyLockChangedLocking(t *testing.T) {
-	hl := &mockHL{}
-	s := New(nil, nil, DefaultConfig(), hl)
-	s.SetLockedProvider(func() bool { return true })
-
-	// Initially lastLocked is false
-	s.NotifyLockChanged()
-
-	// Locking should turn display ON (for lock screen visibility)
-	log := hl.dpmsLog()
-	if len(log) < 1 || log[0] != "on" {
-		t.Errorf("lock should turn display ON, got %v", log)
-	}
-	if s.lastLocked != true {
-		t.Error("lastLocked should be true after NotifyLockChanged")
+func TestDisplayOnStartsTrue(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+	if !s.displayOn.Load() {
+		t.Error("displayOn should be true at startup")
 	}
 }
 
-func TestNotifyLockChangedUnlocking(t *testing.T) {
+func TestDisplayOnTracksSetDisplay(t *testing.T) {
 	hl := &mockHL{}
 	s := New(nil, nil, DefaultConfig(), hl)
 
-	// First lock
-	s.SetLockedProvider(func() bool { return true })
-	s.NotifyLockChanged()
-
-	// Then unlock
-	s.SetLockedProvider(func() bool { return false })
-	s.NotifyLockChanged()
-
-	log := hl.dpmsLog()
-	if len(log) < 2 || log[1] != "on" {
-		t.Errorf("unlock should turn display ON, got %v", log)
-	}
-	if s.lastLocked != false {
-		t.Error("lastLocked should be false after unlock")
-	}
-}
-
-func TestNotifyLockChangedClearsDisplayOffForced(t *testing.T) {
-	s := New(nil, nil, DefaultConfig(), nil)
-	s.SuppressDisplayOn(true)
-
-	// Unlock should clear suppression
-	s.SetLockedProvider(func() bool { return false })
-	s.NotifyLockChanged()
-
-	if s.displayOffForced {
-		t.Error("displayOffForced should be cleared on unlock")
-	}
-}
-
-func TestTickNoSuspendWhenUnlocked(t *testing.T) {
-	s := New(nil, nil, DefaultConfig(), nil)
-	s.SetLockedProvider(func() bool { return false })
-	s.cfg.SuspendTimeout = time.Millisecond
-
-	// Set idleStarted in the past
-	s.idleStarted = time.Now().Add(-2 * time.Millisecond)
-
-	// Tick should do nothing because we're not locked.
-	s.tick()
-	// Actually tick checks isLocked first — we're not locked, so it returns early.
-	// idleStarted stays as-is.
-	_ = s.idleStarted.IsZero()
-}
-
-func TestTickNoSuspendWhenInhibited(t *testing.T) {
-	s := New(nil, nil, DefaultConfig(), nil)
-	s.SetLockedProvider(func() bool { return true })
-	s.inhibited = true
-	s.cfg.SuspendTimeout = time.Millisecond
-	s.idleStarted = time.Now().Add(-2 * time.Millisecond)
-
-	s.tick()
-	// Should not clear idleStarted because inhibited check happens first.
-}
-
-func TestTickNoSuspendWhenNotTimedOut(t *testing.T) {
-	s := New(nil, nil, DefaultConfig(), nil)
-	s.SetLockedProvider(func() bool { return true })
-	s.cfg.SuspendTimeout = time.Hour
-	s.idleStarted = time.Now()
-
-	s.tick()
-	// Should not clear idleStarted because timeout not reached.
-	if s.idleStarted.IsZero() {
-		t.Error("idleStarted should not be cleared before timeout")
-	}
-}
-
-func TestTickClearsIdleStartedOnSuspend(t *testing.T) {
-	s := New(nil, nil, DefaultConfig(), nil)
-	s.SetLockedProvider(func() bool { return true })
-	s.cfg.SuspendTimeout = time.Nanosecond
-	s.idleStarted = time.Now().Add(-time.Millisecond)
-
-	s.tick()
-	if !s.idleStarted.IsZero() {
-		t.Error("idleStarted should be cleared after suspend triggers")
-	}
-}
-
-func TestHandleBlockInhibitedIdleActive(t *testing.T) {
-	b := newBus()
-	s := New(nil, nil, DefaultConfig(), nil)
-	s.bus = b
-
-	var inhibited []bool
-	b.subscribe(topicIdleInhibit, func(e busEvent) {
-		active, _ := e.Data.(bool)
-		inhibited = append(inhibited, active)
-	})
-
-	s.handleBlockInhibited("handle-power-key:idle:handle-lid-switch")
-	if len(inhibited) != 1 || !inhibited[0] {
-		t.Errorf("expected inhibited=true, got %v", inhibited)
-	}
-}
-
-func TestHandleBlockInhibitedNoIdle(t *testing.T) {
-	b := newBus()
-	s := New(nil, nil, DefaultConfig(), nil)
-	s.bus = b
-
-	var inhibited []bool
-	b.subscribe(topicIdleInhibit, func(e busEvent) {
-		active, _ := e.Data.(bool)
-		inhibited = append(inhibited, active)
-	})
-
-	s.handleBlockInhibited("handle-power-key:handle-lid-switch")
-	if len(inhibited) != 1 || inhibited[0] {
-		t.Errorf("expected inhibited=false, got %v", inhibited)
-	}
-}
-
-func TestHandleBlockInhibitedEmpty(t *testing.T) {
-	b := newBus()
-	s := New(nil, nil, DefaultConfig(), nil)
-	s.bus = b
-
-	var inhibited []bool
-	b.subscribe(topicIdleInhibit, func(e busEvent) {
-		active, _ := e.Data.(bool)
-		inhibited = append(inhibited, active)
-	})
-
-	s.handleBlockInhibited("")
-	if len(inhibited) != 1 || inhibited[0] {
-		t.Errorf("expected inhibited=false for empty string, got %v", inhibited)
-	}
-}
-
-func TestHandleBlockInhibitedOnlyIdle(t *testing.T) {
-	b := newBus()
-	s := New(nil, nil, DefaultConfig(), nil)
-	s.bus = b
-
-	var inhibited []bool
-	b.subscribe(topicIdleInhibit, func(e busEvent) {
-		active, _ := e.Data.(bool)
-		inhibited = append(inhibited, active)
-	})
-
-	s.handleBlockInhibited("idle")
-	if len(inhibited) != 1 || !inhibited[0] {
-		t.Errorf("expected inhibited=true for bare 'idle', got %v", inhibited)
-	}
-}
-
-func TestInhibitionFlow(t *testing.T) {
-	b := newBus()
-	s := New(nil, nil, DefaultConfig(), nil)
-	s.bus = b
-
-	// Simulate what the bus subscriber does: track inhibition state.
-	var inhibited bool
-	b.subscribe(topicIdleInhibit, func(e busEvent) {
-		inhibited, _ = e.Data.(bool)
-	})
-
-	s.handleBlockInhibited("idle")
-	if !inhibited {
-		t.Error("should be inhibited after idle block")
+	s.setDisplay(false)
+	if s.displayOn.Load() {
+		t.Error("displayOn should be false after setDisplay(false)")
 	}
 
-	s.handleBlockInhibited("")
-	if inhibited {
-		t.Error("should not be inhibited after empty block")
-	}
-}
-
-func TestServiceNew(t *testing.T) {
-	s := New(nil, nil, DefaultConfig(), nil)
-	if s.bus == nil {
-		t.Error("bus should not be nil")
-	}
-	if s.cfg.IdleTimeout != 5*time.Minute {
-		t.Error("config should be default")
+	s.setDisplay(true)
+	if !s.displayOn.Load() {
+		t.Error("displayOn should be true after setDisplay(true)")
 	}
 }
 
@@ -356,13 +190,61 @@ func TestSetOnDisplayChange(t *testing.T) {
 	}
 }
 
+// ── Lock change tests ───────────────────────────────────────────────────────
+
+func TestNotifyLockChangedLocking(t *testing.T) {
+	hl := &mockHL{}
+	s := New(nil, nil, DefaultConfig(), hl)
+	s.SetLockedProvider(func() bool { return true })
+
+	s.NotifyLockChanged()
+
+	log := hl.dpmsLog()
+	if len(log) < 1 || log[0] != "on" {
+		t.Errorf("lock should turn display ON, got %v", log)
+	}
+	if s.lastLocked != true {
+		t.Error("lastLocked should be true after NotifyLockChanged")
+	}
+}
+
+func TestNotifyLockChangedUnlocking(t *testing.T) {
+	hl := &mockHL{}
+	s := New(nil, nil, DefaultConfig(), hl)
+
+	s.SetLockedProvider(func() bool { return true })
+	s.NotifyLockChanged()
+
+	s.SetLockedProvider(func() bool { return false })
+	s.NotifyLockChanged()
+
+	log := hl.dpmsLog()
+	if len(log) < 2 || log[1] != "on" {
+		t.Errorf("unlock should turn display ON, got %v", log)
+	}
+	if s.lastLocked != false {
+		t.Error("lastLocked should be false after unlock")
+	}
+}
+
+func TestNotifyLockChangedClearsDisplayOffForced(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+	s.SuppressDisplayOn(true)
+
+	s.SetLockedProvider(func() bool { return false })
+	s.NotifyLockChanged()
+
+	if s.displayOffForced {
+		t.Error("displayOffForced should be cleared on unlock")
+	}
+}
+
+// ── Callback tests ──────────────────────────────────────────────────────────
+
 func TestSetOnLogindUnlock(t *testing.T) {
 	s := New(nil, nil, DefaultConfig(), nil)
 	called := false
-	s.SetOnLogindUnlock(func() {
-		called = true
-	})
-
+	s.SetOnLogindUnlock(func() { called = true })
 	s.onLogindUnlock()
 	if !called {
 		t.Error("onLogindUnlock callback should be called")
@@ -372,17 +254,14 @@ func TestSetOnLogindUnlock(t *testing.T) {
 func TestSetOnLockCallback(t *testing.T) {
 	s := New(nil, nil, DefaultConfig(), nil)
 	called := false
-	s.SetOnLock(func() {
-		called = true
-	})
-
-	// doLock via internal path — but doLock also tries to exec.Command("qs", ...)
-	// which we can't control. Instead test the callback reference directly.
+	s.SetOnLock(func() { called = true })
 	s.onLockCallback()
 	if !called {
 		t.Error("onLockCallback should be called")
 	}
 }
+
+// ── doLock tests ────────────────────────────────────────────────────────────
 
 func TestLockDoesNotDoubleLock(t *testing.T) {
 	s := New(nil, nil, DefaultConfig(), nil)
@@ -399,7 +278,7 @@ func TestLockDoesNotDoubleLock(t *testing.T) {
 
 func TestLockSkippedWhenInhibited(t *testing.T) {
 	s := New(nil, nil, DefaultConfig(), nil)
-	s.inhibited = true
+	s.setInhibitedForTest(true)
 
 	callCount := 0
 	s.SetOnLock(func() { callCount++ })
@@ -410,52 +289,268 @@ func TestLockSkippedWhenInhibited(t *testing.T) {
 	}
 }
 
-// TestResumedHandlerRecreatesTimers verifies that the resumed handler
-// set by recreateTimers calls recreateTimers again. This is critical:
-// ext_idle_notify_v1 notifications are one-shot — after idled+resumed
-// the notification is consumed. The resumed handler must recreate timers
-// or the next idle period goes undetected.
+// ── tick tests ──────────────────────────────────────────────────────────────
+
+func TestTickNoSuspendWhenUnlocked(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+	s.SetLockedProvider(func() bool { return false })
+	s.cfg.SuspendTimeout = time.Millisecond
+	s.idleStarted = time.Now().Add(-2 * time.Millisecond)
+
+	s.tick()
+	// tick checks isLocked first — not locked, returns early.
+	_ = s.idleStarted.IsZero()
+}
+
+func TestTickNoSuspendWhenInhibited(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+	s.SetLockedProvider(func() bool { return true })
+	s.setInhibitedForTest(true)
+	s.cfg.SuspendTimeout = time.Millisecond
+	s.idleStarted = time.Now().Add(-2 * time.Millisecond)
+
+	s.tick()
+	// Should not clear idleStarted because inhibited check happens first.
+}
+
+func TestTickNoSuspendWhenNotTimedOut(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+	s.SetLockedProvider(func() bool { return true })
+	s.cfg.SuspendTimeout = time.Hour
+	s.idleStarted = time.Now()
+
+	s.tick()
+	if s.idleStarted.IsZero() {
+		t.Error("idleStarted should not be cleared before timeout")
+	}
+}
+
+func TestTickClearsIdleStartedOnSuspend(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+	s.SetLockedProvider(func() bool { return true })
+	s.cfg.SuspendTimeout = time.Nanosecond
+	s.idleStarted = time.Now().Add(-time.Millisecond)
+
+	s.tick()
+	if !s.idleStarted.IsZero() {
+		t.Error("idleStarted should be cleared after suspend triggers")
+	}
+}
+
+// ── Inhibition source tests ─────────────────────────────────────────────────
+
+func TestHandleBlockInhibitedIdleActive(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+	s.handleBlockInhibited("handle-power-key:idle:handle-lid-switch")
+	if !s.inhibited.Load() {
+		t.Error("expected inhibited=true when :idle: in BlockInhibited")
+	}
+}
+
+func TestHandleBlockInhibitedNoIdle(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+	s.handleBlockInhibited("handle-power-key:handle-lid-switch")
+	if s.inhibited.Load() {
+		t.Error("expected inhibited=false when :idle: not in BlockInhibited")
+	}
+}
+
+func TestHandleBlockInhibitedEmpty(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+	s.handleBlockInhibited("")
+	if s.inhibited.Load() {
+		t.Error("expected inhibited=false for empty string")
+	}
+}
+
+func TestHandleBlockInhibitedOnlyIdle(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+	s.handleBlockInhibited("idle")
+	if !s.inhibited.Load() {
+		t.Error("expected inhibited=true for bare 'idle'")
+	}
+}
+
+func TestInhibitionFlow(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+
+	s.handleBlockInhibited("idle")
+	if !s.inhibited.Load() {
+		t.Error("should be inhibited after idle block")
+	}
+
+	s.handleBlockInhibited("")
+	if s.inhibited.Load() {
+		t.Error("should not be inhibited after empty block")
+	}
+}
+
+// TestInhibitionSourcesDontOverride verifies that multiple inhibition sources
+// are OR-ed together and one source clearing its flag does not clobber another.
+func TestInhibitionSourcesDontOverride(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+
+	// ScreenSaver inhibits
+	s.mu.Lock()
+	s.screensaverInhibited = true
+	s.mu.Unlock()
+	s.recomputeInhibition()
+	if !s.inhibited.Load() {
+		t.Fatal("should be inhibited after screensaver inhibit")
+	}
+
+	// logind BlockInhibited changes to something without :idle: — should NOT clear inhibition
+	s.handleBlockInhibited("handle-power-key")
+	if !s.inhibited.Load() {
+		t.Error("inhibition should persist — screensaver is still active")
+	}
+
+	// ScreenSaver uninhibits — now inhibition should clear
+	s.mu.Lock()
+	s.screensaverInhibited = false
+	s.mu.Unlock()
+	s.recomputeInhibition()
+	if s.inhibited.Load() {
+		t.Error("inhibition should clear when all sources are gone")
+	}
+}
+
+// TestFullscreenInhibition verifies fullscreen count drives inhibition.
+func TestFullscreenInhibition(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+
+	// Window goes fullscreen
+	s.mu.Lock()
+	s.fullscreenCount++
+	s.mu.Unlock()
+	s.recomputeInhibition()
+	if !s.inhibited.Load() {
+		t.Error("should be inhibited when fullscreen window exists")
+	}
+
+	// Another window goes fullscreen
+	s.mu.Lock()
+	s.fullscreenCount++
+	s.mu.Unlock()
+	s.recomputeInhibition()
+	if !s.inhibited.Load() {
+		t.Error("should still be inhibited with 2 fullscreen windows")
+	}
+
+	// One exits fullscreen
+	s.mu.Lock()
+	s.fullscreenCount--
+	s.mu.Unlock()
+	s.recomputeInhibition()
+	if !s.inhibited.Load() {
+		t.Error("should still be inhibited with 1 fullscreen window")
+	}
+
+	// Last exits fullscreen
+	s.mu.Lock()
+	s.fullscreenCount--
+	s.mu.Unlock()
+	s.recomputeInhibition()
+	if s.inhibited.Load() {
+		t.Error("should not be inhibited when no fullscreen windows")
+	}
+}
+
+// TestInhibitionTurnsDisplayOn verifies that activating inhibition while
+// display is off turns the display back on (unlocked screen only).
+func TestInhibitionTurnsDisplayOn(t *testing.T) {
+	hl := &mockHL{}
+	s := New(nil, nil, DefaultConfig(), hl)
+	s.SetLockedProvider(func() bool { return false })
+
+	// Turn display off
+	s.setDisplay(false)
+	if log := hl.dpmsLog(); len(log) != 1 || log[0] != "off" {
+		t.Fatalf("expected display off, got %v", log)
+	}
+
+	// ScreenSaver inhibits — should turn display back on
+	s.mu.Lock()
+	s.screensaverInhibited = true
+	s.mu.Unlock()
+	s.recomputeInhibition()
+
+	log := hl.dpmsLog()
+	if len(log) < 2 || log[1] != "on" {
+		t.Errorf("inhibition should turn display ON, got %v", log)
+	}
+}
+
+// TestInhibitionDoesNotTurnDisplayOnWhenLocked verifies that inhibition
+// activating while the screen is locked does NOT turn the display on.
+func TestInhibitionDoesNotTurnDisplayOnWhenLocked(t *testing.T) {
+	hl := &mockHL{}
+	s := New(nil, nil, DefaultConfig(), hl)
+	s.SetLockedProvider(func() bool { return true })
+
+	// Simulate locked state with display off
+	s.mu.Lock()
+	s.lastLocked = true
+	s.displayOn.Store(false)
+	s.mu.Unlock()
+	s.setDisplay(false)
+
+	callsBefore := len(hl.dpmsLog())
+
+	// ScreenSaver inhibits while locked — should NOT turn display on
+	s.mu.Lock()
+	s.screensaverInhibited = true
+	s.mu.Unlock()
+	s.recomputeInhibition()
+
+	if len(hl.dpmsLog()) > callsBefore {
+		t.Errorf("inhibition should NOT turn display on when locked, got %v", hl.dpmsLog())
+	}
+}
+
+// ── Service constructor test ────────────────────────────────────────────────
+
+func TestServiceNew(t *testing.T) {
+	s := New(nil, nil, DefaultConfig(), nil)
+	if s.bus == nil {
+		t.Error("bus should not be nil")
+	}
+	if s.cfg.IdleTimeout != 5*time.Minute {
+		t.Error("config should be default")
+	}
+}
+
+// ── Wayland timer recreation tests ──────────────────────────────────────────
+
 func TestResumedHandlerRecreatesTimers(t *testing.T) {
 	s := New(nil, nil, DefaultConfig(), nil)
 	s.SetLockedProvider(func() bool { return true })
 
 	var recreateCount int
-	s.SetOnRecreateTimers(func() {
-		recreateCount++
-	})
+	s.SetOnRecreateTimers(func() { recreateCount++ })
 
-	// Simulate what recreateTimers does: store a resumed handler that
-	// turns display on and recreates timers.
 	s.testResumedHandler = func() {
 		s.setDisplay(true)
 		s.recreateTimers()
 	}
 
-	// Initial recreate call (e.g. from NotifyLockChanged)
 	s.recreateTimers()
 	if recreateCount != 1 {
 		t.Fatalf("expected 1 initial recreate, got %d", recreateCount)
 	}
 
-	// Simulate a Wayland resume event
 	s.testResumedHandler()
-
-	// Should have triggered recreateTimers again
 	if recreateCount != 2 {
-		t.Errorf("expected 2 recreates after resume, got %d — resumed handler did not recreate timers", recreateCount)
+		t.Errorf("expected 2 recreates after resume, got %d", recreateCount)
 	}
 }
 
-// TestResumedHandlerRecreatesTimersWhenUnlocked verifies the same
-// resume→recreate cycle works when unlocked.
 func TestResumedHandlerRecreatesTimersWhenUnlocked(t *testing.T) {
 	s := New(nil, nil, DefaultConfig(), nil)
 	s.SetLockedProvider(func() bool { return false })
 
 	var recreateCount int
-	s.SetOnRecreateTimers(func() {
-		recreateCount++
-	})
+	s.SetOnRecreateTimers(func() { recreateCount++ })
 
 	s.testResumedHandler = func() {
 		s.setDisplay(true)
@@ -473,14 +568,10 @@ func TestResumedHandlerRecreatesTimersWhenUnlocked(t *testing.T) {
 	}
 }
 
-// TestRecreateTimersHookFiresEvenWithNilManager ensures the test hook
-// fires regardless of Wayland state.
 func TestRecreateTimersHookFiresEvenWithNilManager(t *testing.T) {
 	s := New(nil, nil, DefaultConfig(), nil)
-
 	var count int
 	s.SetOnRecreateTimers(func() { count++ })
-
 	s.recreateTimers()
 	if count != 1 {
 		t.Errorf("hook should fire even with nil manager, got %d", count)

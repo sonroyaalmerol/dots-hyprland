@@ -6,7 +6,7 @@ import (
 )
 
 func TestScreenSaverInhibitReturnsUniqueIDs(t *testing.T) {
-	ss := newScreenSaver(newBus())
+	ss := newScreenSaver(nil)
 	id1, _ := ss.Inhibit("firefox", "video")
 	id2, _ := ss.Inhibit("vlc", "playback")
 	if id1 == id2 {
@@ -14,100 +14,99 @@ func TestScreenSaverInhibitReturnsUniqueIDs(t *testing.T) {
 	}
 }
 
-func TestScreenSaverInhibitPublishesInhibitFalseOnLastUnInhibit(t *testing.T) {
-	b := newBus()
-	ss := newScreenSaver(b)
+func TestScreenSaverInhibitCallback(t *testing.T) {
+	var mu sync.Mutex
+	var calls []bool
+	ss := newScreenSaver(func(inhibited bool) {
+		mu.Lock()
+		calls = append(calls, inhibited)
+		mu.Unlock()
+	})
 
-	var events []bool
-	b.subscribe(topicIdleInhibit, func(e busEvent) {
-		active, _ := e.Data.(bool)
-		events = append(events, active)
+	ss.Inhibit("app1", "reason1")
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) != 1 || !calls[0] {
+		t.Errorf("expected [true], got %v", calls)
+	}
+}
+
+func TestScreenSaverUnInhibitCallbackOnLastRemove(t *testing.T) {
+	var mu sync.Mutex
+	var calls []bool
+	ss := newScreenSaver(func(inhibited bool) {
+		mu.Lock()
+		calls = append(calls, inhibited)
+		mu.Unlock()
 	})
 
 	id1, _ := ss.Inhibit("app1", "reason1")
+	_, _ = ss.Inhibit("app2", "reason2")
 	_ = ss.UnInhibit(id1)
 
-	if len(events) < 2 {
-		t.Fatalf("expected at least 2 events, got %d: %v", len(events), events)
+	mu.Lock()
+	got := len(calls)
+	mu.Unlock()
+	if got != 2 {
+		t.Fatalf("expected 2 calls after partial uninhibit, got %d", got)
 	}
-	if !events[0] {
-		t.Error("first event should be true (inhibit)")
+
+	// Remove second inhibitor
+	ss.inhibitors.Range(func(k, _ any) bool {
+		ss.UnInhibit(k.(uint32))
+		return false // remove first remaining
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) != 3 {
+		t.Fatalf("expected 3 calls, got %d: %v", len(calls), calls)
 	}
-	if events[len(events)-1] {
-		t.Error("last event should be false (uninhibit)")
+	if calls[2] {
+		t.Error("last callback should be false (uninhibit)")
 	}
 }
 
-func TestScreenSaverUnInhibitOnlyPublishesFalseWhenEmpty(t *testing.T) {
-	b := newBus()
-	ss := newScreenSaver(b)
-
-	var inhibitEvents []bool
-	b.subscribe(topicIdleInhibit, func(e busEvent) {
-		active, _ := e.Data.(bool)
-		inhibitEvents = append(inhibitEvents, active)
+func TestScreenSaverUnInhibitOnlyCallbackWhenEmpty(t *testing.T) {
+	var mu sync.Mutex
+	var calls []bool
+	ss := newScreenSaver(func(inhibited bool) {
+		mu.Lock()
+		calls = append(calls, inhibited)
+		mu.Unlock()
 	})
 
 	id1, _ := ss.Inhibit("a", "r")
 	id2, _ := ss.Inhibit("b", "r")
 
-	// Remove first — should still be inhibited (id2 remains)
+	// Remove first — should NOT call back (id2 remains)
 	_ = ss.UnInhibit(id1)
+	mu.Lock()
+	before := len(calls)
+	mu.Unlock()
+	if before != 2 {
+		t.Errorf("expected 2 calls after partial uninhibit, got %d", before)
+	}
 
-	// Remove second — now empty
+	// Remove last — should callback false
 	_ = ss.UnInhibit(id2)
-
-	// Events: Inhibit(true), Inhibit(true), UnInhibit(false)
-	// But UnInhibit only publishes false when the set goes empty.
-	// So: true, true, false
-	if len(inhibitEvents) != 3 {
-		t.Fatalf("expected 3 events, got %d: %v", len(inhibitEvents), inhibitEvents)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) != 3 {
+		t.Fatalf("expected 3 calls, got %d: %v", len(calls), calls)
 	}
-	if !inhibitEvents[0] {
-		t.Error("event 0 should be true")
-	}
-	if !inhibitEvents[1] {
-		t.Error("event 1 should be true")
-	}
-	if inhibitEvents[2] {
-		t.Error("event 2 should be false (last uninhibit)")
-	}
-}
-
-func TestScreenSaverUnInhibitKeepsInhibitedWhenNotEmpty(t *testing.T) {
-	b := newBus()
-	ss := newScreenSaver(b)
-
-	var eventCount int
-	b.subscribe(topicIdleInhibit, func(e busEvent) {
-		eventCount++
-	})
-
-	// Add two inhibitors
-	id1, _ := ss.Inhibit("a", "r")
-	id2, _ := ss.Inhibit("b", "r")
-
-	// Remove one — should NOT publish (still inhibited)
-	beforeRemove := eventCount
-	_ = ss.UnInhibit(id1)
-	if eventCount != beforeRemove {
-		t.Errorf("UnInhibit should not publish when inhibitors remain: before=%d after=%d", beforeRemove, eventCount)
-	}
-
-	// Remove last — should publish false
-	_ = ss.UnInhibit(id2)
-	if eventCount != beforeRemove+1 {
-		t.Errorf("last UnInhibit should publish false: before=%d after=%d", beforeRemove, eventCount)
+	if calls[2] {
+		t.Error("last callback should be false")
 	}
 }
 
 func TestScreenSaverConcurrentInhibit(t *testing.T) {
-	b := newBus()
-	ss := newScreenSaver(b)
-
-	var ids []uint32
 	var mu sync.Mutex
+	var ids []uint32
 	var wg sync.WaitGroup
+
+	ss := newScreenSaver(func(bool) {})
 
 	for range 50 {
 		wg.Go(func() {
@@ -122,7 +121,6 @@ func TestScreenSaverConcurrentInhibit(t *testing.T) {
 	}
 	wg.Wait()
 
-	// All 50 IDs should be unique.
 	seen := make(map[uint32]bool)
 	for _, id := range ids {
 		if seen[id] {
@@ -136,13 +134,7 @@ func TestScreenSaverConcurrentInhibit(t *testing.T) {
 }
 
 func TestScreenSaverConcurrentUnInhibit(t *testing.T) {
-	b := newBus()
-	ss := newScreenSaver(b)
-
-	var inhibitEvents int
-	b.subscribe(topicIdleInhibit, func(e busEvent) {
-		inhibitEvents++
-	})
+	ss := newScreenSaver(func(bool) {})
 
 	var ids []uint32
 	for range 20 {
@@ -152,15 +144,12 @@ func TestScreenSaverConcurrentUnInhibit(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for _, id := range ids {
-		wg.Add(1)
-		go func(id uint32) {
-			defer wg.Done()
+		wg.Go(func() {
 			_ = ss.UnInhibit(id)
-		}(id)
+		})
 	}
 	wg.Wait()
 
-	// After all uninhibits, verify the map is empty.
 	remaining := 0
 	ss.inhibitors.Range(func(_, _ any) bool {
 		remaining++
@@ -172,22 +161,13 @@ func TestScreenSaverConcurrentUnInhibit(t *testing.T) {
 }
 
 func TestScreenSaverLock(t *testing.T) {
-	b := newBus()
-	ss := newScreenSaver(b)
-
-	var locked bool
-	b.subscribe(topicScreenLock, func(e busEvent) {
-		locked, _ = e.Data.(bool)
-	})
-
+	ss := newScreenSaver(nil)
+	// Lock is now a no-op, should not panic.
 	_ = ss.Lock()
-	if !locked {
-		t.Error("Lock() should publish screenlock true")
-	}
 }
 
 func TestScreenSaverGetActive(t *testing.T) {
-	ss := newScreenSaver(newBus())
+	ss := newScreenSaver(nil)
 	active, err := ss.GetActive()
 	if err != nil {
 		t.Errorf("GetActive returned error: %v", err)
@@ -198,7 +178,7 @@ func TestScreenSaverGetActive(t *testing.T) {
 }
 
 func TestScreenSaverSimulateUserActivity(t *testing.T) {
-	ss := newScreenSaver(newBus())
+	ss := newScreenSaver(nil)
 	err := ss.SimulateUserActivity()
 	if err != nil {
 		t.Errorf("SimulateUserActivity returned error: %v", err)

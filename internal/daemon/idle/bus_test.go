@@ -87,9 +87,6 @@ func TestBusTopicConstants(t *testing.T) {
 	if topicScreenLock != "screenlock" {
 		t.Errorf("topicScreenLock = %q, want screenlock", topicScreenLock)
 	}
-	if topicIdleInhibit != "idleinhibit" {
-		t.Errorf("topicIdleInhibit = %q, want idleinhibit", topicIdleInhibit)
-	}
 }
 
 func TestBusConcurrentPublish(t *testing.T) {

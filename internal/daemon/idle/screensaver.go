@@ -16,19 +16,21 @@ const (
 // ScreenSaver implements org.freedesktop.ScreenSaver on the session bus,
 // allowing media players and other apps to inhibit idle.
 type ScreenSaver struct {
-	b          *bus
-	inhibitors sync.Map // uint32 -> string (app name)
-	id         atomic.Uint32
+	onInhibitChanged func(inhibited bool) // called when inhibition state changes
+	inhibitors       sync.Map             // uint32 -> string (app name)
+	id               atomic.Uint32
 }
 
-func newScreenSaver(b *bus) *ScreenSaver {
-	return &ScreenSaver{b: b}
+func newScreenSaver(onChange func(bool)) *ScreenSaver {
+	return &ScreenSaver{onInhibitChanged: onChange}
 }
 
 func (ss *ScreenSaver) Inhibit(appName string, reason string) (uint32, *dbus.Error) {
 	id := ss.id.Add(1)
 	ss.inhibitors.Store(id, appName)
-	ss.b.publish(topicIdleInhibit, true)
+	if ss.onInhibitChanged != nil {
+		ss.onInhibitChanged(true)
+	}
 	return id, nil
 }
 
@@ -39,16 +41,13 @@ func (ss *ScreenSaver) UnInhibit(id uint32) *dbus.Error {
 		empty = false
 		return false
 	})
-	if empty {
-		ss.b.publish(topicIdleInhibit, false)
+	if empty && ss.onInhibitChanged != nil {
+		ss.onInhibitChanged(false)
 	}
 	return nil
 }
 
-func (ss *ScreenSaver) Lock() *dbus.Error {
-	ss.b.publish(topicScreenLock, true)
-	return nil
-}
+func (ss *ScreenSaver) Lock() *dbus.Error { return nil }
 
 func (ss *ScreenSaver) SimulateUserActivity() *dbus.Error { return nil }
 func (ss *ScreenSaver) GetActive() (bool, *dbus.Error)    { return false, nil }

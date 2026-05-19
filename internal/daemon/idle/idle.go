@@ -1,13 +1,24 @@
 // Package idle monitors user inactivity via Wayland ext_idle_notifier_v1
 // and triggers screen locking, display power management, and optional suspend.
+//
+// Inhibition is tracked from three independent sources, each updating its own
+// flag. A computed inhibited state is derived by OR-ing all flags. This
+// prevents any single source from overriding another.
+//
+// Lock ordering: waylandMu → mu.  recomputeInhibition always releases mu
+// before calling recreateTimers (which acquires waylandMu), so no deadlock.
 package idle
 
 import (
+	"bufio"
 	"context"
 	"log"
+	"net"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -41,49 +52,97 @@ func DefaultConfig() Config {
 // Service detects user inactivity and triggers locking and optional suspend.
 type Service struct {
 	bus         *bus
-	conn        dbusutil.DBusConn
-	sessionConn dbusutil.DBusConn
+	conn        dbusutil.DBusConn // system bus (logind)
+	sessionConn dbusutil.DBusConn // session bus (ScreenSaver)
 	cfg         Config
 	hl          hyprland.API
 
-	mu             sync.Mutex
-	idleStarted    time.Time
-	inhibited      bool
-	onLockCallback func() // called by doLock instead of publishing to internal bus
-	lockedProvider func() bool
-	lastLocked     bool
-	onLogindUnlock func()
+	// mu protects source flags, config, callback pointers, and mutable state.
+	// Lock ordering: waylandMu → mu.  Never hold mu while acquiring waylandMu.
+	mu sync.Mutex
 
-	// Wayland fields
-	waylandMu        sync.Mutex
-	display          *client.Display
-	manager          *protocol.ExtIdleNotifierV1
-	seat             *client.Seat
-	displayOffNotif  *protocol.ExtIdleNotificationV1
-	lockCancel       context.CancelFunc // cancels pending lock-after-display-off goroutine
-	displayOffForced bool               // suppress setDisplay(true) when true
+	// Inhibition source flags (protected by mu).
+	screensaverInhibited bool
+	logindIdleInhibited  bool
+	fullscreenCount      int // number of currently fullscreened windows
+
+	// Computed inhibition state — written under mu, readable atomically.
+	inhibited atomic.Bool
+
+	// Display power state — written in setDisplay, readable atomically.
+	displayOn atomic.Bool
+
+	// Other mutable state (protected by mu).
+	idleStarted      time.Time
+	lastLocked       bool
+	displayOffForced bool
+	lockCancel       context.CancelFunc
+	onLockCallback   func()
+	lockedProvider   func() bool
+	onLogindUnlock   func()
 	onDisplayChange  func(on bool)
 
+	// Wayland fields (protected by waylandMu).
+	waylandMu       sync.Mutex
+	display         *client.Display
+	manager         *protocol.ExtIdleNotifierV1
+	seat            *client.Seat
+	displayOffNotif *protocol.ExtIdleNotificationV1
+
 	// test hooks
-	onRecreateTimers   func() // called at the end of recreateTimers for testing
-	testResumedHandler func() // latest resumed handler set by recreateTimers
+	onRecreateTimers   func()
+	testResumedHandler func()
 }
 
 // New creates the idle service.
-// sysConn is the system bus (for logind).
-// sessionConn is the session bus (for ScreenSaver).
 func New(sysConn dbusutil.DBusConn, sessionConn dbusutil.DBusConn, cfg Config, hl hyprland.API) *Service {
-	return &Service{
+	s := &Service{
 		bus:         newBus(),
 		conn:        sysConn,
 		sessionConn: sessionConn,
 		cfg:         cfg,
 		hl:          hl,
 	}
+	s.displayOn.Store(true)
+	return s
 }
 
+// ── Inhibition recomputation ────────────────────────────────────────────────
+
+// recomputeInhibition derives the inhibited state from all source flags and
+// takes side-effects when the state transitions.  Must NOT be called with mu
+// or waylandMu held.
+func (s *Service) recomputeInhibition() {
+	s.mu.Lock()
+	newInhibited := s.screensaverInhibited || s.logindIdleInhibited || s.fullscreenCount > 0
+	changed := newInhibited != s.inhibited.Load()
+	wasDisplayOn := s.displayOn.Load()
+	locked := s.isLocked()
+	ss := s.screensaverInhibited
+	li := s.logindIdleInhibited
+	fc := s.fullscreenCount
+	s.inhibited.Store(newInhibited)
+	s.mu.Unlock()
+
+	if !changed {
+		return
+	}
+
+	log.Printf("[idle] inhibition: %v (screensaver=%v logind=%v fullscreen=%d)",
+		newInhibited, ss, li, fc)
+
+	// If inhibition activated while display is off and screen is not locked,
+	// turn the display back on (e.g. video started playing via remote/cast).
+	if newInhibited && !wasDisplayOn && !locked {
+		s.setDisplay(true)
+	}
+
+	s.recreateTimers()
+}
+
+// ── Exported setters ────────────────────────────────────────────────────────
+
 // SuppressDisplayOn prevents setDisplay(true) from running when on=true.
-// Used by power-button/lid-close to prevent Wayland resumed events from waking the display.
 func (s *Service) SuppressDisplayOn(suppress bool) {
 	s.mu.Lock()
 	s.displayOffForced = suppress
@@ -124,6 +183,14 @@ func (s *Service) SetOnRecreateTimers(fn func()) {
 	s.mu.Unlock()
 }
 
+// SetDisplay is the exported wrapper around setDisplay.
+func (s *Service) SetDisplay(on bool) {
+	s.setDisplay(on)
+}
+
+// ── Internal helpers ────────────────────────────────────────────────────────
+
+// isLocked reads the locked provider. Must be called with mu held.
 func (s *Service) isLocked() bool {
 	if s.lockedProvider != nil {
 		return s.lockedProvider()
@@ -138,10 +205,7 @@ func (s *Service) setDPMS(action string) {
 	s.hl.SetDPMS(action)
 }
 
-// SetDisplay is the exported wrapper around setDisplay.
-func (s *Service) SetDisplay(on bool) {
-	s.setDisplay(on)
-}
+// ── Timer management ────────────────────────────────────────────────────────
 
 func (s *Service) recreateTimers() {
 	s.waylandMu.Lock()
@@ -174,10 +238,7 @@ func (s *Service) recreateTimers() {
 			notif, err := s.manager.GetIdleNotification(ms, s.seat)
 			if err == nil {
 				notif.SetIdledHandler(func(protocol.ExtIdleNotificationV1IdledEvent) {
-					s.mu.Lock()
-					inhibited := s.inhibited
-					s.mu.Unlock()
-					if inhibited {
+					if s.inhibited.Load() {
 						return
 					}
 					s.setDisplay(false)
@@ -200,10 +261,7 @@ func (s *Service) recreateTimers() {
 			notif, err := s.manager.GetIdleNotification(ms, s.seat)
 			if err == nil {
 				notif.SetIdledHandler(func(protocol.ExtIdleNotificationV1IdledEvent) {
-					s.mu.Lock()
-					inhibited := s.inhibited
-					s.mu.Unlock()
-					if inhibited {
+					if s.inhibited.Load() {
 						return
 					}
 					s.setDisplay(false)
@@ -237,17 +295,18 @@ func (s *Service) recreateTimers() {
 
 func (s *Service) setDisplay(on bool) {
 	s.mu.Lock()
-	// Suppress display-on when forced off (power button / lid close)
 	if on && s.displayOffForced {
 		s.mu.Unlock()
 		return
 	}
-	// Cancel pending lock goroutine if display is turned back on
 	if on && s.lockCancel != nil {
 		s.lockCancel()
 		s.lockCancel = nil
 	}
 	s.mu.Unlock()
+
+	// Update tracked state before issuing DPMS so recomputeInhibition sees it.
+	s.displayOn.Store(on)
 
 	if on {
 		log.Printf("[idle] turning display ON")
@@ -264,6 +323,8 @@ func (s *Service) setDisplay(on bool) {
 		cb(on)
 	}
 }
+
+// ── Main entry point ────────────────────────────────────────────────────────
 
 // Run starts monitoring. Blocks until ctx is cancelled.
 func (s *Service) Run(ctx context.Context) error {
@@ -285,25 +346,19 @@ func (s *Service) Run(ctx context.Context) error {
 
 	// Register ScreenSaver on session bus (where browsers/media players call Inhibit)
 	if sessConn, ok := s.sessionConn.(*dbusutil.RealConn); ok && sessConn.Conn != nil {
-		if err := registerScreenSaver(sessConn.Conn, newScreenSaver(s.bus)); err != nil {
+		onChange := func(inhibited bool) {
+			s.mu.Lock()
+			s.screensaverInhibited = inhibited
+			s.mu.Unlock()
+			s.recomputeInhibition()
+		}
+		if err := registerScreenSaver(sessConn.Conn, newScreenSaver(onChange)); err != nil {
 			log.Printf("[idle] screensaver dbus: %v", err)
 		}
 	}
 
-	// Subscribe to internal bus events
-	s.bus.subscribe(topicIdleInhibit, func(e busEvent) {
-		active, _ := e.Data.(bool)
-		s.mu.Lock()
-		s.inhibited = active
-		s.mu.Unlock()
-		log.Printf("[idle] inhibition: %v (active inhibitors)", active)
-
-		// Recreate timers when inhibition state changes.
-		// If inhibition became active while we already idled, the display
-		// is off — turn it back on. If inhibition dropped while idled,
-		// restart the timers so the lock delay runs again.
-		s.recreateTimers()
-	})
+	// Monitor Hyprland events for fullscreen state (event-driven, no polling)
+	go s.monitorHyprlandEvents(ctx)
 
 	go s.waylandLoop(ctx)
 
@@ -319,6 +374,8 @@ func (s *Service) Run(ctx context.Context) error {
 		}
 	}
 }
+
+// ── Lock state management ───────────────────────────────────────────────────
 
 // NotifyLockChanged re-reads the locked state from the provider and
 // triggers side effects (display on, timer recreation) if the state changed.
@@ -338,8 +395,6 @@ func (s *Service) NotifyLockChanged() {
 
 	if locked {
 		// Turn display ON when locking so the lock screen is visible.
-		// The locked-mode idle timer (LockDisplayOffTimeout) will turn it
-		// back off after the user stops interacting.
 		s.setDisplay(true)
 	} else {
 		s.setDisplay(true)
@@ -351,14 +406,17 @@ func (s *Service) NotifyLockChanged() {
 }
 
 func (s *Service) tick() {
+	if s.inhibited.Load() {
+		return
+	}
+
 	s.mu.Lock()
 	cfg := s.cfg
 	started := s.idleStarted
-	inhibited := s.inhibited
 	s.mu.Unlock()
 	locked := s.isLocked()
 
-	if inhibited || !locked || started.IsZero() {
+	if !locked || started.IsZero() {
 		return
 	}
 
@@ -375,6 +433,54 @@ func (s *Service) tick() {
 		}()
 	}
 }
+
+func (s *Service) doLock() {
+	if s.inhibited.Load() {
+		return
+	}
+	s.mu.Lock()
+	if s.isLocked() {
+		s.mu.Unlock()
+		return
+	}
+	cb := s.onLockCallback
+	s.mu.Unlock()
+
+	log.Printf("[idle] idle lock triggered")
+
+	if cb != nil {
+		cb()
+	}
+
+	// Dispatch to Quickshell via IPC for reliable lock screen display.
+	go func() {
+		qsPath := s.cfg.QsConfigPath
+		if qsPath == "" {
+			qsPath = "/usr/share/snry-shell/frontend/ii"
+		}
+		if err := exec.Command("qs", "-p", qsPath, "ipc", "call", "lock", "activate").Run(); err != nil {
+			log.Printf("[idle] qs ipc lock failed: %v", err)
+			// Fallback: activate global shortcut via IPC
+			if err := s.hl.ActivateGlobalShortcut("quickshell:lock"); err != nil {
+				log.Printf("[idle] global shortcut fallback failed, no more fallbacks")
+			}
+		}
+	}()
+
+	s.bus.publish(topicScreenLock, true)
+}
+
+// Lock triggers a lock externally (e.g. from a socket command).
+func (s *Service) Lock() {
+	s.doLock()
+}
+
+// Unlock triggers an unlock externally (e.g. from a socket command).
+func (s *Service) Unlock() {
+	s.setDisplay(true)
+}
+
+// ── Wayland ─────────────────────────────────────────────────────────────────
 
 func (s *Service) waylandLoop(ctx context.Context) {
 	for {
@@ -469,117 +575,7 @@ func (s *Service) initAndDispatch(ctx context.Context) error {
 	}
 }
 
-func (s *Service) doLock() {
-	s.mu.Lock()
-	if s.isLocked() || s.inhibited {
-		s.mu.Unlock()
-		return
-	}
-	cb := s.onLockCallback
-	s.mu.Unlock()
-
-	log.Printf("[idle] idle lock triggered")
-
-	// Set daemon lock state first (for idle timer tracking)
-	if cb != nil {
-		cb()
-	}
-
-	// Dispatch to Quickshell via IPC for reliable lock screen display.
-	// This bypasses the potentially unreliable socket connection.
-	go func() {
-		qsPath := s.cfg.QsConfigPath
-		if qsPath == "" {
-			qsPath = "/usr/share/snry-shell/frontend/ii"
-		}
-		if err := exec.Command("qs", "-p", qsPath, "ipc", "call", "lock", "activate").Run(); err != nil {
-			log.Printf("[idle] qs ipc lock failed: %v", err)
-			// Fallback: activate global shortcut via IPC
-			if err := s.hl.ActivateGlobalShortcut("quickshell:lock"); err != nil {
-				log.Printf("[idle] global shortcut fallback failed, no more fallbacks")
-			}
-		}
-	}()
-
-	s.bus.publish(topicScreenLock, true)
-}
-
-// Lock triggers a lock externally (e.g. from a socket command).
-func (s *Service) Lock() {
-	s.doLock()
-}
-
-// Unlock triggers an unlock externally (e.g. from a socket command).
-// The actual lock state is managed by the lockscreen service via the provider.
-func (s *Service) Unlock() {
-	// Ensure display is on when unlocking.
-	s.setDisplay(true)
-}
-
-// monitorLogindInhibit watches the logind BlockInhibited property for
-// systemd-inhibit --what=idle inhibitors. When :idle: appears in the
-// colon-separated list, we treat it as active idle inhibition.
-func (s *Service) monitorLogindInhibit(ctx context.Context, conn *dbus.Conn) {
-	// Get initial value
-	s.updateLogindInhibit(conn)
-
-	// Watch for property changes
-	if err := s.conn.AddMatchSignal(
-		dbus.WithMatchInterface("org.freedesktop.DBus.Properties"),
-		dbus.WithMatchMember("PropertiesChanged"),
-		dbus.WithMatchObjectPath(dbus.ObjectPath(dbusutil.LogindPath)),
-	); err != nil {
-		log.Printf("[idle] logind PropertiesChanged match: %v", err)
-		return
-	}
-
-	ch := make(chan *dbus.Signal, 16)
-	s.conn.Signal(ch)
-	defer s.conn.RemoveSignal(ch)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case sig, ok := <-ch:
-			if !ok {
-				return
-			}
-			if sig.Name == "org.freedesktop.DBus.Properties.PropertiesChanged" &&
-				string(sig.Path) == dbusutil.LogindPath &&
-				len(sig.Body) >= 2 {
-				if iface, _ := sig.Body[0].(string); iface == dbusutil.LogindManager {
-					if changed, ok := sig.Body[1].(map[string]dbus.Variant); ok {
-						if v, exists := changed["BlockInhibited"]; exists {
-							s.handleBlockInhibited(v.String())
-						}
-					}
-				}
-			}
-		}
-	}
-}
-
-// updateLogindInhibit fetches the current BlockInhibited property from logind.
-func (s *Service) updateLogindInhibit(conn *dbus.Conn) {
-	v, err := conn.Object(dbusutil.LogindDest, dbus.ObjectPath(dbusutil.LogindPath)).
-		GetProperty(dbusutil.LogindManager + ".BlockInhibited")
-	if err != nil {
-		log.Printf("[idle] logind BlockInhibited get: %v", err)
-		return
-	}
-	s.handleBlockInhibited(v.String())
-}
-
-// handleBlockInhibited parses the BlockInhibited colon-separated string
-// and activates/deactivates idle inhibition.
-func (s *Service) handleBlockInhibited(inhibits string) {
-	// BlockInhibited is colon-separated. Wrap in colons for easier checking.
-	wrapped := ":" + inhibits + ":"
-	active := strings.Contains(wrapped, ":idle:")
-	log.Printf("[idle] systemd inhibit: %q idle-active=%v", inhibits, active)
-	s.bus.publish(topicIdleInhibit, active)
-}
+// ── Logind monitors ─────────────────────────────────────────────────────────
 
 func (s *Service) monitorLogind(ctx context.Context) {
 	var rawConn *dbus.Conn
@@ -627,4 +623,161 @@ func (s *Service) monitorLogind(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// monitorLogindInhibit watches the logind BlockInhibited property for
+// systemd-inhibit --what=idle inhibitors.
+func (s *Service) monitorLogindInhibit(ctx context.Context, conn *dbus.Conn) {
+	s.updateLogindInhibit(conn)
+
+	if err := s.conn.AddMatchSignal(
+		dbus.WithMatchInterface("org.freedesktop.DBus.Properties"),
+		dbus.WithMatchMember("PropertiesChanged"),
+		dbus.WithMatchObjectPath(dbus.ObjectPath(dbusutil.LogindPath)),
+	); err != nil {
+		log.Printf("[idle] logind PropertiesChanged match: %v", err)
+		return
+	}
+
+	ch := make(chan *dbus.Signal, 16)
+	s.conn.Signal(ch)
+	defer s.conn.RemoveSignal(ch)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case sig, ok := <-ch:
+			if !ok {
+				return
+			}
+			if sig.Name == "org.freedesktop.DBus.Properties.PropertiesChanged" &&
+				string(sig.Path) == dbusutil.LogindPath &&
+				len(sig.Body) >= 2 {
+				if iface, _ := sig.Body[0].(string); iface == dbusutil.LogindManager {
+					if changed, ok := sig.Body[1].(map[string]dbus.Variant); ok {
+						if v, exists := changed["BlockInhibited"]; exists {
+							s.handleBlockInhibited(v.String())
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func (s *Service) updateLogindInhibit(conn *dbus.Conn) {
+	v, err := conn.Object(dbusutil.LogindDest, dbus.ObjectPath(dbusutil.LogindPath)).
+		GetProperty(dbusutil.LogindManager + ".BlockInhibited")
+	if err != nil {
+		log.Printf("[idle] logind BlockInhibited get: %v", err)
+		return
+	}
+	s.handleBlockInhibited(v.String())
+}
+
+// handleBlockInhibited parses the BlockInhibited colon-separated string
+// and updates the logind inhibition source flag.
+func (s *Service) handleBlockInhibited(inhibits string) {
+	wrapped := ":" + inhibits + ":"
+	active := strings.Contains(wrapped, ":idle:")
+	log.Printf("[idle] systemd inhibit: %q idle-active=%v", inhibits, active)
+	s.mu.Lock()
+	s.logindIdleInhibited = active
+	s.mu.Unlock()
+	s.recomputeInhibition()
+}
+
+// ── Hyprland event monitor ──────────────────────────────────────────────────
+
+// monitorHyprlandEvents connects to the Hyprland event socket and watches for
+// fullscreen state changes. Fully event-driven — no polling.
+func (s *Service) monitorHyprlandEvents(ctx context.Context) {
+	instance := os.Getenv("HYPRLAND_INSTANCE_SIGNATURE")
+	if instance == "" {
+		return
+	}
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		return
+	}
+	sockPath := runtimeDir + "/hypr/" + instance + "/.socket2.sock"
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		conn, err := net.Dial("unix", sockPath)
+		if err != nil {
+			log.Printf("[idle] hyprland event socket: %v, retrying in 5s", err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+				continue
+			}
+		}
+
+		// Reset fullscreen count on reconnect — we don't know the current state
+		// until we receive events.
+		s.mu.Lock()
+		s.fullscreenCount = 0
+		s.mu.Unlock()
+		s.recomputeInhibition()
+
+		err = s.readHyprlandEvents(ctx, conn)
+		conn.Close()
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			log.Printf("[idle] hyprland event reader: %v, reconnecting", err)
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+// readHyprlandEvents reads events from the Hyprland event socket until the
+// connection closes or ctx is cancelled.
+func (s *Service) readHyprlandEvents(ctx context.Context, conn net.Conn) error {
+	scanner := bufio.NewScanner(conn)
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		parts := strings.SplitN(line, ">>", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		switch parts[0] {
+		case "fullscreen":
+			// Hyprland fullscreen event data: "1" or "ADDRESS,1" for fullscreen,
+			// "0" or "ADDRESS,0" for unfullscreen.
+			data := parts[1]
+			fields := strings.Split(data, ",")
+			state := fields[len(fields)-1]
+
+			s.mu.Lock()
+			if state == "1" {
+				s.fullscreenCount++
+			} else if s.fullscreenCount > 0 {
+				s.fullscreenCount--
+			}
+			s.mu.Unlock()
+			s.recomputeInhibition()
+		}
+	}
+	return scanner.Err()
 }
