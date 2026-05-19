@@ -140,8 +140,11 @@ func (s *Service) Restart() {
 	killQS(s)
 }
 
-// killQS terminates the running qs process group. The Run loop will detect
-// the exit and restart automatically (unless the context is cancelled).
+// killQS terminates the qs process only — NOT its entire process group.
+// User apps launched via Quickshell.execDetached (terminals, browsers, etc.)
+// are children of qs but should survive a daemon restart.  By killing only
+// the qs PID we let the compositor (Hyprland) re-parent those windows while
+// the daemon respawns a fresh qs instance.
 func killQS(s *Service) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -149,14 +152,11 @@ func killQS(s *Service) {
 		return
 	}
 
-	// Send SIGTERM first so QuickShell can clean up Wayland resources.
-	// If it doesn't exit in 2 seconds, escalate to SIGKILL.
-	pgid, err := syscall.Getpgid(s.cmd.Process.Pid)
-	if err != nil {
-		return
-	}
+	pid := s.cmd.Process.Pid
 
-	_ = syscall.Kill(-pgid, syscall.SIGTERM)
+	// Send SIGTERM to qs only (not the process group) so that detached
+	// user apps like Ghostty and browsers are not affected.
+	_ = syscall.Kill(pid, syscall.SIGTERM)
 
 	done := make(chan struct{})
 	go func() {
@@ -169,7 +169,7 @@ func killQS(s *Service) {
 		log.Printf("quickshell: terminated gracefully")
 	case <-time.After(2 * time.Second):
 		log.Printf("quickshell: SIGTERM timeout, sending SIGKILL")
-		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		_ = syscall.Kill(pid, syscall.SIGKILL)
 		<-done
 	}
 }
