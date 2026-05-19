@@ -130,7 +130,7 @@ func runStartHyprland() {
 	fmt.Printf("starting Hyprland with config: %s\n", configPath)
 
 	// Detach Hyprland into its own session so it survives the caller exiting.
-	cmd := exec.Command("start-hyprland", "-c", configPath)
+	cmd := exec.Command("start-hyprland", "--", "-c", configPath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Stdin = nil
 	cmd.Stdout = nil
